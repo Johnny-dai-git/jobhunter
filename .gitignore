@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Local data (敏感)
+data/jobs.db
+data/jobs.db-*
+data/cookies/
+data/resume/_parsed.txt
+data/outputs/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Playwright
+.pw-cache/

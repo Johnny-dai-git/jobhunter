@@ -1,0 +1,152 @@
+# ====== LLM Provider 配置 ======
+# DeepSeek V4 提供 Anthropic 兼容接口,所以两家可以共用 anthropic SDK,只换 base_url + api_key
+providers:
+  claude:
+    # base_url 留空表示用 anthropic SDK 默认值
+    base_url: ""
+    api_key_env: ANTHROPIC_API_KEY
+  deepseek:
+    base_url: https://api.deepseek.com/anthropic
+    api_key_env: DEEPSEEK_API_KEY
+
+# ====== 模型路由 ======
+# 每个角色单独指定 provider 和模型. 混合路由策略:
+# - 评分 / 趋势分析: DeepSeek (高频 / 长 context, 省钱)
+# - 简历定制 / 求职信 / 投递助手: Claude (质量 / agentic 能力)
+model:
+  matcher:
+    provider: deepseek
+    name: deepseek-v4-flash
+  tailor:
+    provider: claude
+    name: claude-sonnet-4-6
+  cover_letter:
+    provider: claude
+    name: claude-sonnet-4-6
+  apply:
+    provider: claude
+    name: claude-sonnet-4-6
+  trends:
+    provider: deepseek
+    name: deepseek-v4-pro
+  max_tokens: 4096
+
+# ====== 求职偏好 ======
+preferences:
+  # 目标岗位关键词(用于搜索和过滤)
+  job_titles:
+    - Software Engineer
+    - Machine Learning Engineer
+    - Backend Engineer
+
+  # 目标地点
+  locations:
+    - Remote
+    - San Francisco Bay Area
+    - New York
+
+  # 工作类型
+  job_types:
+    - Full-time
+    # - Internship
+    # - Contract
+
+  # 公司规模偏好(用于匹配评分加权)
+  company_size:
+    - Startup
+    - Mid-size
+    - Large
+
+  # 技术栈关键词(出现得越多,匹配度越高)
+  must_have_skills:
+    - Python
+
+  nice_to_have_skills:
+    - Go
+    - Kubernetes
+    - LLM
+
+  # 排除关键词(出现就跳过)
+  exclude_keywords:
+    - Senior Director
+    - VP
+
+  # 经验年限范围(用于过滤明显不匹配的)
+  years_of_experience:
+    min: 0
+    max: 8
+
+  # 薪资下限(USD/年,可选)
+  min_salary_usd: 80000
+
+# ====== 匹配评分阈值 ======
+scoring:
+  # 低于此分数的岗位不会推荐生成简历
+  min_recommend_score: 70
+  # 低于此分数的岗位会被自动归档
+  auto_archive_below: 40
+
+# ====== 抓取时间窗 ======
+freshness:
+  # 只抓最近多少小时内发布的岗位 (0 = 不限制)
+  max_age_hours: 24
+
+# ====== 每日邮件 digest ======
+digest:
+  enabled: true
+  top_n: 15
+  # 收件邮箱
+  to: ""
+  # SMTP (可选,留空则只生成 HTML 文件不发邮件)
+  smtp:
+    host: smtp.gmail.com
+    port: 587
+    username: ""
+    # 应用专用密码 (Gmail 需要),建议放在 .env 里读
+    password_env: SMTP_PASSWORD
+
+# ====== 投递助手 ======
+apply:
+  # 默认在点提交按钮前暂停等你确认.设 true 后会真的自动点!
+  auto_submit: false
+  # 候选人通用信息(投递时会用到的字段)
+  candidate:
+    name: ""
+    email: ""
+    phone: ""
+    linkedin: ""
+    github: ""
+    portfolio: ""
+    work_authorization: "Yes"
+    require_sponsorship: "No"
+
+# ====== 采集器 ======
+collectors:
+  linkedin:
+    enabled: true
+    # 你需要先在浏览器登录,然后导出 cookie 到此文件(见 docs/collectors.md)
+    cookie_file: data/cookies/linkedin.json
+    # 单次采集上限(避免触发反爬)
+    max_per_run: 30
+
+  indeed:
+    enabled: true
+    cookie_file: data/cookies/indeed.json
+    max_per_run: 30
+
+  glassdoor:
+    enabled: true
+    cookie_file: data/cookies/glassdoor.json
+    max_per_run: 20
+
+  ziprecruiter:
+    enabled: true
+    cookie_file: data/cookies/ziprecruiter.json
+    max_per_run: 30
+
+# ====== 路径 ======
+paths:
+  resume_dir: data/resume
+  jobs_dir: data/jobs
+  outputs_dir: data/outputs
+  db_path: data/jobs.db
