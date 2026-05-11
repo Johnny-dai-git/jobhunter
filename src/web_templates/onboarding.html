@@ -261,6 +261,57 @@
   </div>
   {% endif %}
 
+  {# ============ 自动运行 ============ #}
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <h3 style="margin:0;">⏰ 自动运行</h3>
+      <span style="font-size:11px; color:var(--color-text-muted);">仅在 web server 运行时生效</span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">当前设置</div>
+        <div style="font-weight:600; margin-top:2px;">
+          {% if schedule.hours > 0 %}
+            每 {{ schedule.hours }} 小时自动跑一次
+          {% else %}
+            <span style="color:var(--color-text-muted);">关闭</span>
+          {% endif %}
+        </div>
+      </div>
+      {% if schedule.last %}
+      <div>
+        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">上次跑</div>
+        <div style="font-weight:500; margin-top:2px; font-size:13px;">{{ schedule.last.strftime('%Y-%m-%d %H:%M') }}</div>
+      </div>
+      {% endif %}
+      {% if schedule.next %}
+      <div>
+        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">下次跑</div>
+        <div style="font-weight:500; margin-top:2px; font-size:13px; color:var(--color-accent);">{{ schedule.next.strftime('%Y-%m-%d %H:%M') }}</div>
+      </div>
+      {% endif %}
+
+      <form method="post" action="/schedule/set" style="margin:0; margin-left:auto; display:flex; gap:8px; align-items:center;">
+        <label style="font-size:12px; color:var(--color-text-muted); margin-right:4px;">间隔</label>
+        <select name="hours" style="padding:6px 10px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm); font-size:13px;">
+          <option value="0" {% if schedule.hours == 0 %}selected{% endif %}>关闭</option>
+          <option value="1" {% if schedule.hours == 1 %}selected{% endif %}>每 1 小时</option>
+          <option value="3" {% if schedule.hours == 3 %}selected{% endif %}>每 3 小时</option>
+          <option value="6" {% if schedule.hours == 6 %}selected{% endif %}>每 6 小时</option>
+          <option value="12" {% if schedule.hours == 12 %}selected{% endif %}>每 12 小时</option>
+          <option value="24" {% if schedule.hours == 24 %}selected{% endif %}>每天 (24h)</option>
+          <option value="168" {% if schedule.hours == 168 %}selected{% endif %}>每周 (7d)</option>
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">保存</button>
+      </form>
+    </div>
+
+    <div style="font-size:11px; color:var(--color-text-dim); margin-top:10px;">
+      💡 触发时跑 collect + match (不重做画像分析). 如果上次没跑完,本次自动跳过. 要真 24/7 后台跑可以另外配 crontab (scripts/daily.sh).
+    </div>
+  </div>
+
   {% if pipeline_running %}
   <div class="card" style="background:#fef3c7; border-color:#fde68a;">
     ⚠️ 当前有流水线在跑. 提交新画像会自动中断它, 然后用新画像重新跑.

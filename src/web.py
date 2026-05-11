@@ -34,6 +34,7 @@ from .profile_analyzer import (
     save_user_description,
 )
 from .resume_reader import SUPPORTED_EXTS, list_resumes, load_cached, parse_and_cache
+from .scheduler import AgentScheduler
 from .tailor import tailor_for_job
 from .tracker import mark_applied
 
@@ -208,6 +209,21 @@ def create_app(config: Config) -> FastAPI:
                 return True
             _time.sleep(0.5)
         return False
+
+    # ===== 自动调度 =====
+    def _scheduled_run():
+        """scheduler 触发的回调: 用当前画像跑一次 collect+match (不阻塞调用方)."""
+        if pipeline_state["running"]:
+            print("[scheduler] pipeline 已经在跑, 跳过本次")
+            return
+        threading.Thread(
+            target=_run_pipeline_bg, args=(False, None, None),
+            daemon=True, name="ScheduledPipeline",
+        ).start()
+
+    settings_path = config.path("resume_dir").parent / "settings.json"
+    scheduler = AgentScheduler(settings_path, _scheduled_run)
+    scheduler.start()
 
     def render(name: str, **ctx) -> HTMLResponse:
         tpl = env.get_template(name)
@@ -422,6 +438,12 @@ def create_app(config: Config) -> FastAPI:
                 "modified": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
             })
 
+        schedule_info = {
+            "hours": scheduler.get_schedule_hours(),
+            "last": scheduler.get_last_run(),
+            "next": scheduler.get_next_run(),
+        }
+
         return render(
             "onboarding.html",
             existing_desc=existing_desc,
@@ -432,6 +454,7 @@ def create_app(config: Config) -> FastAPI:
             job_counts=job_counts,
             pipeline_running=pipeline_state["running"],
             resume_files=resume_files,
+            schedule=schedule_info,
         )
 
     @app.post("/onboarding/submit")
@@ -596,6 +619,11 @@ def create_app(config: Config) -> FastAPI:
         # do_analyze=False: 直接用已激活的画像跑 collect+match
         background_tasks.add_task(_run_pipeline_bg, False, None, None)
         return RedirectResponse(url="/onboarding/processing", status_code=303)
+
+    @app.post("/schedule/set")
+    def set_schedule(hours: int = Form(...)):
+        scheduler.set_schedule_hours(hours)
+        return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/pipeline/cancel")
     def cancel_pipeline():
