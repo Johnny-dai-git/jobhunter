@@ -405,13 +405,18 @@
           <td style="padding:10px; color:var(--color-text-muted); font-size:12px; white-space:nowrap;">
             {{ h.created_at.strftime('%m-%d %H:%M') }}
           </td>
-          <td style="padding:10px;">
-            <a href="/profiles/{{ h.id }}" style="text-decoration:none; color:inherit; display:block;">
-              <div style="font-weight:600; color:var(--color-accent);">{{ h.label or '(无描述)' }}</div>
-              <div style="font-size:11px; color:var(--color-text-dim); margin-top:2px; max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                {{ h.user_description[:140] }}{% if h.user_description|length > 140 %}...{% endif %}
+          <td style="padding:10px; max-width:420px;">
+            <a href="/profiles/{{ h.id }}"
+               title="{{ h.user_description }}"
+               style="text-decoration:none; color:inherit; display:block;">
+              <div style="font-weight:600; color:var(--color-accent); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px;">
+                {{ h.label or '(无描述)' }}
               </div>
-              {% if h.resume_filename %}<div style="font-size:11px; color:var(--color-text-dim); margin-top:2px;">📎 {{ h.resume_filename }}</div>{% endif %}
+              {% if h.resume_filename %}
+              <div style="font-size:11px; color:var(--color-text-dim); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px;">
+                📎 {{ h.resume_filename }}
+              </div>
+              {% endif %}
             </a>
           </td>
           <td style="padding:10px;">
