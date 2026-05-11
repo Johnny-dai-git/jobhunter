@@ -53,13 +53,25 @@ def matches_excluded(cj: CollectedJob, excluded: list[str]) -> str | None:
     return None
 
 
-def collect_all(config: Config, platforms: Optional[list[str]] = None) -> dict:
+def collect_all(
+    config: Config,
+    platforms: Optional[list[str]] = None,
+    *,
+    should_continue=None,
+    profile_id: Optional[int] = None,
+) -> dict:
     """跑指定平台 (默认所有 enabled) 的采集器,返回统计.
 
     搜索 keywords 来源优先级:
     1. data/resume/_profile.json (analyze-profile 生成的 Top-5 搜索 title)
     2. config.yaml preferences.job_titles (fallback)
+
+    should_continue: callable; 每个平台开始前调用一次, 返回 False 就提前退出
+    profile_id: 当前活跃画像的 ID, 给新入库的 Job 打标
     """
+    if should_continue is None:
+        should_continue = lambda: True
+
     platforms = platforms or PLATFORMS
 
     profile = load_profile(config)
@@ -92,6 +104,9 @@ def collect_all(config: Config, platforms: Optional[list[str]] = None) -> dict:
     }
 
     for platform in platforms:
+        if not should_continue():
+            print("[collect] 检测到取消信号, 提前退出")
+            break
         c = get_collector(platform, config)
         if not c.enabled:
             continue
@@ -135,6 +150,7 @@ def collect_all(config: Config, platforms: Optional[list[str]] = None) -> dict:
                         description=cj.description,
                         posted_at=_parse_posted_at(cj),
                         status=JobStatus.NEW.value,
+                        profile_id=profile_id,
                     )
                     session.add(job)
                     session.commit()

@@ -23,10 +23,14 @@ from .cover_letter import write_cover_letter
 from .db import Job, JobStatus, init_db, session_scope
 from .matcher import score_pending
 from .profile_analyzer import (
+    activate_profile_snapshot,
     analyze_profile,
+    get_current_profile_id,
+    list_profile_snapshots,
     load_profile,
     load_user_description,
     save_profile,
+    save_profile_snapshot,
     save_user_description,
 )
 from .resume_reader import SUPPORTED_EXTS, load_cached, parse_and_cache
@@ -112,15 +116,24 @@ def create_app(config: Config) -> FastAPI:
     # ===== 后台流水线状态 (单实例够用,多用户场景需换 DB) =====
     pipeline_state: dict[str, Any] = {
         "running": False,
-        "phase": "idle",            # idle | analyzing | collecting | matching | done | error
+        "phase": "idle",            # idle | analyzing | collecting | matching | done | cancelled | error
         "started_at": None,
         "ended_at": None,
         "error": None,
-        "stats": {},                # collect_all 返回的 stats + match 结果
+        "stats": {},
+        "profile_id": None,         # 当前流水线绑定的画像 id
+        "cancel_requested": False,
     }
     pipeline_lock = threading.Lock()
 
-    def _run_pipeline_bg(do_analyze: bool, user_description: str | None = None):
+    def _should_continue():
+        return not pipeline_state["cancel_requested"]
+
+    def _run_pipeline_bg(
+        do_analyze: bool,
+        user_description: str | None = None,
+        resume_filename: str | None = None,
+    ):
         """后台跑 [analyze_profile] -> collect -> match. 失败也能 graceful exit."""
         with pipeline_lock:
             if pipeline_state["running"]:
@@ -132,23 +145,47 @@ def create_app(config: Config) -> FastAPI:
                 ended_at=None,
                 error=None,
                 stats={},
+                cancel_requested=False,
+                profile_id=None,
             )
 
         try:
             if do_analyze:
                 profile = analyze_profile(config, user_description=user_description)
                 save_profile(config, profile)
+                # 同时写历史 DB
+                pid = save_profile_snapshot(
+                    config, profile,
+                    user_description=user_description or "",
+                    resume_filename=resume_filename,
+                )
+                pipeline_state["profile_id"] = pid
+            else:
+                # 沿用现有当前画像 id
+                pipeline_state["profile_id"] = get_current_profile_id(config)
+
+            if not _should_continue():
+                pipeline_state["phase"] = "cancelled"
+                return
 
             pipeline_state["phase"] = "collecting"
-            stats = collect_all(config)
+            stats = collect_all(
+                config,
+                should_continue=_should_continue,
+                profile_id=pipeline_state["profile_id"],
+            )
             pipeline_state["stats"]["collect"] = stats
+
+            if not _should_continue():
+                pipeline_state["phase"] = "cancelled"
+                return
 
             pipeline_state["phase"] = "matching"
             resume_text = load_cached(config.path("resume_dir"))
-            results = score_pending(config, resume_text)
+            results = score_pending(config, resume_text, should_continue=_should_continue)
             pipeline_state["stats"]["match"] = {"scored": len(results)}
 
-            pipeline_state["phase"] = "done"
+            pipeline_state["phase"] = "cancelled" if not _should_continue() else "done"
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -157,6 +194,20 @@ def create_app(config: Config) -> FastAPI:
         finally:
             pipeline_state["running"] = False
             pipeline_state["ended_at"] = datetime.now()
+
+
+    def _wait_for_cancel(timeout: float = 30) -> bool:
+        """请求取消,轮询等到流水线真停下来(或超时). 返回是否成功停下."""
+        import time as _time
+        if not pipeline_state["running"]:
+            return True
+        pipeline_state["cancel_requested"] = True
+        deadline = _time.time() + timeout
+        while _time.time() < deadline:
+            if not pipeline_state["running"]:
+                return True
+            _time.sleep(0.5)
+        return False
 
     def render(name: str, **ctx) -> HTMLResponse:
         tpl = env.get_template(name)
@@ -271,11 +322,16 @@ def create_app(config: Config) -> FastAPI:
     def onboarding_form():
         existing_desc = load_user_description(config) or ""
         profile = load_profile(config)
+        history = list_profile_snapshots(config)
+        current_id = get_current_profile_id(config)
         return render(
             "onboarding.html",
             existing_desc=existing_desc,
             has_profile=profile is not None,
             supported_exts=", ".join(sorted(SUPPORTED_EXTS)),
+            history=history,
+            current_id=current_id,
+            pipeline_running=pipeline_state["running"],
         )
 
     @app.post("/onboarding/submit")
@@ -284,8 +340,24 @@ def create_app(config: Config) -> FastAPI:
         description: str = Form(...),
         resume: UploadFile | None = File(None),
     ):
+        # 如果当前描述跟上次完全相同, 不重复跑
+        existing = load_user_description(config) or ""
+        desc = (description or "").strip()
+        if not desc:
+            raise HTTPException(400, "请填写求职需求描述")
+
+        if existing.strip() == desc and not (resume and resume.filename):
+            # 描述和简历都没变, 直接回主页
+            return RedirectResponse(url="/", status_code=303)
+
+        # 如果有流水线在跑, 先中断
+        if pipeline_state["running"]:
+            print("[onboarding] 检测到流水线在跑, 请求取消...")
+            _wait_for_cancel(timeout=60)
+
         # 1) 如果有新简历, 保存
         resume_dir = config.path("resume_dir")
+        uploaded_filename = None
         if resume and resume.filename:
             ext = Path(resume.filename).suffix.lower()
             if ext not in SUPPORTED_EXTS:
@@ -298,25 +370,43 @@ def create_app(config: Config) -> FastAPI:
                 raise HTTPException(400, "上传文件为空")
             target = resume_dir / resume.filename
             target.write_bytes(content)
+            uploaded_filename = resume.filename
             try:
                 parse_and_cache(resume_dir)
             except Exception as e:
                 raise HTTPException(500, f"解析简历失败: {e}")
 
         # 2) 保存用户描述
-        desc = (description or "").strip()
-        if not desc:
-            raise HTTPException(400, "请填写求职需求描述")
         save_user_description(config, desc)
 
         # 3) 确认 DB 在
         init_db(config.path("db_path"))
 
         # 4) 不再阻塞: analyze + collect + match 都丢后台
-        if pipeline_state["running"]:
-            raise HTTPException(409, "已有流水线在跑,等它结束再试")
-        background_tasks.add_task(_run_pipeline_bg, True, desc)
+        background_tasks.add_task(_run_pipeline_bg, True, desc, uploaded_filename)
 
+        return RedirectResponse(url="/onboarding/processing", status_code=303)
+
+    @app.post("/profiles/{profile_id}/use")
+    def use_profile(profile_id: int, background_tasks: BackgroundTasks):
+        """切回某历史画像 + 重跑流水线."""
+        # 取消当前跑的(如有)
+        if pipeline_state["running"]:
+            print(f"[use_profile] 流水线在跑, 请求取消以切换到 #{profile_id}...")
+            _wait_for_cancel(timeout=60)
+        try:
+            activate_profile_snapshot(config, profile_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        # do_analyze=False: 直接用已激活的画像跑 collect+match
+        background_tasks.add_task(_run_pipeline_bg, False, None, None)
+        return RedirectResponse(url="/onboarding/processing", status_code=303)
+
+    @app.post("/pipeline/cancel")
+    def cancel_pipeline():
+        if not pipeline_state["running"]:
+            return RedirectResponse(url="/onboarding/processing", status_code=303)
+        pipeline_state["cancel_requested"] = True
         return RedirectResponse(url="/onboarding/processing", status_code=303)
 
     @app.get("/onboarding/processing")

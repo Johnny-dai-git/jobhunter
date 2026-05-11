@@ -18,8 +18,11 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select, update
+
 from .agent import load_prompt, make_client, render
 from .config import Config
+from .db import Profile, session_scope
 from .resume_reader import load_cached
 
 
@@ -370,12 +373,84 @@ def load_user_description(config: Config) -> str | None:
 
 
 def save_profile(config: Config, profile: ProfileAnalysis) -> Path:
+    """保存 profile 到 JSON 文件 (用于代码读取)."""
     path = _profile_path(config)
     path.write_text(
         json.dumps(profile.to_dict(), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
     return path
+
+
+def save_profile_snapshot(
+    config: Config,
+    profile: ProfileAnalysis,
+    user_description: str,
+    resume_filename: str | None = None,
+) -> int:
+    """落 profile 到 DB (profiles 表) 一条新行,标为 current. 返回 profile_id.
+
+    跟 save_profile 配合: JSON 是"当前激活的画像", DB 是历史快照.
+    """
+    label = (user_description.strip().splitlines()[0] if user_description else "")[:60] or "Profile"
+    profile_json = json.dumps(profile.to_dict(), ensure_ascii=False)
+    db_path = config.path("db_path")
+
+    with session_scope(db_path) as session:
+        # 旧的 current 取消激活
+        session.execute(update(Profile).where(Profile.is_current).values(is_current=False))
+        new_row = Profile(
+            label=label,
+            user_description=user_description,
+            resume_filename=resume_filename,
+            profile_json=profile_json,
+            is_current=True,
+        )
+        session.add(new_row)
+        session.commit()
+        return new_row.id
+
+
+def list_profile_snapshots(config: Config) -> list[Profile]:
+    """返回所有历史画像快照,新 → 老."""
+    db_path = config.path("db_path")
+    with session_scope(db_path) as session:
+        rows = list(session.scalars(
+            select(Profile).order_by(Profile.created_at.desc())
+        ).all())
+        for r in rows:
+            session.expunge(r)
+        return rows
+
+
+def get_current_profile_id(config: Config) -> int | None:
+    db_path = config.path("db_path")
+    with session_scope(db_path) as session:
+        row = session.scalar(select(Profile).where(Profile.is_current))
+        return row.id if row else None
+
+
+def activate_profile_snapshot(config: Config, profile_id: int) -> Profile:
+    """把某历史画像设为当前,同时把它的 profile_json 写回 JSON 文件 + 同步 user_description.
+
+    返回激活的 Profile 对象.
+    """
+    db_path = config.path("db_path")
+    with session_scope(db_path) as session:
+        row = session.get(Profile, profile_id)
+        if not row:
+            raise ValueError(f"Profile #{profile_id} 不存在")
+
+        session.execute(update(Profile).where(Profile.is_current).values(is_current=False))
+        row.is_current = True
+        session.add(row)
+        session.commit()
+
+        # 同步 JSON + 用户描述文件
+        _profile_path(config).write_text(row.profile_json, encoding="utf-8")
+        save_user_description(config, row.user_description)
+        session.expunge(row)
+        return row
 
 
 def load_profile(config: Config) -> ProfileAnalysis | None:

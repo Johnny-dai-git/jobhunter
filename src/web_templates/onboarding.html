@@ -115,12 +115,72 @@
     <h1>{% if has_profile %}更新你的求职画像{% else %}欢迎使用 JobHunter{% endif %}</h1>
     <p>
       {% if has_profile %}
-        修改你的求职描述或上传新简历, 系统会重新生成 Top-5 匹配方向.
+        修改求职描述或上传新简历, 系统会重新生成 Top-5 匹配方向.
       {% else %}
         告诉 AI 你想找什么样的工作, 上传简历, 之后系统会自动从 5 个平台抓岗位、按 6 维度评分、生成定制简历.
       {% endif %}
     </p>
   </div>
+
+  {# ============ 历史画像 ============ #}
+  {% if history %}
+  <div class="card">
+    <h3 style="margin-top:0;">📚 历史画像 ({{ history|length }} 个)</h3>
+    <div style="font-size:12px; color:var(--color-text-muted); margin-bottom:12px;">
+      你之前的求职策略快照. 点"用这个"切换 — 系统会自动重跑采集 + 评分.
+    </div>
+    <table style="font-size:13px;">
+      <thead>
+        <tr>
+          <th style="padding:8px 10px;">时间</th>
+          <th style="padding:8px 10px;">描述</th>
+          <th style="padding:8px 10px;">简历</th>
+          <th style="padding:8px 10px;">状态</th>
+          <th style="padding:8px 10px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in history %}
+        <tr>
+          <td style="padding:8px 10px; color:var(--color-text-muted); font-size:12px;">
+            {{ h.created_at.strftime('%m-%d %H:%M') }}
+          </td>
+          <td style="padding:8px 10px;">
+            <div style="font-weight:500;">{{ h.label or '(无描述)' }}</div>
+            <div style="font-size:11px; color:var(--color-text-dim); margin-top:2px; max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              {{ h.user_description[:120] }}{% if h.user_description|length > 120 %}...{% endif %}
+            </div>
+          </td>
+          <td style="padding:8px 10px; font-size:11px; color:var(--color-text-muted);">
+            {{ h.resume_filename or '—' }}
+          </td>
+          <td style="padding:8px 10px;">
+            {% if h.id == current_id %}<span class="badge badge-green">✓ 当前</span>
+            {% else %}<span class="badge badge-gray">历史</span>{% endif %}
+          </td>
+          <td style="padding:8px 10px; text-align:right;">
+            {% if h.id != current_id %}
+              <form method="post" action="/profiles/{{ h.id }}/use" style="margin:0; display:inline;">
+                <button class="btn btn-secondary btn-sm" type="submit"
+                        {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"{% endif %}>
+                  用这个 →
+                </button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if pipeline_running %}
+  <div class="card" style="background:#fef3c7; border-color:#fde68a;">
+    ⚠️ 当前有流水线在跑. 提交新画像会自动中断它, 然后用新画像重新跑.
+    <a href="/onboarding/processing" style="color:var(--color-accent); margin-left:8px;">查看进度 →</a>
+  </div>
+  {% endif %}
 
   <form action="/onboarding/submit" method="post" enctype="multipart/form-data" class="card">
 

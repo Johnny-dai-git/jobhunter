@@ -181,9 +181,26 @@
       <div style="font-family:monospace; font-size:12px; background:rgba(255,255,255,0.5); padding:8px; border-radius:4px; margin-top:8px;">{{ state.error }}</div>
       <div style="margin-top:12px;"><a href="/onboarding" class="btn btn-secondary">回去重试</a></div>
     </div>
+  {% elif state.phase == 'cancelled' %}
+    <div class="card" style="background:#f1f5f9; text-align:center;">
+      <h2 style="margin:0 0 8px;">⏸ 已取消</h2>
+      <div style="color:var(--color-text-muted);">耗时 {{ elapsed }}, 中途取消</div>
+      <div style="margin-top:14px;">
+        <a href="/onboarding" class="btn btn-secondary">回 onboarding</a>
+        <a href="/" class="btn btn-primary" style="margin-left:6px;">看现有岗位</a>
+      </div>
+    </div>
   {% else %}
     <div style="text-align:center; margin-top:24px; color:var(--color-text-muted); font-size:13px;">
       ⏳ 整个过程约需 3-8 分钟. 这个页面每 3 秒自动刷新, 别关.
+    </div>
+    <div style="text-align:center; margin-top:12px;">
+      <form method="post" action="/pipeline/cancel" style="margin:0;">
+        <button type="submit" class="btn btn-secondary btn-sm"
+                onclick="return confirm('确定要取消正在跑的流水线?')">
+          ✕ 取消流水线
+        </button>
+      </form>
     </div>
   {% endif %}
 

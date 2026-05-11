@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -40,12 +41,27 @@ class JobStatus(str, Enum):
     ARCHIVED = "archived"        # 自动或手动归档
 
 
+class Profile(Base):
+    """画像快照: 一次 onboarding 提交对应一行. 历史可回滚."""
+
+    __tablename__ = "profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    label: Mapped[str] = mapped_column(String(120))                # 自动从描述里取前 60 字
+    user_description: Mapped[str] = mapped_column(Text)            # 用户原文
+    resume_filename: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    profile_json: Mapped[str] = mapped_column(Text)                # ProfileAnalysis 序列化
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)  # 当前活跃画像
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source: Mapped[str] = mapped_column(String(32))            # linkedin / indeed / manual
     external_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profiles.id"), nullable=True)
     url: Mapped[str] = mapped_column(String(1024))
     title: Mapped[str] = mapped_column(String(256))
     company: Mapped[str] = mapped_column(String(256))

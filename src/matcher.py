@@ -170,7 +170,10 @@ def score_pending(
     resume_text: str,
     *,
     limit: int | None = None,
+    should_continue=None,
 ) -> list[tuple[int, MatchResult]]:
+    if should_continue is None:
+        should_continue = lambda: True
     client, model_name = make_client(config, "matcher")
     db_path = config.path("db_path")
     auto_archive_below = float(config.scoring.get("auto_archive_below", 40))
@@ -183,6 +186,9 @@ def score_pending(
         jobs = session.scalars(stmt).all()
 
         for job in jobs:
+            if not should_continue():
+                print("[match] 检测到取消信号, 提前退出")
+                break
             try:
                 result = score_job(client, model_name, config, resume_text, job)
             except Exception as e:
