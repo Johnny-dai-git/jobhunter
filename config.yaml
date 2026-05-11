@@ -153,7 +153,9 @@ collectors:
     max_per_run: 20
 
   ziprecruiter:
-    enabled: true
+    # 暂禁用: ZipRecruiter 用 Cloudflare Bot Fight 防爬,Playwright+cookies 也过不去.
+    # Apify 上无便宜可靠的 jobs scraper. 对 AI Infra 等技术岗位密度低,跳过.
+    enabled: false
     backend: playwright
     cookie_file: data/cookies/ziprecruiter.json
     max_per_run: 30
