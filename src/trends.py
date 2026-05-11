@@ -380,6 +380,13 @@ def render_markdown(stats: dict[str, Any], narrative: str) -> str:
     return "\n".join(L)
 
 
+def send_trends_email(config: Config, html: str, subject: str | None = None) -> bool:
+    """复用 digest 的 SMTP 配置发趋势报告邮件."""
+    from .digest import send_email as _send
+
+    return _send(config, html, subject=subject or f"市场趋势报告 - {datetime.now():%Y-%m-%d}")
+
+
 def render_html(md_text: str, title: str) -> str:
     """Markdown -> HTML (简单包装,不引外部样式表)."""
     try:
@@ -413,8 +420,9 @@ def generate_report(
     days: int = 30,
     min_score: float | None = None,
     formats: tuple[str, ...] = ("md",),
+    send_email: bool = False,
 ) -> dict[str, Path]:
-    """生成趋势报告. 返回 {format: path}."""
+    """生成趋势报告. 返回 {format: path}. send_email=True 时同时通过 SMTP 发出去."""
     stats = aggregate_stats(config, days=days, min_score=min_score)
 
     if stats["total_jobs"] == 0:
@@ -431,14 +439,22 @@ def generate_report(
     stamp = datetime.now().strftime("%Y%m%d")
     paths: dict[str, Path] = {}
 
+    html_full = None
     if "md" in formats:
         p = outputs / f"trends_{stamp}.md"
         p.write_text(md_text, encoding="utf-8")
         paths["md"] = p
     if "html" in formats:
         title = f"求职市场趋势 {stamp}"
+        html_full = render_html(md_text, title)
         p = outputs / f"trends_{stamp}.html"
-        p.write_text(render_html(md_text, title), encoding="utf-8")
+        p.write_text(html_full, encoding="utf-8")
         paths["html"] = p
+
+    # 发邮件 (复用 digest 的 SMTP 配置)
+    if send_email:
+        if html_full is None:
+            html_full = render_html(md_text, f"求职市场趋势 {stamp}")
+        send_trends_email(config, html_full)
 
     return paths

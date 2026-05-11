@@ -290,7 +290,8 @@ def digest():
     default=("md", "html"),
     help="输出格式,可指定多个",
 )
-def trends(days, min_score, formats):
+@click.option("--email", is_flag=True, help="同时通过 SMTP 邮件发出")
+def trends(days, min_score, formats, email):
     """分析求职市场趋势: 主要 player / 技术栈热度 / 薪资水位 / 给你的建议."""
     config = _load_config()
     console.print(
@@ -298,7 +299,8 @@ def trends(days, min_score, formats):
         f"(score >= {min_score}) 的市场趋势...[/cyan]"
     )
     paths = generate_trends_report(
-        config, days=days, min_score=min_score, formats=tuple(formats)
+        config, days=days, min_score=min_score,
+        formats=tuple(formats), send_email=email,
     )
     for fmt, p in paths.items():
         console.print(f"[green]✓[/green] {fmt}: {p}")
@@ -311,14 +313,13 @@ def trends(days, min_score, formats):
     default="all",
 )
 @click.option("--no-collect", is_flag=True, help="跳过采集步骤")
-@click.option("--no-digest", is_flag=True, help="跳过发 digest")
-@click.option(
-    "--with-trends",
-    is_flag=True,
-    help="额外生成趋势报告 (建议每周跑一次,日跑没必要)",
-)
-def run_all(platform, no_collect, no_digest, with_trends):
-    """每日全流程: collect -> match -> digest [-> trends]. 适合 cron 触发."""
+@click.option("--no-digest", is_flag=True, help="跳过发 daily digest 邮件")
+@click.option("--no-trends", is_flag=True, help="跳过趋势报告邮件")
+def run_all(platform, no_collect, no_digest, no_trends):
+    """每日全流程: collect -> match -> digest -> trends. 都通过邮件发出. 不含 apply.
+
+    适合 cron 触发. 你想投哪个就手动跑 'apply --job-id N',默认流程不投.
+    """
     config = _load_config()
 
     if not no_collect:
@@ -326,19 +327,21 @@ def run_all(platform, no_collect, no_digest, with_trends):
         console.print("[bold]→ 采集...[/bold]")
         collect_all(config, plats)
 
-    console.print("[bold]→ 评分...[/bold]")
+    console.print("[bold]→ 评分 (6 维度)...[/bold]")
     resume_text = load_cached(config.path("resume_dir"))
     score_pending(config, resume_text)
 
     if not no_digest:
-        console.print("[bold]→ 生成 digest...[/bold]")
+        console.print("[bold]→ 发送 Top-N 岗位 digest 邮件...[/bold]")
         run_digest(config)
 
-    if with_trends:
-        console.print("[bold]→ 生成趋势报告...[/bold]")
-        generate_trends_report(config, days=30, min_score=50.0, formats=("md", "html"))
+    if not no_trends:
+        console.print("[bold]→ 发送市场趋势报告邮件...[/bold]")
+        generate_trends_report(
+            config, days=30, min_score=50.0, formats=("md", "html"), send_email=True
+        )
 
-    console.print("[green bold]✓ 全流程完成[/green bold]")
+    console.print("[green bold]✓ 全流程完成 (未触发任何投递)[/green bold]")
 
 
 @cli.command()

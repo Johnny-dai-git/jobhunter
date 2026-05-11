@@ -14,5 +14,5 @@ if [ -f ".venv/bin/activate" ]; then
 fi
 
 echo "=== $(date) Weekly trends report ==="
-python3 -m src.main trends --days 30 --min-score 50 --format md --format html
+python3 -m src.main trends --days 30 --min-score 50 --format md --format html --email
 echo "=== Done $(date) ==="
