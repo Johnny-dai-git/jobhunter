@@ -1,85 +1,175 @@
 """Y Combinator Work at a Startup via Apify (artemlazarevm/yc-jobs-scraper).
 
-artemlazarevm 是 YC jobs scraper 里口碑较好的一个,scrapes workatastartup.com.
+⚠️ 这个 actor 跟一般 scraper 不同 - 它按"公司"返回数据,每条 item 里嵌套着该公司的
+所有 jobs[]. 所以我们要重写 search() 把 jobs 平铺出来.
 
-可能的 input schema (按常见模式,actor 实际值可能略有差异):
-    keyword       - 搜索关键词
-    location      - 地点
-    maxItems      - 上限
-    batch         - YC batch 过滤 (例如 'W24', 'S24')
-    industry      - 行业过滤
+Input schema (从官方文档):
+    maxCompanies                Integer  最大抓取公司数
+    filterByBatch               List     ["W24","S24"] 等
+    filterByIndustry            List     ["B2B","AI","Fintech"]
+    filterByStage               List     ["Seed","Series A"]
+    filterByLocation            List     ["Remote","San Francisco"]
+    topCompaniesOnly            Boolean
+    includeFounderDescriptions  Boolean  (默认 true)
+    rateLimitDelay              Number   (秒,默认 1.5)
 
-如果 actor 拒绝某些字段,看 console 报错并改 input_overrides.
+Output 每条 (按公司组织):
+    {
+      "company": {name, ycBatch, industry, teamSize, ...},
+      "founders": [...],
+      "jobs": [
+        {
+          "jobId", "title", "jobUrl", "location",
+          "salary": {"min","max","currency"},
+          "equity": {"min","max"},
+          "jobType", "roleCategory", "experience", "visa",
+          "skills": [...], "description", "interviewProcess",
+          "applyUrl"
+        },
+        ...
+      ]
+    }
 
-输出常见字段:
-    company / companyName
-    title / role
-    url / jobUrl
-    location
-    description
-    salary / equity
-    batch  (例如 'W23')
+注意 keyword 过滤要在客户端做(actor 不支持按 title 过滤).
 """
 from __future__ import annotations
 
-from typing import Optional
+import os
+from typing import Iterable, Optional
 
-from .apify_base import ApifyCollector
-from .base import CollectedJob
+import httpx
+
+from ..config import Config
+from .apify_base import ApifyCollector, ApifyError
+from .base import BaseCollector, CollectedJob
 
 
-class YCApifyCollector(ApifyCollector):
+# 把候选人的关键词翻成 YC industry 标签 (YC 自己的分类只有几十个)
+INDUSTRY_KEYWORD_MAP = {
+    "ml": "AI",
+    "machine learning": "AI",
+    "ai": "AI",
+    "llm": "AI",
+    "infrastructure": "Developer Tools",
+    "devops": "Developer Tools",
+    "data": "B2B",
+    "platform": "Developer Tools",
+}
+
+
+def _infer_industries(keywords: list[str]) -> list[str]:
+    """从用户的 job_titles 推断对应的 YC industry tag."""
+    industries: set[str] = set()
+    for kw in keywords:
+        kw_lower = kw.lower()
+        for keyword_part, industry in INDUSTRY_KEYWORD_MAP.items():
+            if keyword_part in kw_lower:
+                industries.add(industry)
+    return sorted(industries)
+
+
+class YCApifyCollector(BaseCollector):
+    """YC 用自定义 search 流程: 一次 API call 拿公司列表,平铺 jobs[]."""
+
     name = "yc"
 
+    def __init__(self, config: Config):
+        super().__init__(config)
+        apify_cfg = config.raw.get("apify", {}) or {}
+        token_env = apify_cfg.get("api_token_env", "APIFY_API_TOKEN")
+        self._token = os.getenv(token_env)
+        self._timeout_sec = int(apify_cfg.get("default_timeout_sec", 600))
+        self._apify_cfg = (self._settings.get("apify") or {})
+
+    @property
+    def actor_id(self) -> str:
+        return self._apify_cfg.get("actor", "artemlazarevm/yc-jobs-scraper")
+
     def _build_input(self, keywords: list[str], locations: list[str]) -> dict:
-        # YC scraper 一般支持单 keyword + 单 location 或 startUrls
-        # 我们 fallback 用第一个 keyword + 第一个 location
+        industries = _infer_industries(keywords)
         return {
-            "keyword": keywords[0] if keywords else "",
-            "location": locations[0] if locations else "",
-            "keywords": keywords,        # 有些 actor 支持数组
-            "locations": locations,
-            "maxItems": self.max_per_run,
+            "maxCompanies": 50,                  # 抓 50 个公司,然后客户端过滤 jobs
+            "filterByLocation": locations,
+            "filterByIndustry": industries or ["AI"],
+            "topCompaniesOnly": False,
+            "includeFounderDescriptions": False,  # 节省 token,我们不需要 founder bio
+            "rateLimitDelay": 1.0,
         }
 
-    def _parse_item(self, item: dict) -> Optional[CollectedJob]:
-        # 兼容各种字段名变体
-        title = item.get("title") or item.get("role") or item.get("jobTitle")
-        company = (
-            item.get("companyName")
-            or item.get("company")
-            or (item.get("startup") or {}).get("name")
-        )
-        url = (
-            item.get("url")
-            or item.get("jobUrl")
-            or item.get("link")
-            or item.get("applyUrl")
-        )
-        if not (title and company and url):
-            return None
+    def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:
+        if not self._token:
+            raise ApifyError("APIFY_API_TOKEN 未设置")
 
-        location = item.get("location") or item.get("city")
-        if isinstance(location, list):
-            location = ", ".join(location)
+        input_data = self._build_input(keywords, locations)
+        input_data.update(self._apify_cfg.get("input_overrides") or {})
+        actor_path = self.actor_id.replace("/", "~")
+        url = f"https://api.apify.com/v2/acts/{actor_path}/run-sync-get-dataset-items"
 
-        salary_or_equity = item.get("salary") or item.get("compensation") or item.get("equity")
-        if isinstance(salary_or_equity, dict):
-            salary_or_equity = salary_or_equity.get("text")
+        print(f"  [apify] POST {self.actor_id}  input={input_data!r}")
+        try:
+            with httpx.Client(timeout=self._timeout_sec) as client:
+                resp = client.post(url, params={"token": self._token}, json=input_data)
+        except httpx.HTTPError as e:
+            raise ApifyError(f"Apify 请求失败: {e}")
 
-        return CollectedJob(
-            source="yc",
-            external_id=str(item.get("id") or item.get("jobId") or url),
-            url=url,
-            title=str(title).strip(),
-            company=str(company).strip(),
-            location=str(location).strip() if location else None,
-            salary=str(salary_or_equity) if salary_or_equity else None,
-            description=item.get("description") or item.get("descriptionText"),
-            extras={
-                "batch": item.get("batch") or item.get("ycBatch"),
-                "industry": item.get("industry"),
-                "team_size": item.get("teamSize") or item.get("employeeCount"),
-                "equity": item.get("equity"),
-            },
-        )
+        if resp.status_code >= 400:
+            try:
+                msg = resp.json()
+            except Exception:
+                msg = resp.text[:500]
+            raise ApifyError(f"Apify Actor {self.actor_id} 返回 {resp.status_code}: {msg}")
+
+        companies = resp.json()
+        if not isinstance(companies, list):
+            raise ApifyError(f"Apify 返回非数组: {type(companies).__name__}")
+
+        print(f"  [apify] 拿回 {len(companies)} 个公司")
+        kws_lower = {k.lower() for k in (keywords or [])}
+        count = 0
+
+        # 平铺: 每个公司里的 jobs 都展开,按 keyword 客户端过滤
+        for company_record in companies:
+            if count >= self.max_per_run:
+                break
+            company = company_record.get("company") or {}
+            company_name = company.get("name")
+            jobs = company_record.get("jobs") or []
+
+            for job in jobs:
+                if count >= self.max_per_run:
+                    break
+                title = job.get("title") or ""
+                # 客户端关键词过滤 (任一 keyword 命中 title 就保留)
+                if kws_lower and not any(k in title.lower() for k in kws_lower):
+                    continue
+
+                url_str = job.get("jobUrl") or job.get("applyUrl")
+                if not url_str or not company_name:
+                    continue
+
+                salary_obj = job.get("salary") or {}
+                if isinstance(salary_obj, dict) and salary_obj.get("min"):
+                    salary = f"${salary_obj['min']:,} - ${salary_obj.get('max', '?'):,} {salary_obj.get('currency', 'USD')}"
+                else:
+                    salary = None
+
+                yield CollectedJob(
+                    source="yc",
+                    external_id=str(job.get("jobId") or url_str),
+                    url=url_str,
+                    title=title.strip(),
+                    company=company_name,
+                    location=job.get("location"),
+                    salary=salary,
+                    description=job.get("description"),
+                    extras={
+                        "yc_batch": company.get("ycBatch"),
+                        "industry": company.get("industry"),
+                        "team_size": company.get("teamSize"),
+                        "equity": job.get("equity"),
+                        "visa": job.get("visa"),
+                        "skills": job.get("skills"),
+                        "apply_url": job.get("applyUrl"),
+                    },
+                )
+                count += 1

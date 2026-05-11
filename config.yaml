@@ -172,7 +172,9 @@ collectors:
     enabled: true
     backend: apify
     apify:
-      actor: clearpath/wellfound-api-ppe         # Wellfound (AngelList) PPR
+      # clearpath/wellfound-api-ppe 的月度免费额度已用完
+      # 换 mscraper, 该 actor 是免费试用 + PPR
+      actor: mscraper/wellfound-jobs-scraper
       input_overrides: {}
     max_per_run: 15
 
@@ -181,7 +183,8 @@ collectors:
     enabled: true
     backend: apify
     apify:
-      actor: scrapestorm/dice-jobs-scraper-fast-cheap
+      # scrapestorm/dice-jobs-scraper-fast-cheap 不存在, 换 worldunboxer (有清晰 schema)
+      actor: worldunboxer/dice-jobs-scraper
       input_overrides: {}
     max_per_run: 15
 

@@ -1,15 +1,17 @@
-"""Dice.com Jobs via Apify (scrapestorm/dice-jobs-scraper-fast-cheap).
+"""Dice.com Jobs via Apify (worldunboxer/dice-jobs-scraper).
 
-Dice 是美国传统科技岗位库,云/SRE/DevOps/工程师岗位密度高.
-
-Input schema 示例:
-    {
-        "keyword": "Software development",
-        "place": "New York",
-        "published": "Last 3 days",  # 枚举: Today/Last 24 hours/Last 3 days/Last 7 days
-        "rayon": "5",                # 半径,英里
-        "maxitems": 250
-    }
+worldunboxer 的 schema 字段(从社区文档):
+    keyword          - 单字符串
+    location         - 单字符串
+    radius           - 半径数值
+    unit             - 半径单位 ("mi" / "km")
+    job_entries      - 上限数量
+    posted_date      - "Today" / "1" / "3" / "7" / "30"
+    employment_type  - ["FULLTIME", "PARTTIME", "CONTRACTS"]
+    employer_type    - ["Direct Hire", "Recruiter"]
+    work_settings    - ["On-Site", "Hybrid", "Remote"]
+    easy_apply       - bool
+    willing_to_sponsor - bool
 """
 from __future__ import annotations
 
@@ -19,12 +21,14 @@ from .apify_base import ApifyCollector
 from .base import CollectedJob
 
 
-def _hours_to_published(hours: int) -> str:
+def _hours_to_posted(hours: int) -> str:
     if hours <= 24:
-        return "Last 24 hours"
+        return "1"
     if hours <= 72:
-        return "Last 3 days"
-    return "Last 7 days"
+        return "3"
+    if hours <= 168:
+        return "7"
+    return "30"
 
 
 class DiceApifyCollector(ApifyCollector):
@@ -32,16 +36,14 @@ class DiceApifyCollector(ApifyCollector):
 
     def _build_input(self, keywords: list[str], locations: list[str]) -> dict:
         max_age_hours = int(self.config.freshness.get("max_age_hours", 0) or 24)
-        # Dice 大概率支持单 keyword + 单 place
         return {
             "keyword": keywords[0] if keywords else "",
-            "place": locations[0] if locations else "United States",
-            "published": _hours_to_published(max_age_hours),
-            "rayon": "30",
-            "maxitems": self.max_per_run,
-            # 给个备选数组,有的 actor 支持
-            "keywords": keywords,
-            "places": locations,
+            "location": locations[0] if locations else "United States",
+            "radius": 30,
+            "unit": "mi",
+            "job_entries": self.max_per_run,
+            "posted_date": _hours_to_posted(max_age_hours),
+            "employment_type": ["FULLTIME"],
         }
 
     def _parse_item(self, item: dict) -> Optional[CollectedJob]:
@@ -51,11 +53,16 @@ class DiceApifyCollector(ApifyCollector):
             or item.get("companyName")
             or (item.get("companyInfo") or {}).get("name")
         )
-        url = item.get("url") or item.get("jobUrl") or item.get("detailsUrl") or item.get("link")
+        url = (
+            item.get("url")
+            or item.get("jobUrl")
+            or item.get("detailsUrl")
+            or item.get("link")
+            or item.get("jobDetailUrl")
+        )
         if not (title and company and url):
             return None
 
-        # 拼接 URL 如果是相对路径
         if isinstance(url, str) and url.startswith("/"):
             url = "https://www.dice.com" + url
 
@@ -72,5 +79,6 @@ class DiceApifyCollector(ApifyCollector):
                 "posted": item.get("posted") or item.get("postedDate"),
                 "employment_type": item.get("employmentType"),
                 "skills": item.get("skills"),
+                "work_settings": item.get("workSettings") or item.get("work_settings"),
             },
         )
