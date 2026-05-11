@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}画像 #{{ profile.id }} · JobHunter{% endblock %}
+{% block content %}
+
+<a href="/onboarding" class="back-link">← 回画像列表</a>
+
+<div class="hero">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+    <div style="flex:1;">
+      <h1 class="hero-title">
+        画像 #{{ profile.id }}
+        {% if is_current %}<span class="badge badge-green" style="margin-left:8px; vertical-align:middle;">✓ 当前</span>{% endif %}
+      </h1>
+      <div class="hero-meta">
+        <span>📅 创建于 {{ profile.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        {% if profile.resume_filename %}
+          <span class="hero-meta-sep">·</span>
+          <span>📎 简历: {{ profile.resume_filename }}</span>
+        {% endif %}
+        <span class="hero-meta-sep">·</span>
+        <span>{{ jobs|length }} 个匹配岗位</span>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; flex-shrink:0;">
+      {% if jobs %}
+        <a href="/jobs?profile_id={{ profile.id }}" class="btn btn-primary btn-sm">🔍 看本画像岗位</a>
+      {% endif %}
+      {% if not is_current %}
+      <form method="post" action="/profiles/{{ profile.id }}/use" style="margin:0;">
+        <button type="submit" class="btn btn-primary btn-sm"
+                {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"{% else %}onclick="return confirm('切换到这个画像并重新跑流水线?')"{% endif %}>
+          🔄 重新激活
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ============ 用户描述 ============ #}
+<div class="card">
+  <h3 style="margin-top:0;">📝 求职需求 (用户原始输入)</h3>
+  <div style="background:#f8fafc; padding:14px 16px; border-radius:var(--radius-sm); border:1px solid var(--color-border); white-space:pre-wrap; font-size:13.5px; line-height:1.7;">{{ profile.user_description }}</div>
+</div>
+
+{% if analysis %}
+{# ============ Summary ============ #}
+{% if analysis.summary %}
+<div class="card">
+  <h3 style="margin-top:0;">🎯 核心定位 (AI 总结)</h3>
+  <div style="font-size:14px;">{{ analysis.summary }}</div>
+</div>
+{% endif %}
+
+{# ============ Top 5 Positions ============ #}
+<div class="card">
+  <h3 style="margin-top:0;">🏆 Top 5 投递方向 (按 composite 降序)</h3>
+  <table style="font-size:13px;">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Primary + Aliases (搜索词)</th>
+        <th>Dir</th>
+        <th style="text-align:center;">M/C/A → Comp</th>
+        <th>为什么投</th>
+        <th>市场依据</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in analysis.top_5_positions %}
+      <tr>
+        <td style="font-weight:700;">{{ loop.index }}</td>
+        <td style="max-width:240px;">
+          <div style="font-weight:700;">{{ p.title }}</div>
+          {% if p.aliases %}
+          <div style="font-size:11px; color:var(--color-text-muted); margin-top:4px;">aka:
+            {% for a in p.aliases %}<div style="margin-left:8px;">• {{ a }}</div>{% endfor %}
+          </div>
+          {% endif %}
+          {% if p.broader_terms %}
+          <div style="font-size:11px; color:var(--color-text-dim); margin-top:4px;">隐藏在:
+            {% for b in p.broader_terms %}<div style="margin-left:8px;">• {{ b }}</div>{% endfor %}
+          </div>
+          {% endif %}
+        </td>
+        <td><span class="badge badge-gray" style="font-size:10px;">{{ p.direction }}</span></td>
+        <td style="text-align:center; font-family:'SF Mono', monospace;">
+          {{ p.scores.market_demand }}/{{ p.scores.competition }}/{{ p.scores.user_advantage }}
+          <div style="font-size:18px; font-weight:800; color:var(--color-accent); margin-top:2px;">{{ p.scores.composite }}</div>
+        </td>
+        <td style="max-width:280px; font-size:12px;">
+          {% for w in p.why_this_position %}<div style="margin-bottom:3px;">• {{ w }}</div>{% endfor %}
+        </td>
+        <td style="max-width:200px; font-size:12px; color:var(--color-text-muted);">{{ p.market_evidence }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div style="margin-top:10px; font-size:11px; color:var(--color-text-muted);">
+    M = market_demand · C = competition (越低越好) · A = user_advantage · Comp = composite
+  </div>
+</div>
+
+{# ============ 目标公司 (5 区域) ============ #}
+{% if analysis.recommended_companies %}
+<div class="card">
+  <h3 style="margin-top:0;">🌍 目标公司清单 (按区域)</h3>
+  {% for region_label, companies in analysis.recommended_companies.regions() %}
+    {% if companies %}
+    <div style="margin-bottom:18px;">
+      <div style="font-weight:700; margin-bottom:8px;">{{ region_label }} <span style="font-weight:400; color:var(--color-text-muted); font-size:12px;">({{ companies|length }})</span></div>
+      <table style="font-size:13px;">
+        <thead>
+          <tr>
+            <th>公司</th>
+            <th>为什么 fit</th>
+            <th>扩张信号</th>
+            <th>例子 roles</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in companies %}
+          <tr>
+            <td style="font-weight:600; white-space:nowrap;">{{ c.name }}</td>
+            <td style="font-size:12px; color:var(--color-text-muted);">{{ c.why_fit }}</td>
+            <td style="font-size:12px; color:var(--color-text-muted);">{{ c.hiring_signal }}</td>
+            <td style="font-size:11px;">
+              {% for r in c.example_roles %}<div>• {{ r }}</div>{% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ============ Target locations ============ #}
+{% if analysis.target_locations %}
+<div class="card">
+  <h3 style="margin-top:0;">📍 目标地点</h3>
+  <div style="display:flex; gap:6px; flex-wrap:wrap;">
+    {% for loc in analysis.target_locations %}<span class="badge badge-indigo">{{ loc }}</span>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="card">
+  <p style="color:var(--color-text-muted);">⚠️ profile_json 解析失败,可能是格式问题</p>
+</div>
+{% endif %}
+
+{# ============ 本画像跑出的岗位 ============ #}
+{% if jobs %}
+<div class="card card-flat">
+  <div style="padding:16px 20px; border-bottom:1px solid var(--color-border);">
+    <h3 style="margin:0;">📊 本画像匹配的岗位 (Top 20)</h3>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Score</th>
+        <th>岗位</th>
+        <th>公司</th>
+        <th>状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for j in jobs[:20] %}
+      <tr>
+        <td>
+          {% set s = j.match_score or 0 %}
+          {% if s >= 90 %}<span class="score score-90">{{ "%.0f"|format(s) }}</span>
+          {% elif s >= 75 %}<span class="score score-75">{{ "%.0f"|format(s) }}</span>
+          {% else %}<span class="score score-low">{{ "%.0f"|format(s) }}</span>{% endif %}
+        </td>
+        <td><a href="/job/{{ j.id }}" class="job-title">{{ j.title }}</a></td>
+        <td>{{ j.company }}</td>
+        <td>
+          {% if j.status == 'applied' %}<span class="badge badge-green">✓ applied</span>
+          {% elif j.status == 'scored' %}<span class="badge badge-yellow">scored</span>
+          {% else %}<span class="badge badge-gray">{{ j.status }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if jobs|length > 20 %}
+  <div style="padding:10px 16px; text-align:center; background:#f8fafc; border-top:1px solid var(--color-border);">
+    <a href="/jobs?profile_id={{ profile.id }}" style="font-size:12px; color:var(--color-text-muted);">查看全部 {{ jobs|length }} 个 →</a>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

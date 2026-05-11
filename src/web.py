@@ -475,6 +475,38 @@ def create_app(config: Config) -> FastAPI:
 
         return RedirectResponse(url="/onboarding/processing", status_code=303)
 
+    @app.get("/profiles/{profile_id}")
+    def profile_detail(profile_id: int):
+        """单个历史画像详情: 完整描述 + Top-5 + 区域公司 + 本画像跑出的岗位."""
+        from .db import Profile
+        from .profile_analyzer import ProfileAnalysis
+        import json as _json
+        with session_scope(db_path) as session:
+            row = session.get(Profile, profile_id)
+            if not row:
+                raise HTTPException(404, f"Profile #{profile_id} 不存在")
+            try:
+                pa = ProfileAnalysis.from_dict(_json.loads(row.profile_json))
+            except Exception:
+                pa = None
+
+            # 这个画像跑出来的所有岗位
+            stmt = select(Job).where(Job.profile_id == profile_id).order_by(Job.match_score.desc().nulls_last())
+            jobs = list(session.scalars(stmt).all())
+            for j in jobs:
+                session.expunge(j)
+            session.expunge(row)
+
+        current_id = get_current_profile_id(config)
+        return render(
+            "profile_detail.html",
+            profile=row,
+            analysis=pa,
+            jobs=jobs,
+            is_current=(row.id == current_id),
+            pipeline_running=pipeline_state["running"],
+        )
+
     @app.post("/profiles/{profile_id}/use")
     def use_profile(profile_id: int, background_tasks: BackgroundTasks):
         """切回某历史画像 + 重跑流水线."""

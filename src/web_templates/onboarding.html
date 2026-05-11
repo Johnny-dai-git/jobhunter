@@ -147,11 +147,13 @@
             {{ h.created_at.strftime('%m-%d %H:%M') }}
           </td>
           <td style="padding:10px;">
-            <div style="font-weight:500;">{{ h.label or '(无描述)' }}</div>
-            <div style="font-size:11px; color:var(--color-text-dim); margin-top:2px; max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-              {{ h.user_description[:140] }}{% if h.user_description|length > 140 %}...{% endif %}
-            </div>
-            {% if h.resume_filename %}<div style="font-size:11px; color:var(--color-text-dim); margin-top:2px;">📎 {{ h.resume_filename }}</div>{% endif %}
+            <a href="/profiles/{{ h.id }}" style="text-decoration:none; color:inherit; display:block;">
+              <div style="font-weight:600; color:var(--color-accent);">{{ h.label or '(无描述)' }}</div>
+              <div style="font-size:11px; color:var(--color-text-dim); margin-top:2px; max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                {{ h.user_description[:140] }}{% if h.user_description|length > 140 %}...{% endif %}
+              </div>
+              {% if h.resume_filename %}<div style="font-size:11px; color:var(--color-text-dim); margin-top:2px;">📎 {{ h.resume_filename }}</div>{% endif %}
+            </a>
           </td>
           <td style="padding:10px;">
             {% if counts.total > 0 %}
