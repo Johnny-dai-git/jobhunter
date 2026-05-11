@@ -78,14 +78,14 @@ def build_html(jobs: list[Job], min_recommend: float) -> str:
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#f9fafb;padding:20px">
   <div style="max-width:720px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
     <div style="background:#111827;color:white;padding:20px">
-      <div style="font-size:20px;font-weight:600">每日 Job Agent 推送</div>
+      <div style="font-size:20px;font-weight:600">每日 JobHunter 推送</div>
       <div style="color:#9ca3af;font-size:13px;margin-top:4px">{today} &middot; Top {len(jobs)} &middot; 推荐分阈值 {min_recommend:.0f}</div>
     </div>
     <table style="width:100%;border-collapse:collapse">
       {''.join(rows) if rows else '<tr><td style="padding:30px;text-align:center;color:#6b7280">今天没有新匹配的岗位 🎉</td></tr>'}
     </table>
     <div style="padding:16px;background:#f9fafb;color:#6b7280;font-size:12px;text-align:center">
-      由 Job Agent 自动生成 · 想跳过某个岗位回复 archive #&lt;id&gt;
+      由 JobHunter 自动生成 · 想跳过某个岗位回复 archive #&lt;id&gt;
     </div>
   </div>
 </body></html>"""
@@ -119,7 +119,7 @@ def send_email(config: Config, html: str, subject: str | None = None) -> bool:
         return False
 
     msg = EmailMessage()
-    msg["Subject"] = subject or f"每日 Job Agent 推送 - {datetime.now():%Y-%m-%d}"
+    msg["Subject"] = subject or f"每日 JobHunter 推送 - {datetime.now():%Y-%m-%d}"
     msg["From"] = username
     msg["To"] = to
     msg.set_content("此邮件需要 HTML 模式查看")

@@ -52,6 +52,8 @@ class Job(Base):
     location: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     salary: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 岗位实际发布时间(各平台 actor 提供,如有)
+    posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # 评分字段 — 总分
     match_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

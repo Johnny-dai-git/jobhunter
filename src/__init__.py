@@ -1,3 +1,3 @@
-"""Job Agent - personal job-search assistant powered by Claude."""
+"""JobHunter - personal job-search agent."""
 
 __version__ = "0.1.0"

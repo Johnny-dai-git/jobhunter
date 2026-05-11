@@ -1,4 +1,4 @@
-"""Job Agent CLI 入口."""
+"""JobHunter CLI 入口."""
 from __future__ import annotations
 
 import sys
@@ -36,7 +36,7 @@ def _load_config() -> Config:
 
 @click.group()
 def cli():
-    """求职 agent — 个人求职助手."""
+    """JobHunter — 个人求职 agent."""
 
 
 @cli.command()

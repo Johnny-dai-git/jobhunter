@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select
@@ -10,6 +11,24 @@ from .collectors import CollectedJob, get_collector
 from .config import Config
 from .db import Job, JobStatus, session_scope
 from .profile_analyzer import load_profile
+
+
+def _parse_posted_at(cj: CollectedJob) -> Optional[datetime]:
+    """从 cj.extras 找发布时间字段, 解析 ISO. 找不到返回 None."""
+    if not cj.extras:
+        return None
+    # 各 collector 用不同 key, 都试一遍
+    for key in ("posted_date", "postedDate", "posted_at", "postedAt", "posted", "published_at", "publishedAt"):
+        val = cj.extras.get(key)
+        if not val or not isinstance(val, str):
+            continue
+        try:
+            s = val.replace("Z", "+00:00")
+            # 砍掉 ".000" 这种毫秒
+            return datetime.fromisoformat(s)
+        except ValueError:
+            continue
+    return None
 
 
 PLATFORMS = [
@@ -114,6 +133,7 @@ def collect_all(config: Config, platforms: Optional[list[str]] = None) -> dict:
                         location=cj.location,
                         salary=cj.salary,
                         description=cj.description,
+                        posted_at=_parse_posted_at(cj),
                         status=JobStatus.NEW.value,
                     )
                     session.add(job)

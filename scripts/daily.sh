@@ -17,6 +17,6 @@ CONDA_BASE="${CONDA_BASE:-/home/johnny/miniconda3}"
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate job-agent
 
-echo "=== $(date) Job Agent daily run ==="
+echo "=== $(date) JobHunter daily run ==="
 python -m src.main run-all
 echo "=== Done $(date) ==="

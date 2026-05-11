@@ -36,7 +36,7 @@ def _make_env() -> Environment:
 
 
 def create_app(config: Config) -> FastAPI:
-    app = FastAPI(title="Job Agent")
+    app = FastAPI(title="JobHunter")
     env = _make_env()
     db_path = config.path("db_path")
 
@@ -139,8 +139,27 @@ def create_app(config: Config) -> FastAPI:
     return app
 
 
+def _find_free_port(host: str, start: int, max_tries: int = 20) -> int:
+    """从 start 开始递增找一个能 bind 上的端口."""
+    import socket
+    for p in range(start, start + max_tries):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, p))
+            s.close()
+            return p
+        except OSError:
+            s.close()
+            continue
+    raise RuntimeError(f"在 {start}..{start + max_tries - 1} 范围内找不到可用端口")
+
+
 def run_server(config: Config, host: str = "127.0.0.1", port: int = 8765):
     import uvicorn
+    actual_port = _find_free_port(host, port)
+    if actual_port != port:
+        print(f"⚠️  端口 {port} 被占用,改用 {actual_port}")
     app = create_app(config)
-    print(f"\n→ Job Agent web UI: http://{host}:{port}\n")
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    print(f"\n→ JobHunter web UI: http://{host}:{actual_port}\n")
+    uvicorn.run(app, host=host, port=actual_port, log_level="info")

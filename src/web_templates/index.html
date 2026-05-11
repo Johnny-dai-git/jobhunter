@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Jobs · Job Agent{% endblock %}
+{% block title %}Jobs · JobHunter{% endblock %}
 {% block content %}
+{% set now = (jobs[0].updated_at if jobs else None) %}
 
 <form class="filters" method="get">
   <label for="min_score">最低分</label>
@@ -27,6 +28,7 @@
         <th>岗位</th>
         <th>公司</th>
         <th>地点</th>
+        <th>发布</th>
         <th>来源</th>
         <th>状态</th>
         <th>产物</th>
@@ -48,6 +50,9 @@
         </td>
         <td>{{ j.company }}</td>
         <td><span style="font-size:13px; color:#6b7280;">{{ j.location or '-' }}</span></td>
+        <td><span style="font-size:12px; color:#6b7280;">
+          {% if j.posted_at %}{{ j.posted_at.strftime('%m-%d') }}{% else %}-{% endif %}
+        </span></td>
         <td><span class="badge badge-gray">{{ j.source }}</span></td>
         <td>
           {% if j.status == 'applied' %}<span class="badge badge-green">applied</span>
@@ -62,7 +67,7 @@
         <td><a href="/job/{{ j.id }}" class="btn btn-secondary">查看</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="8" style="text-align:center; color:#6b7280; padding:30px;">没有匹配的岗位</td></tr>
+      <tr><td colspan="9" style="text-align:center; color:#6b7280; padding:30px;">没有匹配的岗位</td></tr>
       {% endfor %}
     </tbody>
   </table>
