@@ -106,7 +106,12 @@ Aliases **必须是市场上真实使用的**写法, 不许造词.
 
 ---
 
-## 候选人偏好
+## 候选人**自己写的求职需求** (最优先信号)
+> {{ user_description }}
+
+请把上面这段自然语言转化成结构化的搜索策略 (top_5_positions, target_locations, recommended_companies 都应该尊重这段需求里的方向偏好/地点偏好/公司类型偏好).
+
+## 候选人偏好 (系统默认, 仅作 fallback)
 {{ preferences }}
 
 ## 候选人简历

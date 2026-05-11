@@ -352,6 +352,23 @@ def _profile_path(config: Config) -> Path:
     return config.path("resume_dir") / "_profile.json"
 
 
+def _user_desc_path(config: Config) -> Path:
+    return config.path("resume_dir") / "_user_description.txt"
+
+
+def save_user_description(config: Config, text: str) -> Path:
+    path = _user_desc_path(config)
+    path.write_text(text.strip(), encoding="utf-8")
+    return path
+
+
+def load_user_description(config: Config) -> str | None:
+    path = _user_desc_path(config)
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8").strip() or None
+
+
 def save_profile(config: Config, profile: ProfileAnalysis) -> Path:
     path = _profile_path(config)
     path.write_text(
@@ -377,12 +394,20 @@ def load_profile(config: Config) -> ProfileAnalysis | None:
         return None
 
 
-def analyze_profile(config: Config) -> ProfileAnalysis:
-    """读取简历, 调 DeepSeek 做 Top-5 三维度评分分析."""
+def analyze_profile(config: Config, user_description: str | None = None) -> ProfileAnalysis:
+    """读取简历 + 用户自描述求职需求, 调 DeepSeek 做 Top-5 三维度评分分析.
+
+    user_description 是用户自由输入的"我想找什么样的工作"自然语言,
+    优先级高于 config.preferences. 如果传 None 则尝试从磁盘加载.
+    """
     resume_text = load_cached(config.path("resume_dir"))
+    if user_description is None:
+        user_description = load_user_description(config)
+
     prompt = render(
         load_prompt("profile_analyzer"),
         resume=resume_text,
+        user_description=user_description or "(候选人未提供自述,只根据简历和默认偏好推断)",
         preferences=json.dumps(config.preferences, ensure_ascii=False, indent=2),
     )
 

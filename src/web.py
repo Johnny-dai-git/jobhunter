@@ -10,15 +10,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 
 from .config import Config
 from .cover_letter import write_cover_letter
-from .db import Job, JobStatus, session_scope
-from .resume_reader import load_cached
+from .db import Job, JobStatus, init_db, session_scope
+from .profile_analyzer import (
+    analyze_profile,
+    load_profile,
+    load_user_description,
+    save_profile,
+    save_user_description,
+)
+from .resume_reader import SUPPORTED_EXTS, load_cached, parse_and_cache
 from .tailor import tailor_for_job
 from .tracker import mark_applied
 
@@ -117,6 +124,10 @@ def create_app(config: Config) -> FastAPI:
         status: str = "active",
         sort: str = "score",
     ):
+        # 首次访问无 profile 则跳 onboarding
+        if not load_profile(config):
+            return RedirectResponse(url="/onboarding", status_code=303)
+
         with session_scope(db_path) as session:
             stmt = select(Job)
             if status == "active":
@@ -201,6 +212,61 @@ def create_app(config: Config) -> FastAPI:
     def mark_app(job_id: int, note: Optional[str] = None):
         mark_applied(config, job_id, note=note)
         return RedirectResponse(url=f"/job/{job_id}", status_code=303)
+
+    # ---- Onboarding (首次使用 / 重设画像) ----
+    @app.get("/onboarding")
+    def onboarding_form():
+        existing_desc = load_user_description(config) or ""
+        profile = load_profile(config)
+        return render(
+            "onboarding.html",
+            existing_desc=existing_desc,
+            has_profile=profile is not None,
+            supported_exts=", ".join(sorted(SUPPORTED_EXTS)),
+        )
+
+    @app.post("/onboarding/submit")
+    async def onboarding_submit(
+        description: str = Form(...),
+        resume: UploadFile | None = File(None),
+    ):
+        # 1) 如果有新简历, 保存
+        resume_dir = config.path("resume_dir")
+        if resume and resume.filename:
+            ext = Path(resume.filename).suffix.lower()
+            if ext not in SUPPORTED_EXTS:
+                raise HTTPException(
+                    400,
+                    f"不支持的简历格式 {ext}. 仅支持: {sorted(SUPPORTED_EXTS)}",
+                )
+            content = await resume.read()
+            if not content:
+                raise HTTPException(400, "上传文件为空")
+            target = resume_dir / resume.filename
+            target.write_bytes(content)
+            # 重新解析
+            try:
+                parse_and_cache(resume_dir)
+            except Exception as e:
+                raise HTTPException(500, f"解析简历失败: {e}")
+
+        # 2) 保存用户描述
+        desc = (description or "").strip()
+        if not desc:
+            raise HTTPException(400, "请填写求职需求描述")
+        save_user_description(config, desc)
+
+        # 3) 确认 DB 在
+        init_db(config.path("db_path"))
+
+        # 4) 跑 analyze-profile
+        try:
+            profile = analyze_profile(config, user_description=desc)
+            save_profile(config, profile)
+        except Exception as e:
+            raise HTTPException(500, f"画像分析失败: {e}")
+
+        return RedirectResponse(url="/", status_code=303)
 
     return app
 
