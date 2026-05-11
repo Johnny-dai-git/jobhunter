@@ -122,6 +122,45 @@
     </p>
   </div>
 
+  {# ============ Agent 全局控制 ============ #}
+  {% if agent_state != 'uninitialized' %}
+  <div class="card" style="background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border-left: 3px solid {% if agent_state == 'running' %}var(--color-success){% elif agent_state == 'scheduled' %}var(--color-accent){% else %}var(--color-text-dim){% endif %};">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h3 style="margin:0;">🤖 Agent 状态</h3>
+        <div style="margin-top:6px; font-size:14px;">
+          {% if agent_state == 'running' %}
+            <span class="badge badge-green">● 运行中</span>
+            <span style="color:var(--color-text-muted); margin-left:8px;">流水线正在跑</span>
+          {% elif agent_state == 'scheduled' %}
+            <span class="badge badge-indigo">⏰ 已安排</span>
+            <span style="color:var(--color-text-muted); margin-left:8px;">按时间表自动跑</span>
+          {% else %}
+            <span class="badge badge-gray">⏸ 空闲</span>
+            <span style="color:var(--color-text-muted); margin-left:8px;">没有定时任务,也没在跑</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        {% if agent_state in ['running', 'scheduled'] %}
+          <form method="post" action="/agent/pause" style="margin:0;">
+            <button type="submit" class="btn btn-secondary btn-sm"
+                    onclick="return confirm('暂停 Agent? 会取消正在跑的流水线 + 关掉所有定时任务. 画像/历史/简历都保留, 后续可以从这里随时恢复.')">
+              ⏸ 暂停 Agent
+            </button>
+          </form>
+        {% endif %}
+        <form method="post" action="/agent/delete" style="margin:0;">
+          <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);"
+                  onclick="return confirm('删除 Agent? 这会:\n- 取消正在跑的流水线\n- 关掉所有定时任务\n- 清空当前画像 (历史画像仍保留, 可以从历史里再激活)\n- 历史岗位数据保留\n\n确认?')">
+            🗑 删除 Agent
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {# ============ Resume 管理 (列表 + 上传) ============ #}
   <div class="card">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">

@@ -484,6 +484,19 @@ def create_app(config: Config) -> FastAPI:
         }
         freshness_info = {"hours": int(config.freshness.get("max_age_hours", 24))}
 
+        # Agent 总体状态
+        has_profile = profile is not None
+        has_schedule = cron_info["installed"] or scheduler.get_schedule_hours() > 0
+        is_running = pipeline_state["running"]
+        if not has_profile:
+            agent_state = "uninitialized"   # 还没 onboarding
+        elif is_running:
+            agent_state = "running"
+        elif has_schedule:
+            agent_state = "scheduled"
+        else:
+            agent_state = "idle"
+
         return render(
             "onboarding.html",
             existing_desc=existing_desc,
@@ -496,6 +509,7 @@ def create_app(config: Config) -> FastAPI:
             resume_files=resume_files,
             schedule=schedule_info,
             freshness=freshness_info,
+            agent_state=agent_state,
         )
 
     @app.post("/onboarding/submit")
@@ -752,6 +766,66 @@ def create_app(config: Config) -> FastAPI:
             return RedirectResponse(url="/onboarding/processing", status_code=303)
         pipeline_state["cancel_requested"] = True
         return RedirectResponse(url="/onboarding/processing", status_code=303)
+
+    # ===== Agent 全局控制 =====
+    @app.post("/agent/pause")
+    def agent_pause():
+        """暂停 agent: 取消正在跑的, 关 in-process 调度, 卸 cron. 不动数据."""
+        # 1. 取消当前流水线
+        if pipeline_state["running"]:
+            pipeline_state["cancel_requested"] = True
+        # 2. 关进程内调度
+        scheduler.set_schedule_hours(0)
+        # 3. 卸系统 cron
+        try:
+            cron_uninstall()
+        except Exception:
+            pass
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    @app.post("/agent/delete")
+    def agent_delete():
+        """删除 agent: 暂停 + 清画像 + 解绑所有岗位 profile_id, 回到 onboarding 初态.
+
+        不删 Jobs 数据 (你历史的岗位还在 /jobs 看得到), 不删简历文件.
+        """
+        # 1. 暂停
+        if pipeline_state["running"]:
+            pipeline_state["cancel_requested"] = True
+            _wait_for_cancel(timeout=30)
+        scheduler.set_schedule_hours(0)
+        try:
+            cron_uninstall()
+        except Exception:
+            pass
+
+        # 2. 清画像
+        resume_dir = config.path("resume_dir")
+        for fname in ("_profile.json", "_user_description.txt"):
+            f = resume_dir / fname
+            if f.exists():
+                f.unlink()
+        # DB 里所有 profile 取消激活 (但不删历史快照, 用户可以再激活)
+        from sqlalchemy import update as _update
+        from .db import Profile
+        with session_scope(db_path) as session:
+            session.execute(_update(Profile).where(Profile.is_current).values(is_current=False))
+            session.commit()
+
+        # 3. 清 pipeline 状态
+        pipeline_state.update(
+            running=False,
+            phase="idle",
+            started_at=None,
+            ended_at=None,
+            error=None,
+            stats={},
+            profile_id=None,
+            cancel_requested=False,
+            current_platform=None,
+            platform_started_at=None,
+        )
+        return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/profiles/{profile_id}/delete")
     def delete_profile(profile_id: int):
