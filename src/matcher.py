@@ -63,8 +63,18 @@ SCORING_TOOL = {
                 "type": "boolean",
                 "description": "是否推荐投递",
             },
+            "work_mode": {
+                "type": "string",
+                "enum": ["remote", "hybrid", "onsite", "unspecified"],
+                "description": "JD 中描述的工作模式. JD 未明说就 unspecified",
+            },
+            "min_education": {
+                "type": "string",
+                "enum": ["high_school", "bachelor", "master", "phd", "any", "unspecified"],
+                "description": "JD 要求的最低学历. JD 未明说就 unspecified",
+            },
         },
-        "required": ["score", "summary", "keywords", "fit_bullets", "connector", "recommend"],
+        "required": ["score", "summary", "keywords", "fit_bullets", "connector", "recommend", "work_mode", "min_education"],
     },
 }
 
@@ -101,6 +111,8 @@ class MatchResult:
     fit_bullets: list[str] = field(default_factory=list)
     connector: str = ""
     recommend: bool = False
+    work_mode: str = "unspecified"
+    min_education: str = "unspecified"
 
     @classmethod
     def from_tool_input(cls, data: dict) -> "MatchResult":
@@ -113,6 +125,8 @@ class MatchResult:
             fit_bullets=list(data.get("fit_bullets") or []),
             connector=str(data.get("connector", "")).strip(),
             recommend=bool(data.get("recommend", False)),
+            work_mode=str(data.get("work_mode", "unspecified")),
+            min_education=str(data.get("min_education", "unspecified")),
         )
 
 
@@ -191,6 +205,8 @@ def score_pending(
             job.match_keywords = "\n".join(result.keywords)
             job.match_fit_bullets = "\n".join(result.fit_bullets)
             job.match_connector = result.connector
+            job.work_mode = result.work_mode
+            job.min_education = result.min_education
 
             if result.score < auto_archive_below:
                 job.status = JobStatus.ARCHIVED.value

@@ -28,10 +28,12 @@
         <th>岗位</th>
         <th>公司</th>
         <th>地点</th>
+        <th>模式</th>
+        <th>学历</th>
+        <th>薪资</th>
         <th>发布</th>
         <th>来源</th>
         <th>状态</th>
-        <th>产物</th>
         <th></th>
       </tr>
     </thead>
@@ -50,6 +52,18 @@
         </td>
         <td>{{ j.company }}</td>
         <td><span style="font-size:13px; color:#6b7280;">{{ j.location or '-' }}</span></td>
+        <td>
+          {% if j.work_mode == 'remote' %}<span class="badge badge-green">🏠 Remote</span>
+          {% elif j.work_mode == 'hybrid' %}<span class="badge badge-yellow">🔀 Hybrid</span>
+          {% elif j.work_mode == 'onsite' %}<span class="badge badge-gray">🏢 Onsite</span>
+          {% else %}<span style="color:#9ca3af; font-size:12px;">-</span>{% endif %}
+        </td>
+        <td>
+          {% if j.min_education and j.min_education != 'unspecified' %}
+            <span class="badge badge-gray" style="text-transform:uppercase">{{ j.min_education }}</span>
+          {% else %}<span style="color:#9ca3af; font-size:12px;">-</span>{% endif %}
+        </td>
+        <td><span style="font-size:12px; color:#374151;">{{ j.salary or '-' }}</span></td>
         <td><span style="font-size:12px; color:#6b7280;">
           {% if j.posted_at %}{{ j.posted_at.strftime('%m-%d') }}{% else %}-{% endif %}
         </span></td>
@@ -60,14 +74,10 @@
           {% elif j.status == 'archived' %}<span class="badge badge-gray">archived</span>
           {% else %}<span class="badge badge-gray">{{ j.status }}</span>{% endif %}
         </td>
-        <td>
-          {% if j.tailored_resume_pdf_path %}<span class="badge badge-green">📄 PDF</span>{% endif %}
-          {% if j.cover_letter_path %}<span class="badge badge-green">✉</span>{% endif %}
-        </td>
         <td><a href="/job/{{ j.id }}" class="btn btn-secondary">查看</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="9" style="text-align:center; color:#6b7280; padding:30px;">没有匹配的岗位</td></tr>
+      <tr><td colspan="11" style="text-align:center; color:#6b7280; padding:30px;">没有匹配的岗位</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -55,6 +55,10 @@ class Job(Base):
     # 岗位实际发布时间(各平台 actor 提供,如有)
     posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # 从 JD 中抽取的额外结构化字段 (matcher 阶段填充)
+    work_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)   # remote / hybrid / onsite / unspecified
+    min_education: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # high_school / bachelor / master / phd / any / unspecified
+
     # 评分字段 — 总分
     match_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     match_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

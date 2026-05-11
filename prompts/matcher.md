@@ -38,6 +38,8 @@
 - **fit_bullets** (3-5 条,英文,简历语气): 直接点出"候选人为什么 fit 这岗位"的子弹点,后续会复用到求职信第二段. 每条要有动词+具体经历+(如果能)量化结果
 - **connector** (一句话,英文): "候选人和这家公司的具体连接点" — 比如"你在简历里用过 Stripe SDK,而 Stripe 正是 X 公司的核心基础设施". 这会作为求职信的钩子
 - **recommend** (true/false): 综合判断,是否值得花时间投递 (一般 overall >= 65 且 skills_overlap >= 15 才推荐)
+- **work_mode** (枚举: remote / hybrid / onsite / unspecified): JD 中的工作模式. JD 未明说或不确定就 unspecified
+- **min_education** (枚举: high_school / bachelor / master / phd / any / unspecified): JD 要求的最低学历. "PhD preferred"/"Master's required" 等都要抓出来. JD 没提就 unspecified
 
 注意:
 - **绝不捏造**简历里没有的技能或经历

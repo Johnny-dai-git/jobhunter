@@ -384,6 +384,16 @@ def trends(days, min_score, formats, email):
 
 
 @cli.command()
+@click.option("--limit", type=int, default=None, help="本次最多补填多少个 (默认全部)")
+def enrich(limit):
+    """对已评分但缺 work_mode/min_education 的旧岗位调 LLM 补填这两个字段."""
+    from .enricher import enrich_pending
+    config = _load_config()
+    done = enrich_pending(config, limit=limit)
+    console.print(f"[green]✓[/green] 补填了 {done} 个岗位")
+
+
+@cli.command()
 @click.option("--host", default="127.0.0.1")
 @click.option("--port", type=int, default=8765)
 def web(host, port):
