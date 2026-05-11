@@ -67,6 +67,20 @@ PROFILE_TOOL: dict[str, Any] = {
                             },
                             "required": ["market_demand", "competition", "user_advantage", "composite"],
                         },
+                        "aliases": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 2,
+                            "maxItems": 5,
+                            "description": "2-5 个市场真实存在的同义/变体 title (英文)",
+                        },
+                        "broader_terms": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 0,
+                            "maxItems": 3,
+                            "description": "0-3 个可能隐藏此方向的广义 title (英文,例如某些AI公司用 'Software Engineer' 实际是 ML 岗)",
+                        },
                         "why_this_position": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -84,7 +98,7 @@ PROFILE_TOOL: dict[str, Any] = {
                         },
                     },
                     "required": [
-                        "title", "direction", "scores",
+                        "title", "direction", "scores", "aliases", "broader_terms",
                         "why_this_position", "market_evidence", "linkedin_search_url",
                     ],
                 },
@@ -128,9 +142,11 @@ class Position:
     title: str
     direction: str
     scores: PositionScores
-    why_this_position: list[str]
-    market_evidence: str
-    linkedin_search_url: str
+    aliases: list[str] = field(default_factory=list)
+    broader_terms: list[str] = field(default_factory=list)
+    why_this_position: list[str] = field(default_factory=list)
+    market_evidence: str = ""
+    linkedin_search_url: str = ""
 
     @classmethod
     def from_dict(cls, d: dict) -> "Position":
@@ -138,10 +154,19 @@ class Position:
             title=str(d.get("title", "")).strip(),
             direction=str(d.get("direction", "engineering")),
             scores=PositionScores.from_dict(d.get("scores") or {}),
+            aliases=list(d.get("aliases") or []),
+            broader_terms=list(d.get("broader_terms") or []),
             why_this_position=list(d.get("why_this_position") or []),
             market_evidence=str(d.get("market_evidence", "")),
             linkedin_search_url=str(d.get("linkedin_search_url", "")),
         )
+
+    def all_search_terms(self, include_broader: bool = False) -> list[str]:
+        """primary + aliases [+ broader_terms].  保持顺序,去除空串."""
+        out = [self.title] + list(self.aliases)
+        if include_broader:
+            out += list(self.broader_terms)
+        return [t.strip() for t in out if t and t.strip()]
 
 
 @dataclass
@@ -168,6 +193,8 @@ class ProfileAnalysis:
                     "title": p.title,
                     "direction": p.direction,
                     "scores": asdict(p.scores),
+                    "aliases": p.aliases,
+                    "broader_terms": p.broader_terms,
                     "why_this_position": p.why_this_position,
                     "market_evidence": p.market_evidence,
                     "linkedin_search_url": p.linkedin_search_url,
@@ -188,22 +215,39 @@ class ProfileAnalysis:
             summary=data.get("summary", ""),
         )
 
-    def search_titles(self) -> list[str]:
-        """5 个 position 的 title list. 已经在 prompt 里要求 distinct."""
-        # 去重保险
+    def search_titles(
+        self, *, include_aliases: bool = True, include_broader: bool = False, limit: int = 12
+    ) -> list[str]:
+        """聚合 5 个 position 的搜索词. 默认包含 aliases (扩大命中面), 不含 broader.
+
+        去重 case-insensitive, 保持顺序 (primary 优先, 然后是 aliases).
+        """
         seen: set[str] = set()
         out: list[str] = []
         for p in self.top_5_positions:
-            t = p.title.strip()
-            t_low = t.lower()
-            if t and t_low not in seen:
-                seen.add(t_low)
-                out.append(t)
+            # 先收 primary
+            terms = [p.title]
+            if include_aliases:
+                terms += p.aliases
+            if include_broader:
+                terms += p.broader_terms
+            for t in terms:
+                t_clean = (t or "").strip()
+                t_low = t_clean.lower()
+                if t_clean and t_low not in seen:
+                    seen.add(t_low)
+                    out.append(t_clean)
+                if len(out) >= limit:
+                    return out
         return out
 
+    def primary_titles(self) -> list[str]:
+        """只取 5 个 primary title (老逻辑兼容)."""
+        return [p.title for p in self.top_5_positions if p.title]
+
     # 向后兼容: 旧代码用过 unique_search_titles
-    def unique_search_titles(self, limit: int = 5) -> list[str]:
-        return self.search_titles()[:limit]
+    def unique_search_titles(self, limit: int = 12) -> list[str]:
+        return self.search_titles(include_aliases=True, limit=limit)
 
 
 def _profile_path(config: Config) -> Path:

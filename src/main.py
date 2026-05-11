@@ -84,7 +84,7 @@ def analyze_profile_cmd(force):
 
 
 def _print_profile(profile):
-    """打印 profile 结果给用户看 (新版: 三维度评分)."""
+    """打印 profile 结果给用户看 (新版: 三维度评分 + aliases + broader_terms)."""
     console.print(f"[bold]核心定位:[/bold] {profile.summary}\n")
 
     tbl = Table(
@@ -92,38 +92,53 @@ def _print_profile(profile):
         show_lines=True,
     )
     tbl.add_column("#", style="bold")
-    tbl.add_column("Title")
-    tbl.add_column("Direction", style="dim")
-    tbl.add_column("M / C / A → Comp", justify="center", style="bold cyan")
+    tbl.add_column("Primary + Aliases (搜索用)")
+    tbl.add_column("Dir", style="dim")
+    tbl.add_column("M/C/A→Comp", justify="center", style="bold cyan")
     tbl.add_column("为什么投这个", style="dim")
-    tbl.add_column("市场依据")
     for i, p in enumerate(profile.top_5_positions, 1):
         s = p.scores
-        why = "\n".join(f"• {w}" for w in p.why_this_position)
+        why = "\n".join(f"• {w}" for w in p.why_this_position[:3])
+        titles_block = f"[bold]{p.title}[/bold]"
+        if p.aliases:
+            titles_block += "\n[dim]aka:[/dim]\n  " + "\n  ".join(f"• {a}" for a in p.aliases)
+        if p.broader_terms:
+            titles_block += "\n[dim]hidden under:[/dim]\n  " + "\n  ".join(f"• {b}" for b in p.broader_terms)
         tbl.add_row(
             str(i),
-            p.title,
-            p.direction,
+            titles_block,
+            p.direction[:8],
             f"{s.market_demand}/{s.competition}/{s.user_advantage}\n→ [yellow]{s.composite}[/yellow]",
             why,
-            p.market_evidence,
         )
     console.print(tbl)
     console.print(
         "[dim]M = market_demand  C = competition (越低越好)  "
-        "A = user_advantage  Comp = composite (越高越好)[/dim]"
+        "A = user_advantage  Comp = composite[/dim]"
     )
 
-    titles = profile.search_titles()
+    # 汇总收集器用的搜索词
+    all_terms = profile.search_titles(include_aliases=True, limit=20)
     console.print(
-        f"\n[bold]搜索 titles (collect 会用):[/bold]\n  "
-        + "\n  ".join(f"• {t}" for t in titles)
+        f"\n[bold]Collect 实际会用 {len(all_terms)} 个搜索词 (含 aliases):[/bold]"
     )
+    for t in all_terms:
+        console.print(f"  • {t}")
+
+    broader = []
+    for p in profile.top_5_positions:
+        broader.extend(p.broader_terms)
+    if broader:
+        console.print(
+            f"\n[dim]Broader terms (默认不用,可能噪音大):[/dim]\n  "
+            + ", ".join(set(broader))
+        )
+
     console.print(
         f"\n[bold]目标地点:[/bold] " + ", ".join(profile.target_locations)
     )
 
-    console.print("\n[bold]直接打开 LinkedIn 搜索 (复制到浏览器):[/bold]")
+    console.print("\n[bold]LinkedIn 直链 (primary title):[/bold]")
     for p in profile.top_5_positions:
         console.print(f"  • [link]{p.linkedin_search_url}[/link]")
 

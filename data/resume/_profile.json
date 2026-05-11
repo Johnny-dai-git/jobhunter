@@ -4,99 +4,154 @@
       "title": "Machine Learning Engineer",
       "direction": "engineering",
       "scores": {
-        "market_demand": 10,
+        "market_demand": 9,
         "competition": 6,
-        "user_advantage": 8,
-        "composite": 32
+        "user_advantage": 9,
+        "composite": 81
       },
-      "why_this_position": [
-        "DYNAMIX project designed PPO-based RL scheduler achieving 46% wall-clock speedup across 8-64 A100 GPUs",
-        "Built self-hosted K8s LLM inference platform (vLLM + FastAPI + ArgoCD) with 91.3% peak GPU compute under stress",
-        "Trained PubMedBERT with PyTorch DDP on 2×RTX A6000 and fine-tuned Qwen-7B with few-shot prompting for clinical NLP",
-        "7 first-author papers at IEEE/ACM/Springer on ML systems and infrastructure"
+      "aliases": [
+        "ML Engineer",
+        "AI/ML Engineer",
+        "ML Software Engineer",
+        "Machine Learning Software Engineer",
+        "Engineer, Machine Learning"
       ],
-      "market_evidence": "MLE is LinkedIn's #1 emerging job; GenAI demand drives massive hiring across all company sizes.",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Machine%20Learning%20Engineer&location=United%20States&f_TPR=r86400"
+      "broader_terms": [
+        "Software Engineer (ML focus at AI companies)",
+        "Member of Technical Staff (Anthropic/OpenAI)"
+      ],
+      "why_this_position": [
+        "使用 PyTorch DDP/FSDP、Megatron-LM、NCCL 训练大模型，具备全栈 ML 经验",
+        "独立搭建 K8s + vLLM + FastAPI 推理平台，支持 HPA、MIG 分区和 GPU time-slicing",
+        "7 篇一作论文涵盖分布式训练优化、强化学习调度（DYNAMIX）、LLM serving 等领域",
+        "熟悉从数据并行到混合并行的全谱系分布式策略，论文验证 8-64 GPUs 规模"
+      ],
+      "market_evidence": "LLM 应用爆发，各行业 AI 落地持续推高 MLE 需求，每天大量新岗位",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Machine+Learning+Engineer"
     },
     {
       "title": "AI Infrastructure Engineer",
       "direction": "engineering",
       "scores": {
         "market_demand": 8,
-        "competition": 4,
+        "competition": 5,
         "user_advantage": 10,
-        "composite": 48
+        "composite": 80
       },
-      "why_this_position": [
-        "PhD candidate specializing in ML/LLM training and inference infrastructure security, optimization, and observability",
-        "Built 4-layer GPU observability stack (DCGM Exporter + Prometheus + Grafana) for vLLM on K8s",
-        "Designed eBPF-based network flow telemetry (PSketch) achieving 96% Top-K accuracy at 10 Gbps with <1.1% overhead",
-        "Scaled full-parameter training via NeMo + Megatron-LM with FSDP ZeRO-3, FlashAttention, and activation checkpointing"
+      "aliases": [
+        "ML Infrastructure Engineer",
+        "AI Platform Engineer",
+        "ML Platform Engineer",
+        "AI Systems Engineer",
+        "ML Systems Engineer"
       ],
-      "market_evidence": "AI infra roles surge as companies scale GPU clusters; demand for K8s+GPU+observability skills is very high.",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=AI%20Infrastructure%20Engineer&location=United%20States&f_TPR=r86400"
+      "broader_terms": [
+        "Infrastructure Engineer",
+        "Platform Engineer",
+        "Systems Engineer"
+      ],
+      "why_this_position": [
+        "核心研究聚焦 AI Infrastructure（安全、优化、可观测性），PhD 课题即此方向",
+        "构建 4 层 GPU 可观测性栈（DCGM + Prometheus + Grafana + vLLM metrics）",
+        "开发 eBPF 内核级网络流遥测（PSketch: 96% Top-K 精度）和系统资源 Profiling",
+        "自托管 K8s 推理平台含 GitOps CI/CD 50+ 部署，91.3% 峰值 GPU 利用率"
+      ],
+      "market_evidence": "AI 公司急需专精 GPU 集群、推理/训练基础设施的工程师，供给严重不足",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=AI+Infrastructure+Engineer"
     },
     {
       "title": "Research Engineer",
       "direction": "research-engineering",
       "scores": {
         "market_demand": 7,
-        "competition": 4,
+        "competition": 6,
         "user_advantage": 9,
-        "composite": 37
+        "composite": 63
       },
-      "why_this_position": [
-        "8 research papers (7 first-author) at IEEE/ACM/Springer on ML systems including side-channel attacks, scheduling, and telemetry",
-        "Published on training-time side-channel attacks on DML (MXNet BSP) achieving >97% layer-type accuracy via Intel RAPL and network side channels",
-        "PRISM project designed priority-based selective reliability for distributed ML training with 8-21% throughput gain for LLMs",
-        "Experience bridging research (PhD) and production systems (Cisco, Broadcom, K8s deployment)"
+      "aliases": [
+        "AI Research Engineer",
+        "Research Engineer, ML",
+        "Applied Research Engineer",
+        "AI Researcher",
+        "Member of Technical Staff (Research)"
       ],
-      "market_evidence": "AI Research Engineer demand grows as labs and industry need PhD-level talent to bridge SOTA research into production.",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Research%20Engineer&location=United%20States&f_TPR=r86400"
+      "broader_terms": [
+        "Research Scientist (applied track at some companies)",
+        "Software Engineer, Research"
+      ],
+      "why_this_position": [
+        "8 篇论文（7 篇一作）发表于 IEEE/ACM/Springer，研究经验扎实",
+        "从 RL 调度（DYNAMIX）到 eBPF 遥测再到 side-channel attack，跨领域系统研究能力",
+        "独立完成从论文选题、方案设计、实验验证到论文撰写的完整闭环",
+        "PhD Candidate in CS（AI Infrastructure），具备前沿研究视野"
+      ],
+      "market_evidence": "AI 实验室和前沿公司需要能 bridge 研究和工程的复合型人才，岗位稳中有升",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Research+Engineer+ML"
     },
     {
       "title": "ML Platform Engineer",
       "direction": "engineering",
       "scores": {
-        "market_demand": 8,
-        "competition": 5,
-        "user_advantage": 9,
-        "composite": 36
-      },
-      "why_this_position": [
-        "Designed self-hosted K8s LLM inference platform with GitOps CI/CD (ArgoCD + GitHub Actions) across 50+ deployments",
-        "Built 4-layer GPU observability: DCGM Exporter → Prometheus → Grafana covering GPU hardware, vLLM metrics, FastAPI gateway, K8s cluster",
-        "Hands-on with HPA (1↔2 on RTX 4050, 1↔7 on Lambda Labs A100 MIG) and GPU time-slicing/MIG",
-        "Scaled distributed training with DDP/FSDP, Megatron-LM, NeMo, FlashAttention on multi-GPU setups"
-      ],
-      "market_evidence": "ML Platform teams are top priority at AI companies; skills in K8s+GPU+vLLM+observability are scarce and in demand.",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=ML%20Platform%20Engineer&location=United%20States&f_TPR=r86400"
-    },
-    {
-      "title": "Systems Engineer",
-      "direction": "engineering",
-      "scores": {
         "market_demand": 7,
         "competition": 5,
         "user_advantage": 8,
-        "composite": 28
+        "composite": 56
       },
-      "why_this_position": [
-        "Designed eBPF-based dual-pipeline framework (eHashPipe) with O(n) Top-K tracking, 10-14× finer temporal resolution than top/htop",
-        "Developed NPU/ASIC features for 100 Gbps core router using Broadcom BCM SDK at Cisco; reduced forwarding latency",
-        "Re-architected RTOS data acquisition with DMA + circular-buffer, reducing CPU load by 30% at Broadcom/Emulex",
-        "Designed Scotch elastic SDN overlay achieving >70% controller congestion reduction on 34-node GENI Clos topology"
+      "aliases": [
+        "ML Platform Software Engineer",
+        "Machine Learning Platform Engineer",
+        "AI Platform Software Engineer",
+        "ML Infrastructure Platform Engineer"
       ],
-      "market_evidence": "Systems engineers with eBPF, networking, and low-level performance skills are in demand for cloud and AI infrastructure.",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Systems%20Engineer&location=United%20States&f_TPR=r86400"
+      "broader_terms": [
+        "Platform Engineer",
+        "Software Engineer, Infrastructure"
+      ],
+      "why_this_position": [
+        "搭建 K8s + ArgoCD + GitHub Actions GitOps 流水线，管理 50+ 部署",
+        "精通 Slurm、Kubernetes、Docker 等编排和调度工具",
+        "构建 GPU 集群 HPA 自动扩缩容策略（MIG 7x1g.5gb, HPA 1↔7）",
+        "Cisco/Broadcom 系统软件工程背景，理解大规模生产环境"
+      ],
+      "market_evidence": "企业 ML 平台化趋势明显，ML Platform 团队在 mid-size/large 公司快速扩张",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=ML+Platform+Engineer"
+    },
+    {
+      "title": "GPU Compute Engineer",
+      "direction": "engineering",
+      "scores": {
+        "market_demand": 6,
+        "competition": 4,
+        "user_advantage": 7,
+        "composite": 42
+      },
+      "aliases": [
+        "GPU Engineer",
+        "GPU Software Engineer",
+        "HPC Engineer",
+        "GPU Systems Engineer",
+        "Compute Infrastructure Engineer"
+      ],
+      "broader_terms": [
+        "Engineer (Nvidia compute roles)",
+        "Systems Software Engineer"
+      ],
+      "why_this_position": [
+        "精通 GPU 多实例分区（MIG）、GPU time-slicing、HPA 等 GPU 资源管理",
+        "8-64 A100 GPU 规模分布式训练经验，NCEL/BytePS 通信优化",
+        "构建 GPU 可观测性栈（DCGM Exporter + Prometheus），监控 GPU 硬件指标",
+        "NCCL 通信调度和传输层优化（UDP 替代方案，15-21% LLM 吞吐提升）"
+      ],
+      "market_evidence": "GPU 集群建设和推理优化为 AI Infra 核心方向，Nvidia 及云厂商持续扩招",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=GPU+Compute+Engineer"
     }
   ],
   "target_locations": [
     "San Francisco Bay Area",
+    "New York City",
     "Seattle",
-    "New York",
-    "United States",
-    "Remote"
+    "Austin",
+    "Boston/Cambridge"
   ],
-  "summary": "AI Infrastructure & ML Systems PhD candidate with strong systems+ML cross skills; target MLE, AI Infrastructure, Research Engineer roles leveraging deep GPU/K8s/eBPF/NCCL experience."
+  "summary": "AI Infra + ML Engineer 方向博士候选人，精通 K8s/vLLM/eBPF/PyTorch 分布式训练全栈。优先投递 MLE 和 AI Infra 岗位，辅以 Research Engineer 和 GPU 工程方向，主攻旧金山、纽约、西雅图、奥斯汀、波士顿。"
 }

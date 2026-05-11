@@ -44,14 +44,15 @@ def collect_all(config: Config, platforms: Optional[list[str]] = None) -> dict:
     platforms = platforms or PLATFORMS
 
     profile = load_profile(config)
-    if profile and profile.top_directions:
-        keywords = profile.unique_search_titles(limit=5)
+    if profile and profile.top_5_positions:
+        # 包含 primary + aliases, 撒大网. 默认上限 12.
+        keywords = profile.search_titles(include_aliases=True, limit=12)
         locations = (
             profile.target_locations
             or config.preferences.get("locations")
             or []
         )
-        print(f"[collect] 用 profile 推断的搜索 title: {keywords}")
+        print(f"[collect] 用 profile 推断的 {len(keywords)} 个搜索词 (含 aliases): {keywords}")
     else:
         keywords = config.preferences.get("job_titles") or []
         locations = config.preferences.get("locations") or []
