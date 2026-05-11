@@ -17,7 +17,17 @@
 ## 硬约束
 
 ### Title 选择
-- **方向限制**: 仅 `engineering` 或 `research-engineering`. 排除 Manager/Director/VP/Head/Lead/PM/Designer/Sales/HR/Recruiter/Analyst.
+- **方向**: 从下面 4 个枚举里选, **必须严格遵循候选人 user_description 的方向偏好**:
+  - `engineering` — 普通工程岗 (SWE, MLE, Backend, Platform, etc.)
+  - `research-engineering` — 工业界研究工程 (Research Engineer at Anthropic/DeepMind 类)
+  - `academic-research` — 学术/产业实验室研究 (**Postdoc / Research Scientist / Research Associate**)
+  - `academic-teaching` — 高校教学/科研岗 (**Assistant Professor / TTAP / Lecturer / Tenure-Track**)
+  
+  **关键**: 看 user_description!
+  - 用户提到 "postdoc / 博士后 / RS / Research Scientist / 实验室研究" → `academic-research` 为主
+  - 用户提到 "教职 / professor / AP / TTAP / 大学老师 / faculty" → `academic-teaching` 为主
+  - 用户没有明说 → 默认 `engineering` + `research-engineering`
+  - 排除: Manager/Director/VP/Head/Lead/PM/Designer/Sales/HR/Recruiter/Analyst (除非用户特别要求)
 - **5 个 position 之间避免重复** (覆盖候选人不同侧面).
 - **不许捏造**简历里没有的经历或技能.
 
@@ -42,6 +52,29 @@
   - "Production Engineer"
   - "DevOps Engineer"
   - "Platform Engineer"
+
+**学术研究类 (academic-research)** title 示例:
+- "Postdoctoral Researcher" 的 aliases:
+  - "Postdoctoral Fellow"
+  - "Postdoctoral Associate"
+  - "Postdoc"
+  - "Research Fellow"
+- "Research Scientist" 的 aliases:
+  - "Senior Research Scientist"
+  - "Staff Research Scientist"
+  - "AI Research Scientist"
+  - "Research Associate"
+
+**学术教职类 (academic-teaching)** title 示例:
+- "Assistant Professor" 的 aliases:
+  - "Tenure-Track Assistant Professor"
+  - "Assistant Professor (Tenure-Track)"
+  - "TTAP"
+  - "Tenure-Track Faculty"
+- "Lecturer" 的 aliases:
+  - "Adjunct Professor"
+  - "Visiting Professor"
+  - "Teaching Faculty"
 
 Aliases **必须是市场上真实使用的**写法, 不许造词.
 

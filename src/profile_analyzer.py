@@ -70,7 +70,13 @@ PROFILE_TOOL: dict[str, Any] = {
                         },
                         "direction": {
                             "type": "string",
-                            "enum": ["engineering", "research-engineering"],
+                            "enum": [
+                                "engineering",
+                                "research-engineering",
+                                "academic-research",
+                                "academic-teaching",
+                            ],
+                            "description": "engineering | research-engineering | academic-research (postdoc/RS) | academic-teaching (Asst Prof/TTAP)",
                         },
                         "scores": {
                             "type": "object",
