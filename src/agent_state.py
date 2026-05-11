@@ -136,7 +136,33 @@ def end_run(config, *, success: bool = True, phase: str = "done", error: Optiona
         except Exception:
             pass
     state["last_run"] = cur
+
+    # 累计统计
+    lifetime = state.setdefault("stats_lifetime", {
+        "total_runs": 0, "successful_runs": 0, "failed_runs": 0,
+        "first_run_at": None, "last_run_at": None,
+        "total_duration_sec": 0,
+    })
+    lifetime["total_runs"] += 1
+    if success:
+        lifetime["successful_runs"] += 1
+    else:
+        lifetime["failed_runs"] += 1
+    if not lifetime.get("first_run_at"):
+        lifetime["first_run_at"] = cur.get("started_at")
+    lifetime["last_run_at"] = cur.get("ended_at")
+    lifetime["total_duration_sec"] += int(cur.get("duration_sec") or 0)
+
     _save(config, state)
+
+
+def get_lifetime_stats(config) -> dict:
+    state = _load(config)
+    return state.get("stats_lifetime") or {
+        "total_runs": 0, "successful_runs": 0, "failed_runs": 0,
+        "first_run_at": None, "last_run_at": None,
+        "total_duration_sec": 0,
+    }
 
 
 def get_state(config) -> dict:

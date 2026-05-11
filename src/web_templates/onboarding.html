@@ -192,6 +192,92 @@
           </div>
         </div>
         {% endif %}
+
+        {# ============ k8s 风格 health probes (liveness + readiness) ============ #}
+        {% if health %}
+        <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div style="padding:10px 12px; background:#f8fafc; border-radius:var(--radius-sm); font-size:12px; border:1px solid var(--color-border);">
+            <div style="font-weight:600; margin-bottom:4px;">
+              💓 Liveness:
+              {% if health.liveness == 'running' %}<span style="color:var(--color-success);">● 运行中</span>
+              {% elif health.liveness == 'healthy' %}<span style="color:var(--color-success);">✓ 健康</span>
+              {% elif health.liveness == 'stale' %}<span style="color:var(--color-warn);">⚠ 落后</span>
+              {% elif health.liveness == 'no-schedule' %}<span style="color:var(--color-text-muted);">○ 无定时</span>
+              {% elif health.liveness == 'untested' %}<span style="color:var(--color-text-muted);">? 未跑过</span>
+              {% else %}<span style="color:var(--color-text-muted);">{{ health.liveness }}</span>{% endif %}
+              <a href="/health/liveness" target="_blank" style="float:right; font-size:10px; color:var(--color-text-dim);">JSON →</a>
+            </div>
+            {% if health.issues_live %}
+            <ul style="margin:4px 0 0 16px; padding:0; color:var(--color-text-muted); font-size:11px; line-height:1.6;">
+              {% for iss in health.issues_live %}<li>{{ iss }}</li>{% endfor %}
+            </ul>
+            {% else %}
+            <div style="color:var(--color-text-dim); font-size:11px;">在线 + 按时跑</div>
+            {% endif %}
+          </div>
+          <div style="padding:10px 12px; background:#f8fafc; border-radius:var(--radius-sm); font-size:12px; border:1px solid var(--color-border);">
+            <div style="font-weight:600; margin-bottom:4px;">
+              🚦 Readiness:
+              {% if health.readiness == 'ready' %}<span style="color:var(--color-success);">✓ 就绪</span>
+              {% else %}<span style="color:var(--color-danger);">✗ 未就绪</span>{% endif %}
+              <a href="/health/readiness" target="_blank" style="float:right; font-size:10px; color:var(--color-text-dim);">JSON →</a>
+            </div>
+            {% if health.issues_ready %}
+            <ul style="margin:4px 0 0 16px; padding:0; color:var(--color-text-muted); font-size:11px; line-height:1.6;">
+              {% for iss in health.issues_ready %}<li>{{ iss }}</li>{% endfor %}
+            </ul>
+            {% else %}
+            <div style="color:var(--color-text-dim); font-size:11px;">画像/简历/Key 都到位</div>
+            {% endif %}
+            <div style="margin-top:6px; font-size:10px; color:var(--color-text-dim);">
+              {% if health.checks.has_profile %}<span style="color:var(--color-success);">✓</span>{% else %}<span style="color:var(--color-danger);">✗</span>{% endif %} 画像 ·
+              {% if health.checks.has_resume %}<span style="color:var(--color-success);">✓</span>{% else %}<span style="color:var(--color-danger);">✗</span>{% endif %} 简历 ·
+              {% if health.checks.has_deepseek_key %}<span style="color:var(--color-success);">✓</span>{% else %}<span style="color:var(--color-danger);">✗</span>{% endif %} DeepSeek ·
+              {% if health.checks.has_apify_token %}<span style="color:var(--color-success);">✓</span>{% else %}<span style="color:var(--color-danger);">✗</span>{% endif %} Apify
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {# ============ 任务计数 (累计跑次 + 岗位) ============ #}
+        {% if lifetime and counts %}
+        <div style="margin-top:8px; padding:10px 12px; background:#fefce8; border-radius:var(--radius-sm); font-size:12px; border:1px solid #fde68a;">
+          <div style="font-weight:600; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+            <span>📊 任务计数</span>
+            <a href="/health" target="_blank" style="font-size:10px; color:var(--color-text-dim);">完整 JSON →</a>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; text-align:center;">
+            <div>
+              <div style="font-size:18px; font-weight:700; color:var(--color-accent);">{{ lifetime.total_runs or 0 }}</div>
+              <div style="color:var(--color-text-muted); font-size:10px;">累计跑次</div>
+              <div style="color:var(--color-text-dim); font-size:10px;">
+                ✓ {{ lifetime.successful_runs or 0 }} / ✗ {{ lifetime.failed_runs or 0 }}
+              </div>
+            </div>
+            <div>
+              <div style="font-size:18px; font-weight:700; color:var(--color-accent);">{{ counts.total_jobs }}</div>
+              <div style="color:var(--color-text-muted); font-size:10px;">岗位总数</div>
+              <div style="color:var(--color-text-dim); font-size:10px;">+{{ counts.week_jobs }} 周 / +{{ counts.day_jobs }} 日</div>
+            </div>
+            <div>
+              <div style="font-size:18px; font-weight:700; color:var(--color-success);">{{ counts.high_match_jobs }}</div>
+              <div style="color:var(--color-text-muted); font-size:10px;">高分 (≥75)</div>
+              <div style="color:var(--color-text-dim); font-size:10px;">{{ counts.scored_jobs }} 已评分</div>
+            </div>
+            <div>
+              <div style="font-size:18px; font-weight:700; color:#7c3aed;">{{ counts.applied_jobs }}</div>
+              <div style="color:var(--color-text-muted); font-size:10px;">已投递</div>
+              <div style="color:var(--color-text-dim); font-size:10px;">{{ counts.tailored_jobs }} 定制 PDF</div>
+            </div>
+          </div>
+          {% if lifetime.total_duration_sec %}
+          <div style="margin-top:6px; font-size:10px; color:var(--color-text-dim); text-align:right;">
+            累计耗时 {{ (lifetime.total_duration_sec // 3600) }}h {{ ((lifetime.total_duration_sec % 3600) // 60) }}m
+            {% if lifetime.last_run_at %} · 最近 {{ lifetime.last_run_at[:19].replace('T',' ') }}{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
       <div style="display:flex; gap:8px;">
         {% if agent_state in ['running', 'scheduled'] %}

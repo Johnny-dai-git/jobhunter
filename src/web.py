@@ -17,6 +17,11 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 
+import os
+from datetime import timedelta
+
+from fastapi.responses import JSONResponse
+
 from . import agent_state
 from .collect import collect_all
 from .config import Config
@@ -318,11 +323,144 @@ def create_app(config: Config) -> FastAPI:
             session.expunge(job)
             return job
 
+    # ---- helpers for health/stats ----
+    def _compute_health() -> dict:
+        """liveness + readiness + 问题列表."""
+        persistent = agent_state.get_state(config)
+        cur = persistent.get("current_run")
+        last = persistent.get("last_run")
+        cron_info = cron_status()
+        schedule_hours = cron_info["hours"] or scheduler.get_schedule_hours() or 0
+
+        # Liveness
+        issues_live: list[str] = []
+        if cur:
+            liveness = "running"
+        elif schedule_hours == 0:
+            liveness = "no-schedule"
+            issues_live.append("没设置定时任务 (cron 或进程内)")
+        elif last and last.get("ended_at"):
+            try:
+                last_end = datetime.fromisoformat(last["ended_at"])
+                gap_h = (datetime.now() - last_end).total_seconds() / 3600
+                if gap_h > schedule_hours * 2:
+                    liveness = "stale"
+                    issues_live.append(
+                        f"上次跑 {gap_h:.1f}h 前, 超出预期 {schedule_hours}h × 2"
+                    )
+                else:
+                    liveness = "healthy"
+            except Exception:
+                liveness = "unknown"
+        else:
+            liveness = "untested"
+            issues_live.append("有定时任务但还从未跑过")
+
+        # Readiness
+        from .profile_analyzer import load_profile as _lp
+        issues_ready: list[str] = []
+        has_profile = _lp(config) is not None
+        has_resume = len(list_resumes(config.path("resume_dir"))) > 0
+        has_deepseek = bool(os.getenv("DEEPSEEK_API_KEY"))
+        has_apify = bool(os.getenv("APIFY_API_TOKEN"))
+        if not has_profile: issues_ready.append("无激活画像 (做 onboarding)")
+        if not has_resume:  issues_ready.append("没有简历 (上传一份)")
+        if not has_deepseek: issues_ready.append("DEEPSEEK_API_KEY 未设置")
+        if not has_apify:   issues_ready.append("APIFY_API_TOKEN 未设置")
+        readiness = "ready" if not issues_ready else "not-ready"
+
+        return {
+            "liveness": liveness,
+            "readiness": readiness,
+            "issues_live": issues_live,
+            "issues_ready": issues_ready,
+            "checks": {
+                "has_profile": has_profile,
+                "has_resume": has_resume,
+                "has_deepseek_key": has_deepseek,
+                "has_apify_token": has_apify,
+                "schedule_hours": schedule_hours,
+            },
+        }
+
+    def _compute_counts() -> dict:
+        """累计任务计数."""
+        from sqlalchemy import func
+        week_ago = datetime.now() - timedelta(days=7)
+        day_ago = datetime.now() - timedelta(days=1)
+
+        with session_scope(db_path) as session:
+            total = session.scalar(select(func.count(Job.id))) or 0
+            scored = session.scalar(
+                select(func.count(Job.id)).where(Job.match_score.is_not(None))
+            ) or 0
+            high = session.scalar(
+                select(func.count(Job.id)).where(Job.match_score >= 75)
+            ) or 0
+            applied = session.scalar(
+                select(func.count(Job.id)).where(Job.status == JobStatus.APPLIED.value)
+            ) or 0
+            tailored = session.scalar(
+                select(func.count(Job.id)).where(Job.tailored_resume_pdf_path.is_not(None))
+            ) or 0
+            week = session.scalar(
+                select(func.count(Job.id)).where(Job.created_at >= week_ago)
+            ) or 0
+            day = session.scalar(
+                select(func.count(Job.id)).where(Job.created_at >= day_ago)
+            ) or 0
+        return {
+            "total_jobs": total,
+            "scored_jobs": scored,
+            "high_match_jobs": high,
+            "tailored_jobs": tailored,
+            "applied_jobs": applied,
+            "week_jobs": week,
+            "day_jobs": day,
+        }
+
     # ---- routes ----
     @app.get("/")
     def root():
         """根路径总是去 onboarding (历史 + 表单)."""
         return RedirectResponse(url="/onboarding", status_code=303)
+
+    # ===== k8s 风格 health probes =====
+    @app.get("/health/liveness")
+    def liveness_probe():
+        h = _compute_health()
+        # 200 当 liveness 是 running/healthy, 否则 503
+        status_code = 200 if h["liveness"] in ("running", "healthy") else 503
+        return JSONResponse({
+            "status": h["liveness"],
+            "issues": h["issues_live"],
+            "current_run": agent_state.get_state(config).get("current_run"),
+        }, status_code=status_code)
+
+    @app.get("/health/readiness")
+    def readiness_probe():
+        h = _compute_health()
+        status_code = 200 if h["readiness"] == "ready" else 503
+        return JSONResponse({
+            "status": h["readiness"],
+            "issues": h["issues_ready"],
+            "checks": h["checks"],
+        }, status_code=status_code)
+
+    @app.get("/health")
+    def health_combined():
+        h = _compute_health()
+        counts = _compute_counts()
+        lifetime = agent_state.get_lifetime_stats(config)
+        return JSONResponse({
+            "liveness": h["liveness"],
+            "readiness": h["readiness"],
+            "issues_live": h["issues_live"],
+            "issues_ready": h["issues_ready"],
+            "checks": h["checks"],
+            "counts": counts,
+            "lifetime": lifetime,
+        })
 
     @app.get("/applied")
     def applied_list(sort: str = "applied_at"):
@@ -584,6 +722,9 @@ def create_app(config: Config) -> FastAPI:
             cur_run=cur_run,
             last_run=last_run,
             cur_elapsed=cur_elapsed,
+            health=_compute_health(),
+            counts=_compute_counts(),
+            lifetime=agent_state.get_lifetime_stats(config),
         )
 
     @app.post("/onboarding/submit")
