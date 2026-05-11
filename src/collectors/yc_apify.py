@@ -88,12 +88,12 @@ class YCApifyCollector(BaseCollector):
     def _build_input(self, keywords: list[str], locations: list[str]) -> dict:
         industries = _infer_industries(keywords)
         return {
-            "maxCompanies": 50,                  # 抓 50 个公司,然后客户端过滤 jobs
+            "maxCompanies": 20,                  # 50 太慢 (2-5 分钟), 降到 20
             "filterByLocation": locations,
             "filterByIndustry": industries or ["AI"],
             "topCompaniesOnly": False,
-            "includeFounderDescriptions": False,  # 节省 token,我们不需要 founder bio
-            "rateLimitDelay": 1.0,
+            "includeFounderDescriptions": False,
+            "rateLimitDelay": 0.8,
         }
 
     def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:

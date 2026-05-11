@@ -59,6 +59,7 @@ def collect_all(
     *,
     should_continue=None,
     profile_id: Optional[int] = None,
+    on_platform_start=None,
 ) -> dict:
     """跑指定平台 (默认所有 enabled) 的采集器,返回统计.
 
@@ -110,6 +111,11 @@ def collect_all(
         c = get_collector(platform, config)
         if not c.enabled:
             continue
+        if on_platform_start:
+            try:
+                on_platform_start(platform)
+            except Exception:
+                pass
         print(f"\n→ 采集 {platform}...")
         new_count = 0
         seen_count = 0

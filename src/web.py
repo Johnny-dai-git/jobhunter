@@ -124,6 +124,8 @@ def create_app(config: Config) -> FastAPI:
         "stats": {},
         "profile_id": None,         # 当前流水线绑定的画像 id
         "cancel_requested": False,
+        "current_platform": None,   # 采集阶段正在跑哪个平台
+        "platform_started_at": None,
     }
     pipeline_lock = threading.Lock()
 
@@ -170,12 +172,19 @@ def create_app(config: Config) -> FastAPI:
                 return
 
             pipeline_state["phase"] = "collecting"
+
+            def _on_platform(name: str):
+                pipeline_state["current_platform"] = name
+                pipeline_state["platform_started_at"] = datetime.now()
+
             stats = collect_all(
                 config,
                 should_continue=_should_continue,
                 profile_id=pipeline_state["profile_id"],
+                on_platform_start=_on_platform,
             )
             pipeline_state["stats"]["collect"] = stats
+            pipeline_state["current_platform"] = None
 
             if not _should_continue():
                 pipeline_state["phase"] = "cancelled"
@@ -698,10 +707,15 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/onboarding/processing")
     def onboarding_processing():
+        plat_elapsed = ""
+        if pipeline_state.get("platform_started_at"):
+            secs = int((datetime.now() - pipeline_state["platform_started_at"]).total_seconds())
+            plat_elapsed = f"{secs}s" if secs < 60 else f"{secs // 60}m {secs % 60}s"
         return render(
             "processing.html",
             state=pipeline_state,
             elapsed=_elapsed(pipeline_state),
+            platform_elapsed=plat_elapsed,
         )
 
     @app.post("/refresh")

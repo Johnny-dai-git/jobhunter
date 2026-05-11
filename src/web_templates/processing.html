@@ -114,9 +114,15 @@
   </div>
 
   {# 4 个阶段 #}
+  {% set collect_hint %}
+    {% if state.phase == 'collecting' and state.current_platform %}
+      当前: <strong>{{ state.current_platform }}</strong>{% if platform_elapsed %} ({{ platform_elapsed }}){% endif %}
+    {% else %}5 平台逐个跑: LinkedIn / Indeed / YC / Dice / HN
+    {% endif %}
+  {% endset %}
   {% set phases = [
     ('analyzing', '分析简历 + 用户描述', 'DeepSeek 生成 Top-5 搜索 title'),
-    ('collecting', '采集岗位', '5 平台并行: LinkedIn / Indeed / YC / Dice / HN'),
+    ('collecting', '采集岗位', collect_hint | trim | safe),
     ('matching', '匹配评分', '6 维度评估每个新岗位'),
     ('done', '完成', '准备进入岗位列表'),
   ] %}
