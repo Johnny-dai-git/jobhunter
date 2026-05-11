@@ -532,15 +532,19 @@ def create_app(config: Config) -> FastAPI:
         return target
 
     @app.post("/resume/{filename}/activate")
-    def activate_resume(filename: str):
-        """把一个旧简历设为当前 (touch 文件让它 mtime 最新)."""
+    def activate_resume(filename: str, background_tasks: BackgroundTasks):
+        """激活某份简历: touch + 重新 parse + 用当前画像跑一遍流水线 (collect + match)."""
         target = _safe_resume_path(filename)
         target.touch()
         try:
             parse_and_cache(config.path("resume_dir"))
         except Exception as e:
             raise HTTPException(500, f"重新解析失败: {e}")
-        return RedirectResponse(url="/onboarding", status_code=303)
+        # 取消正在跑的(如有), 然后启动新流水线
+        if pipeline_state["running"]:
+            _wait_for_cancel(timeout=60)
+        background_tasks.add_task(_run_pipeline_bg, False, None, None)
+        return RedirectResponse(url="/onboarding/processing", status_code=303)
 
     @app.post("/resume/{filename}/delete")
     def delete_resume(filename: str):
@@ -599,6 +603,25 @@ def create_app(config: Config) -> FastAPI:
             return RedirectResponse(url="/onboarding/processing", status_code=303)
         pipeline_state["cancel_requested"] = True
         return RedirectResponse(url="/onboarding/processing", status_code=303)
+
+    @app.post("/profiles/{profile_id}/delete")
+    def delete_profile(profile_id: int):
+        """删除一个历史画像. 当前激活的画像不允许删 (先切走再删)."""
+        from .db import Profile
+        from sqlalchemy import update as _update
+        with session_scope(db_path) as session:
+            row = session.get(Profile, profile_id)
+            if not row:
+                raise HTTPException(404, "画像不存在")
+            if row.is_current:
+                raise HTTPException(400, "不能删除当前激活的画像. 先切换到别的画像再来删.")
+            # 解绑该画像下的所有 jobs (保留岗位记录, 只是 profile_id 置 NULL)
+            session.execute(
+                _update(Job).where(Job.profile_id == profile_id).values(profile_id=None)
+            )
+            session.delete(row)
+            session.commit()
+        return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.get("/onboarding/processing")
     def onboarding_processing():

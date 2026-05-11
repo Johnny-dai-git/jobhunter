@@ -32,6 +32,10 @@
           🔄 重新激活
         </button>
       </form>
+      <form method="post" action="/profiles/{{ profile.id }}/delete" style="margin:0;">
+        <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);"
+                onclick="return confirm('删除这个画像? 操作不可恢复. 该画像下的岗位会保留 (profile_id 置空).')">删除</button>
+      </form>
       {% endif %}
     </div>
   </div>
