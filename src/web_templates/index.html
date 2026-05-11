@@ -1,9 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Jobs · JobHunter{% endblock %}
 {% block content %}
-{% set now = (jobs[0].updated_at if jobs else None) %}
+
+{# 排序链接生成器: 保留其他查询参数 #}
+{% macro sort_link(field, label) %}
+  {% set active = (sort == field) %}
+  <a href="?min_score={{ min_score }}&status={{ status }}&sort={{ field }}"
+     style="color:{% if active %}#111827{% else %}#6b7280{% endif %};
+            text-decoration:none; font-weight:{% if active %}700{% else %}400{% endif %};">
+    {{ label }}{% if active %} ↓{% endif %}
+  </a>
+{% endmacro %}
 
 <form class="filters" method="get">
+  <input type="hidden" name="sort" value="{{ sort }}">
+
   <label for="min_score">最低分</label>
   <input type="number" name="min_score" id="min_score" value="{{ min_score }}" step="5" min="0" max="100">
 
@@ -24,14 +35,14 @@
   <table>
     <thead>
       <tr>
-        <th>Score</th>
+        <th>{{ sort_link('score', 'Score') }}</th>
         <th>岗位</th>
-        <th>公司</th>
+        <th>{{ sort_link('company', '公司') }}</th>
         <th>地点</th>
-        <th>模式</th>
-        <th>学历</th>
-        <th>薪资</th>
-        <th>发布</th>
+        <th>{{ sort_link('mode', '模式') }}</th>
+        <th>{{ sort_link('education', '学历') }}</th>
+        <th>{{ sort_link('salary', '薪资') }}</th>
+        <th>{{ sort_link('posted', '发布') }}</th>
         <th>来源</th>
         <th>状态</th>
         <th></th>

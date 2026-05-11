@@ -26,6 +26,64 @@ from .tracker import mark_applied
 TEMPLATES_DIR = Path(__file__).resolve().parent / "web_templates"
 
 
+# ========= 排序辅助 =========
+_EDU_RANK = {
+    "phd": 5,
+    "master": 4,
+    "bachelor": 3,
+    "high_school": 2,
+    "any": 1,
+    "unspecified": 0,
+    "": 0,
+    None: 0,
+}
+
+
+def _edu_rank(val: str | None) -> int:
+    return _EDU_RANK.get((val or "").lower(), 0)
+
+
+def _parse_salary_min(s: str | None) -> int:
+    """从'$120,000 - $150,000' / '80K - 110K USD' 等字符串里抽 minimum 数字 (USD).
+
+    用于排序; 抓不到就返回 0.
+    """
+    import re
+    if not s:
+        return 0
+    nums: list[int] = []
+    for m in re.finditer(r"\$?\s*(\d{1,3}(?:[,\.]\d{3})+|\d+)\s*([Kk])?", s):
+        raw = m.group(1).replace(",", "").replace(".", "")
+        try:
+            n = int(raw)
+        except ValueError:
+            continue
+        if m.group(2):  # K/k 后缀
+            n *= 1000
+        elif n < 1000:  # 纯数字 < 1000 (例如 "120") 视作 K
+            n *= 1000
+        if 10_000 <= n <= 1_500_000:
+            nums.append(n)
+    return min(nums) if nums else 0
+
+
+_MODE_RANK = {"remote": 3, "hybrid": 2, "onsite": 1, "unspecified": 0, "": 0, None: 0}
+
+
+def _mode_rank(val: str | None) -> int:
+    return _MODE_RANK.get((val or "").lower(), 0)
+
+
+SORTERS = {
+    "score": lambda j: -(j.match_score or -1),
+    "salary": lambda j: -_parse_salary_min(j.salary),
+    "education": lambda j: -_edu_rank(j.min_education),
+    "mode": lambda j: -_mode_rank(j.work_mode),
+    "posted": lambda j: -(j.posted_at.timestamp() if j.posted_at else 0),
+    "company": lambda j: (j.company or "").lower(),
+}
+
+
 def _make_env() -> Environment:
     """直接构造 Jinja2 Environment, 不走 starlette wrapper, 避开 cache_key bug."""
     return Environment(
@@ -54,7 +112,11 @@ def create_app(config: Config) -> FastAPI:
 
     # ---- routes ----
     @app.get("/")
-    def index(min_score: float = 70.0, status: str = "active"):
+    def index(
+        min_score: float = 70.0,
+        status: str = "active",
+        sort: str = "score",
+    ):
         with session_scope(db_path) as session:
             stmt = select(Job)
             if status == "active":
@@ -63,16 +125,20 @@ def create_app(config: Config) -> FastAPI:
                 stmt = stmt.where(Job.status == status)
             if min_score is not None:
                 stmt = stmt.where(Job.match_score >= min_score)
-            stmt = stmt.order_by(Job.match_score.desc().nulls_last(), Job.id.desc())
             jobs = list(session.scalars(stmt).all())
             for j in jobs:
                 session.expunge(j)
+
+        # Python 端排序 (salary/education/mode 都是字符串字段, SQL ORDER BY 难弄)
+        sort_fn = SORTERS.get(sort, SORTERS["score"])
+        jobs.sort(key=sort_fn)
 
         return render(
             "index.html",
             jobs=jobs,
             min_score=min_score,
             status=status,
+            sort=sort,
             total=len(jobs),
         )
 
