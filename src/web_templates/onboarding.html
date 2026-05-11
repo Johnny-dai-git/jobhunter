@@ -145,23 +145,44 @@
         </tr>
       </thead>
       <tbody>
+        {% set ns = namespace(first_active=true) %}
         {% for r in resume_files %}
         <tr>
-          <td style="font-weight:500;">{{ r.filename }}</td>
+          <td style="font-weight:500;">
+            {{ r.filename }}
+            {% if r.paused %}<span style="font-size:11px; color:var(--color-text-dim); margin-left:4px;">(在 _paused/ 里)</span>{% endif %}
+          </td>
           <td style="color:var(--color-text-muted); font-size:12px;">{{ r.size_kb }} KB</td>
           <td style="color:var(--color-text-muted); font-size:12px;">{{ r.modified }}</td>
           <td>
-            {% if loop.first %}<span class="badge badge-green">✓ 激活</span>
-            {% else %}<span class="badge badge-gray">备用</span>{% endif %}
+            {% if r.paused %}
+              <span class="badge badge-gray">⏸ 暂停</span>
+            {% elif ns.first_active %}
+              <span class="badge badge-green">✓ 激活</span>
+              {% set ns.first_active = false %}
+            {% else %}
+              <span class="badge badge-gray">备用</span>
+            {% endif %}
           </td>
           <td style="text-align:right; white-space:nowrap;">
-            <form method="post" action="/resume/{{ r.filename }}/activate" style="margin:0; display:inline;">
-              <button type="submit" class="btn btn-primary btn-sm"
-                      {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"
-                      {% else %}onclick="return confirm('用 {{ r.filename }} 激活并跑流水线 (collect + match)?')"{% endif %}>
-                🔄 激活
-              </button>
-            </form>
+            {% if r.paused %}
+              <form method="post" action="/resume/{{ r.filename }}/unpause" style="margin:0; display:inline;">
+                <button type="submit" class="btn btn-secondary btn-sm"
+                        onclick="return confirm('恢复 {{ r.filename }} 到活跃列表? 它会成为最新的激活简历.')">▶ 恢复</button>
+              </form>
+            {% else %}
+              <form method="post" action="/resume/{{ r.filename }}/activate" style="margin:0; display:inline;">
+                <button type="submit" class="btn btn-primary btn-sm"
+                        {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"
+                        {% else %}onclick="return confirm('用 {{ r.filename }} 激活并跑流水线 (collect + match)?')"{% endif %}>
+                  🔄 激活
+                </button>
+              </form>
+              <form method="post" action="/resume/{{ r.filename }}/pause" style="margin:0; display:inline;">
+                <button type="submit" class="btn btn-secondary btn-sm" style="margin-left:4px;"
+                        onclick="return confirm('暂停 {{ r.filename }}? 文件保留在 _paused/ 里, 流水线不会再用它.')">⏸ 暂停</button>
+              </form>
+            {% endif %}
             <form method="post" action="/resume/{{ r.filename }}/delete" style="margin:0; display:inline;">
               <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger); margin-left:4px;"
                       onclick="return confirm('删除 {{ r.filename }}? 这个操作不可恢复.')">删除</button>
@@ -264,51 +285,59 @@
   {# ============ 自动运行 ============ #}
   <div class="card">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-      <h3 style="margin:0;">⏰ 自动运行</h3>
-      <span style="font-size:11px; color:var(--color-text-muted);">仅在 web server 运行时生效</span>
+      <h3 style="margin:0;">⏰ 自动运行 (24/7 系统 cron)</h3>
+      <span style="font-size:11px; color:var(--color-text-muted);">关电脑也照样定时跑 + 自动发邮件</span>
     </div>
+
+    {% set active_hours = schedule.cron_hours or schedule.inproc_hours %}
+    {% set backend = 'cron' if schedule.cron_installed else ('inproc' if schedule.inproc_hours > 0 else 'cron') %}
 
     <div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
       <div>
-        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">当前设置</div>
+        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">当前</div>
         <div style="font-weight:600; margin-top:2px;">
-          {% if schedule.hours > 0 %}
-            每 {{ schedule.hours }} 小时自动跑一次
+          {% if schedule.cron_installed %}
+            ✓ 每 {{ schedule.cron_hours }} 小时 (系统 cron)
+          {% elif schedule.inproc_hours > 0 %}
+            ⚠️ 每 {{ schedule.inproc_hours }} 小时 (仅 web server 运行时)
           {% else %}
             <span style="color:var(--color-text-muted);">关闭</span>
           {% endif %}
         </div>
+        {% if schedule.cron_line %}
+          <div style="font-size:10px; color:var(--color-text-dim); margin-top:3px; font-family:monospace;">{{ schedule.cron_line }}</div>
+        {% endif %}
       </div>
       {% if schedule.last %}
       <div>
-        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">上次跑</div>
+        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">上次跑 (web)</div>
         <div style="font-weight:500; margin-top:2px; font-size:13px;">{{ schedule.last.strftime('%Y-%m-%d %H:%M') }}</div>
       </div>
       {% endif %}
-      {% if schedule.next %}
-      <div>
-        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">下次跑</div>
-        <div style="font-weight:500; margin-top:2px; font-size:13px; color:var(--color-accent);">{{ schedule.next.strftime('%Y-%m-%d %H:%M') }}</div>
-      </div>
-      {% endif %}
 
-      <form method="post" action="/schedule/set" style="margin:0; margin-left:auto; display:flex; gap:8px; align-items:center;">
-        <label style="font-size:12px; color:var(--color-text-muted); margin-right:4px;">间隔</label>
+      <form method="post" action="/schedule/set" style="margin:0; margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label style="font-size:12px; color:var(--color-text-muted); margin-right:4px;">模式</label>
+        <select name="backend" style="padding:6px 10px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm); font-size:13px;">
+          <option value="cron"   {% if backend == 'cron'   %}selected{% endif %}>系统 cron (24/7)</option>
+          <option value="inproc" {% if backend == 'inproc' %}selected{% endif %}>进程内 (仅 web)</option>
+        </select>
+        <label style="font-size:12px; color:var(--color-text-muted); margin:0 4px;">间隔</label>
         <select name="hours" style="padding:6px 10px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm); font-size:13px;">
-          <option value="0" {% if schedule.hours == 0 %}selected{% endif %}>关闭</option>
-          <option value="1" {% if schedule.hours == 1 %}selected{% endif %}>每 1 小时</option>
-          <option value="3" {% if schedule.hours == 3 %}selected{% endif %}>每 3 小时</option>
-          <option value="6" {% if schedule.hours == 6 %}selected{% endif %}>每 6 小时</option>
-          <option value="12" {% if schedule.hours == 12 %}selected{% endif %}>每 12 小时</option>
-          <option value="24" {% if schedule.hours == 24 %}selected{% endif %}>每天 (24h)</option>
-          <option value="168" {% if schedule.hours == 168 %}selected{% endif %}>每周 (7d)</option>
+          <option value="0"   {% if active_hours == 0   %}selected{% endif %}>关闭</option>
+          <option value="1"   {% if active_hours == 1   %}selected{% endif %}>每 1 小时</option>
+          <option value="3"   {% if active_hours == 3   %}selected{% endif %}>每 3 小时</option>
+          <option value="6"   {% if active_hours == 6   %}selected{% endif %}>每 6 小时</option>
+          <option value="12"  {% if active_hours == 12  %}selected{% endif %}>每 12 小时</option>
+          <option value="24"  {% if active_hours == 24  %}selected{% endif %}>每天 (07:30)</option>
+          <option value="168" {% if active_hours == 168 %}selected{% endif %}>每周 (周日 07:30)</option>
         </select>
         <button type="submit" class="btn btn-secondary btn-sm">保存</button>
       </form>
     </div>
 
     <div style="font-size:11px; color:var(--color-text-dim); margin-top:10px;">
-      💡 触发时跑 collect + match (不重做画像分析). 如果上次没跑完,本次自动跳过. 要真 24/7 后台跑可以另外配 crontab (scripts/daily.sh).
+      💡 系统 cron 模式: 用 <code>scripts/daily.sh</code> 触发, 跑完 collect + match + 发 digest 邮件 (到 <code>{{ digest_to or 'yxd429@case.edu' }}</code>) + 发趋势报告邮件. 日志在 <code>/tmp/jobhunter.log</code>.
+      {% if not schedule.cron_available %}<br>⚠️ 当前系统检测不到 crontab 命令, 只能用进程内模式.{% endif %}
     </div>
   </div>
 

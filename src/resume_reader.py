@@ -6,6 +6,7 @@ from typing import Iterable
 
 
 SUPPORTED_EXTS = {".pdf", ".docx", ".md", ".txt"}
+PAUSED_SUBDIR = "_paused"
 
 
 def find_resume(resume_dir: Path) -> Path:
@@ -19,20 +20,71 @@ def find_resume(resume_dir: Path) -> Path:
 
 
 def list_resumes(resume_dir: Path) -> list[Path]:
-    """列出 resume_dir 下所有合法简历文件,按 mtime 降序 (最新在前). 找不到目录返回 [].
+    """列出 resume_dir 下所有"活跃"简历文件 (不含暂停的),按 mtime 降序.
 
-    忽略以下划线开头的内部缓存文件 (_parsed.txt / _user_description.txt / _profile.json).
+    忽略以下划线开头的内部缓存文件 + 子目录 (_paused/).
     """
     if not resume_dir.exists():
         return []
     files = [
         p for p in resume_dir.iterdir()
-        if p.suffix.lower() in SUPPORTED_EXTS
+        if p.is_file()
+        and p.suffix.lower() in SUPPORTED_EXTS
         and not p.name.startswith("_")
         and not p.name.startswith(".")
     ]
     files.sort(key=lambda p: -p.stat().st_mtime)
     return files
+
+
+def list_paused_resumes(resume_dir: Path) -> list[Path]:
+    """列出 resume_dir/_paused/ 里的简历, mtime 降序."""
+    paused_dir = resume_dir / PAUSED_SUBDIR
+    if not paused_dir.exists():
+        return []
+    files = [
+        p for p in paused_dir.iterdir()
+        if p.is_file() and p.suffix.lower() in SUPPORTED_EXTS
+    ]
+    files.sort(key=lambda p: -p.stat().st_mtime)
+    return files
+
+
+def pause_resume_file(resume_dir: Path, filename: str) -> Path:
+    """把一份简历移到 _paused/ 子目录. 返回新路径."""
+    src = resume_dir / filename
+    if not src.exists() or not src.is_file():
+        raise FileNotFoundError(f"找不到 {filename}")
+    if src.suffix.lower() not in SUPPORTED_EXTS:
+        raise ValueError(f"不支持的格式 {src.suffix}")
+    paused_dir = resume_dir / PAUSED_SUBDIR
+    paused_dir.mkdir(exist_ok=True)
+    dst = paused_dir / filename
+    if dst.exists():
+        dst.unlink()  # 覆盖
+    src.rename(dst)
+    return dst
+
+
+def unpause_resume_file(resume_dir: Path, filename: str) -> Path:
+    """从 _paused/ 还原一份简历回主目录."""
+    paused_dir = resume_dir / PAUSED_SUBDIR
+    src = paused_dir / filename
+    if not src.exists():
+        raise FileNotFoundError(f"找不到暂停的 {filename}")
+    dst = resume_dir / filename
+    if dst.exists():
+        raise FileExistsError(f"已有同名简历 {filename}, 先删除或重命名再恢复")
+    src.rename(dst)
+    return dst
+
+
+def delete_paused_resume(resume_dir: Path, filename: str) -> None:
+    """删除一个暂停状态的简历."""
+    paused_dir = resume_dir / PAUSED_SUBDIR
+    target = paused_dir / filename
+    if target.exists():
+        target.unlink()
 
 
 def read_pdf(path: Path) -> str:

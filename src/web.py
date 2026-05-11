@@ -33,7 +33,23 @@ from .profile_analyzer import (
     save_profile_snapshot,
     save_user_description,
 )
-from .resume_reader import SUPPORTED_EXTS, list_resumes, load_cached, parse_and_cache
+from .cron_manager import (
+    HOURS_TO_CRON,
+    crontab_available,
+    get_status as cron_status,
+    install as cron_install,
+    uninstall as cron_uninstall,
+)
+from .resume_reader import (
+    SUPPORTED_EXTS,
+    delete_paused_resume,
+    list_paused_resumes,
+    list_resumes,
+    load_cached,
+    parse_and_cache,
+    pause_resume_file,
+    unpause_resume_file,
+)
 from .scheduler import AgentScheduler
 from .tailor import tailor_for_job
 from .tracker import mark_applied
@@ -445,12 +461,26 @@ def create_app(config: Config) -> FastAPI:
                 "filename": p.name,
                 "size_kb": round(st.st_size / 1024, 1),
                 "modified": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                "paused": False,
+            })
+        for p in list_paused_resumes(resume_dir):
+            st = p.stat()
+            resume_files.append({
+                "filename": p.name,
+                "size_kb": round(st.st_size / 1024, 1),
+                "modified": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                "paused": True,
             })
 
+        cron_info = cron_status()
         schedule_info = {
-            "hours": scheduler.get_schedule_hours(),
+            "inproc_hours": scheduler.get_schedule_hours(),
             "last": scheduler.get_last_run(),
             "next": scheduler.get_next_run(),
+            "cron_available": cron_info["available"],
+            "cron_installed": cron_info["installed"],
+            "cron_hours": cron_info["hours"],
+            "cron_line": cron_info["line"],
         }
         freshness_info = {"hours": int(config.freshness.get("max_age_hours", 24))}
 
@@ -582,17 +612,58 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/resume/{filename}/delete")
     def delete_resume(filename: str):
-        target = _safe_resume_path(filename)
-        target.unlink()
-        # 还有其他简历就重新解析最新的; 否则清空 cache
+        # 先尝试在主目录, 找不到再尝试 _paused/
         resume_dir = config.path("resume_dir")
-        remaining = list_resumes(resume_dir)
-        if remaining:
-            parse_and_cache(resume_dir)
+        active_target = resume_dir / filename
+        if active_target.exists() and active_target.is_file():
+            active_target.unlink()
+        else:
+            delete_paused_resume(resume_dir, filename)
+        # 还有其他活跃简历就刷 cache; 否则清空
+        if list_resumes(resume_dir):
+            try:
+                parse_and_cache(resume_dir)
+            except Exception:
+                pass
         else:
             cache = resume_dir / "_parsed.txt"
             if cache.exists():
                 cache.unlink()
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    @app.post("/resume/{filename}/pause")
+    def pause_resume(filename: str):
+        resume_dir = config.path("resume_dir")
+        try:
+            pause_resume_file(resume_dir, filename)
+        except FileNotFoundError:
+            raise HTTPException(404, f"简历不存在: {filename}")
+        # 暂停了当前激活的话, 下个最新非暂停的成为激活, 刷新 cache
+        if list_resumes(resume_dir):
+            try:
+                parse_and_cache(resume_dir)
+            except Exception:
+                pass
+        else:
+            cache = resume_dir / "_parsed.txt"
+            if cache.exists():
+                cache.unlink()
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    @app.post("/resume/{filename}/unpause")
+    def unpause_resume(filename: str):
+        resume_dir = config.path("resume_dir")
+        try:
+            unpause_resume_file(resume_dir, filename)
+        except FileNotFoundError:
+            raise HTTPException(404, f"暂停目录里没有: {filename}")
+        except FileExistsError as e:
+            raise HTTPException(409, str(e))
+        # 恢复完, 刷 cache (它会成为最新, 也就是新的激活)
+        try:
+            parse_and_cache(resume_dir)
+        except Exception:
+            pass
         return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/resume/upload")
@@ -632,8 +703,31 @@ def create_app(config: Config) -> FastAPI:
         return RedirectResponse(url="/onboarding/processing", status_code=303)
 
     @app.post("/schedule/set")
-    def set_schedule(hours: int = Form(...)):
-        scheduler.set_schedule_hours(hours)
+    def set_schedule(hours: int = Form(...), backend: str = Form("cron")):
+        """设置自动跑.
+
+        backend='cron'   : 写入系统 crontab (24/7 真后台)
+        backend='inproc' : 进程内调度 (只在 web server 运行时跑)
+        """
+        if backend == "cron":
+            script = Path(__file__).resolve().parent.parent / "scripts" / "daily.sh"
+            try:
+                if hours == 0:
+                    cron_uninstall()
+                else:
+                    cron_install(hours, script)
+                # 同时关闭 in-process 调度避免双触发
+                scheduler.set_schedule_hours(0)
+            except Exception as e:
+                raise HTTPException(500, f"系统 cron 操作失败: {e}")
+        else:
+            # 进程内调度
+            scheduler.set_schedule_hours(hours)
+            # 关闭 cron 避免双触发
+            try:
+                cron_uninstall()
+            except Exception:
+                pass
         return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/freshness/set")
