@@ -1,9 +1,15 @@
-"""简历画像分析器: 让 DeepSeek 看简历,推断 Top-5 能力方向 + 对应搜索 title.
+"""简历画像分析器: 让 DeepSeek 综合"市场热度 × 竞争强度 × 候选人优势"
+为候选人找出 Top-5 最优投递岗位.
 
-工作流:
-    parse-resume -> analyze-profile -> [缓存到 data/resume/_profile.json] -> collect 自动用
+设计原则 (跟之前一版的不同):
+1. **三维评分**: market_demand / competition (越低越好) / user_advantage
+   composite = market_demand * (10 - competition) * user_advantage / 10  范围 0-100.
+2. **方向限制**: 仅 engineering / research-engineering, 排除管理/产品/销售岗.
+3. **Title 强制为市场真实高频称谓**, 不允许造词.
+4. **Schema 严格**, tool_use 强制结构化输出, code 可靠解析.
 
-不写 cache (或者用 --force) 就重新分析. 缓存里包含 5 个方向 + 搜索 title + 地点建议.
+输出存到 data/resume/_profile.json. 后续 collect 自动读取 top_5_positions
+的 title 列表作为搜索关键词.
 """
 from __future__ import annotations
 
@@ -19,111 +25,185 @@ from .resume_reader import load_cached
 
 PROFILE_TOOL: dict[str, Any] = {
     "name": "submit_profile_analysis",
-    "description": "提交对候选人简历的能力方向分析结果",
+    "description": "提交对候选人的 Top-5 最优投递岗位分析",
     "input_schema": {
         "type": "object",
         "properties": {
-            "top_directions": {
+            "top_5_positions": {
                 "type": "array",
                 "minItems": 5,
                 "maxItems": 5,
+                "description": "Top 5 投递岗位, 按 composite 降序",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "name": {
+                        "title": {
                             "type": "string",
-                            "description": "能力方向名称 (中文)",
+                            "description": "LinkedIn 标准 title (英文,不许造词)",
                         },
-                        "why_match": {
+                        "direction": {
                             "type": "string",
-                            "description": "为什么候选人 fit 这个方向, 引用简历具体项目/数字 (中文,<= 60 字)",
+                            "enum": ["engineering", "research-engineering"],
                         },
-                        "search_titles": {
+                        "scores": {
+                            "type": "object",
+                            "properties": {
+                                "market_demand": {
+                                    "type": "integer", "minimum": 0, "maximum": 10,
+                                    "description": "当前市场招聘量",
+                                },
+                                "competition": {
+                                    "type": "integer", "minimum": 0, "maximum": 10,
+                                    "description": "竞争强度,越低越好",
+                                },
+                                "user_advantage": {
+                                    "type": "integer", "minimum": 0, "maximum": 10,
+                                    "description": "候选人匹配深度",
+                                },
+                                "composite": {
+                                    "type": "integer", "minimum": 0, "maximum": 100,
+                                    "description": "= market_demand * (10-competition) * user_advantage / 10",
+                                },
+                            },
+                            "required": ["market_demand", "competition", "user_advantage", "composite"],
+                        },
+                        "why_this_position": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "minItems": 1,
-                            "maxItems": 3,
-                            "description": "对应的 LinkedIn/Indeed 高频搜索 title (英文,1-3 个,必须是市场上真有的)",
+                            "minItems": 2,
+                            "maxItems": 5,
+                            "description": "2-5 条 bullets,引用简历具体项目/数字 (中文)",
+                        },
+                        "market_evidence": {
+                            "type": "string",
+                            "description": "市场为什么旺(<=50字,中文)",
+                        },
+                        "linkedin_search_url": {
+                            "type": "string",
+                            "description": "直接可点开的 LinkedIn 搜索 URL",
                         },
                     },
-                    "required": ["name", "why_match", "search_titles"],
+                    "required": [
+                        "title", "direction", "scores",
+                        "why_this_position", "market_evidence", "linkedin_search_url",
+                    ],
                 },
-                "description": "5 个最匹配能力方向,最强匹配在前",
             },
             "target_locations": {
                 "type": "array",
                 "items": {"type": "string"},
                 "minItems": 3,
                 "maxItems": 5,
-                "description": "推荐的目标地点 (LinkedIn 能识别的写法)",
+                "description": "推荐目标地点 (LinkedIn 可识别)",
             },
             "summary": {
                 "type": "string",
-                "description": "候选人核心定位总结 (中文,<= 80 字)",
+                "description": "候选人核心定位+投递策略(<=80字,中文)",
             },
         },
-        "required": ["top_directions", "target_locations", "summary"],
+        "required": ["top_5_positions", "target_locations", "summary"],
     },
 }
 
 
 @dataclass
-class Direction:
-    name: str
-    why_match: str
-    search_titles: list[str]
+class PositionScores:
+    market_demand: int = 0
+    competition: int = 0
+    user_advantage: int = 0
+    composite: int = 0
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Direction":
+    def from_dict(cls, d: dict) -> "PositionScores":
         return cls(
-            name=str(d.get("name", "")),
-            why_match=str(d.get("why_match", "")),
-            search_titles=list(d.get("search_titles") or []),
+            market_demand=int(d.get("market_demand", 0)),
+            competition=int(d.get("competition", 0)),
+            user_advantage=int(d.get("user_advantage", 0)),
+            composite=int(d.get("composite", 0)),
+        )
+
+
+@dataclass
+class Position:
+    title: str
+    direction: str
+    scores: PositionScores
+    why_this_position: list[str]
+    market_evidence: str
+    linkedin_search_url: str
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Position":
+        return cls(
+            title=str(d.get("title", "")).strip(),
+            direction=str(d.get("direction", "engineering")),
+            scores=PositionScores.from_dict(d.get("scores") or {}),
+            why_this_position=list(d.get("why_this_position") or []),
+            market_evidence=str(d.get("market_evidence", "")),
+            linkedin_search_url=str(d.get("linkedin_search_url", "")),
         )
 
 
 @dataclass
 class ProfileAnalysis:
-    top_directions: list[Direction]
+    top_5_positions: list[Position]
     target_locations: list[str]
     summary: str
 
     @classmethod
     def from_tool_input(cls, data: dict) -> "ProfileAnalysis":
+        positions = [Position.from_dict(p) for p in (data.get("top_5_positions") or [])]
+        # 强制按 composite 降序 (模型有时不严格)
+        positions.sort(key=lambda p: -p.scores.composite)
         return cls(
-            top_directions=[Direction.from_dict(d) for d in (data.get("top_directions") or [])],
+            top_5_positions=positions,
             target_locations=list(data.get("target_locations") or []),
             summary=str(data.get("summary", "")),
         )
 
     def to_dict(self) -> dict:
         return {
-            "top_directions": [asdict(d) for d in self.top_directions],
+            "top_5_positions": [
+                {
+                    "title": p.title,
+                    "direction": p.direction,
+                    "scores": asdict(p.scores),
+                    "why_this_position": p.why_this_position,
+                    "market_evidence": p.market_evidence,
+                    "linkedin_search_url": p.linkedin_search_url,
+                }
+                for p in self.top_5_positions
+            ],
             "target_locations": self.target_locations,
             "summary": self.summary,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProfileAnalysis":
+        positions = [Position.from_dict(p) for p in data.get("top_5_positions", [])]
+        positions.sort(key=lambda p: -p.scores.composite)
         return cls(
-            top_directions=[Direction(**d) for d in data.get("top_directions", [])],
+            top_5_positions=positions,
             target_locations=data.get("target_locations", []),
             summary=data.get("summary", ""),
         )
 
-    def unique_search_titles(self, limit: int = 5) -> list[str]:
-        """把 5 个 direction 里的 search_titles 拍平 + 去重 + 取前 N. 保留顺序."""
+    def search_titles(self) -> list[str]:
+        """5 个 position 的 title list. 已经在 prompt 里要求 distinct."""
+        # 去重保险
         seen: set[str] = set()
         out: list[str] = []
-        for d in self.top_directions:
-            for t in d.search_titles:
-                t_low = t.strip().lower()
-                if t_low and t_low not in seen:
-                    seen.add(t_low)
-                    out.append(t.strip())
-                if len(out) >= limit:
-                    return out
+        for p in self.top_5_positions:
+            t = p.title.strip()
+            t_low = t.lower()
+            if t and t_low not in seen:
+                seen.add(t_low)
+                out.append(t)
         return out
+
+    # 向后兼容: 旧代码用过 unique_search_titles
+    def unique_search_titles(self, limit: int = 5) -> list[str]:
+        return self.search_titles()[:limit]
 
 
 def _profile_path(config: Config) -> Path:
@@ -132,7 +212,10 @@ def _profile_path(config: Config) -> Path:
 
 def save_profile(config: Config, profile: ProfileAnalysis) -> Path:
     path = _profile_path(config)
-    path.write_text(json.dumps(profile.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        json.dumps(profile.to_dict(), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -142,13 +225,18 @@ def load_profile(config: Config) -> ProfileAnalysis | None:
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        # 兼容旧版本格式 (top_directions): 如果是旧版,返回 None 强制重新生成
+        if "top_directions" in data and "top_5_positions" not in data:
+            print("[profile] 旧版 _profile.json 不兼容,请跑 `analyze-profile --force` 重新生成")
+            return None
         return ProfileAnalysis.from_dict(data)
-    except Exception:
+    except Exception as e:
+        print(f"[profile] 加载缓存失败: {e}")
         return None
 
 
 def analyze_profile(config: Config) -> ProfileAnalysis:
-    """读取简历,调 DeepSeek 做 Top-5 能力方向分析,返回结果."""
+    """读取简历, 调 DeepSeek 做 Top-5 三维度评分分析."""
     resume_text = load_cached(config.path("resume_dir"))
     prompt = render(
         load_prompt("profile_analyzer"),
@@ -156,16 +244,14 @@ def analyze_profile(config: Config) -> ProfileAnalysis:
         preferences=json.dumps(config.preferences, ensure_ascii=False, indent=2),
     )
 
-    # 用一个独立 role,允许配置不同模型 (默认与 matcher 一致)
     role = "profile_analyzer"
-    # 如果 config 没显式配 profile_analyzer 角色,回退到 matcher
     if not config.raw.get("model", {}).get(role):
         role = "matcher"
     client, model_name = make_client(config, role)
 
     resp = client.messages.create(
         model=model_name,
-        max_tokens=3000,
+        max_tokens=4096,
         tools=[PROFILE_TOOL],
         tool_choice={"type": "tool", "name": "submit_profile_analysis"},
         messages=[{"role": "user", "content": prompt}],

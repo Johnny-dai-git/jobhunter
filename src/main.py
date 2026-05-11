@@ -84,31 +84,48 @@ def analyze_profile_cmd(force):
 
 
 def _print_profile(profile):
-    """打印 profile 结果给用户看."""
+    """打印 profile 结果给用户看 (新版: 三维度评分)."""
     console.print(f"[bold]核心定位:[/bold] {profile.summary}\n")
 
-    tbl = Table(title="Top 5 能力方向", show_lines=True)
+    tbl = Table(
+        title="Top 5 最优投递岗位 (按 composite 降序)",
+        show_lines=True,
+    )
     tbl.add_column("#", style="bold")
-    tbl.add_column("方向")
-    tbl.add_column("为什么 fit", style="dim")
-    tbl.add_column("搜索 title")
-    for i, d in enumerate(profile.top_directions, 1):
+    tbl.add_column("Title")
+    tbl.add_column("Direction", style="dim")
+    tbl.add_column("M / C / A → Comp", justify="center", style="bold cyan")
+    tbl.add_column("为什么投这个", style="dim")
+    tbl.add_column("市场依据")
+    for i, p in enumerate(profile.top_5_positions, 1):
+        s = p.scores
+        why = "\n".join(f"• {w}" for w in p.why_this_position)
         tbl.add_row(
             str(i),
-            d.name,
-            d.why_match,
-            "\n".join(d.search_titles),
+            p.title,
+            p.direction,
+            f"{s.market_demand}/{s.competition}/{s.user_advantage}\n→ [yellow]{s.composite}[/yellow]",
+            why,
+            p.market_evidence,
         )
     console.print(tbl)
-
-    unique = profile.unique_search_titles(limit=5)
     console.print(
-        f"\n[bold]去重后的 Top 5 搜索 title (collect 会用这些):[/bold]\n  "
-        + ", ".join(unique)
+        "[dim]M = market_demand  C = competition (越低越好)  "
+        "A = user_advantage  Comp = composite (越高越好)[/dim]"
+    )
+
+    titles = profile.search_titles()
+    console.print(
+        f"\n[bold]搜索 titles (collect 会用):[/bold]\n  "
+        + "\n  ".join(f"• {t}" for t in titles)
     )
     console.print(
         f"\n[bold]目标地点:[/bold] " + ", ".join(profile.target_locations)
     )
+
+    console.print("\n[bold]直接打开 LinkedIn 搜索 (复制到浏览器):[/bold]")
+    for p in profile.top_5_positions:
+        console.print(f"  • [link]{p.linkedin_search_url}[/link]")
 
 
 @cli.command()
