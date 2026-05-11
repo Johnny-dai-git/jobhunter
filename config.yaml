@@ -10,22 +10,22 @@ providers:
     api_key_env: DEEPSEEK_API_KEY
 
 # ====== 模型路由 ======
-# 每个角色单独指定 provider 和模型. 混合路由策略:
-# - 评分 / 趋势分析: DeepSeek (高频 / 长 context, 省钱)
-# - 简历定制 / 求职信 / 投递助手: Claude (质量 / agentic 能力)
+# 当前: 全 DeepSeek 路由 (无需 Anthropic key)
+# - 高频任务 (matcher): v4-flash, 便宜快
+# - 质量任务 (tailor / cover_letter / apply / trends): v4-pro, 1M context, 强 tool_use
 model:
   matcher:
     provider: deepseek
     name: deepseek-v4-flash
   tailor:
-    provider: claude
-    name: claude-sonnet-4-6
+    provider: deepseek
+    name: deepseek-v4-pro
   cover_letter:
-    provider: claude
-    name: claude-sonnet-4-6
+    provider: deepseek
+    name: deepseek-v4-pro
   apply:
-    provider: claude
-    name: claude-sonnet-4-6
+    provider: deepseek
+    name: deepseek-v4-pro
   trends:
     provider: deepseek
     name: deepseek-v4-pro
