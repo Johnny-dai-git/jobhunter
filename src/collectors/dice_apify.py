@@ -22,13 +22,14 @@ from .base import CollectedJob
 
 
 def _hours_to_posted(hours: int) -> str:
+    """worldunboxer 用枚举字符串: ANY / ONE / THREE / SEVEN"""
     if hours <= 24:
-        return "1"
+        return "ONE"
     if hours <= 72:
-        return "3"
+        return "THREE"
     if hours <= 168:
-        return "7"
-    return "30"
+        return "SEVEN"
+    return "ANY"
 
 
 class DiceApifyCollector(ApifyCollector):
@@ -47,18 +48,17 @@ class DiceApifyCollector(ApifyCollector):
         }
 
     def _parse_item(self, item: dict) -> Optional[CollectedJob]:
-        title = item.get("title") or item.get("jobTitle") or item.get("position")
-        company = (
-            item.get("company")
-            or item.get("companyName")
-            or (item.get("companyInfo") or {}).get("name")
-        )
+        """worldunboxer 输出字段确认 (real schema):
+        title / company / details_page_url / job_id / summary /
+        location / salary / employment_type / posted_date / is_remote / ...
+        """
+        title = item.get("title") or item.get("jobTitle")
+        company = item.get("company") or item.get("companyName")
         url = (
-            item.get("url")
+            item.get("details_page_url")
+            or item.get("url")
             or item.get("jobUrl")
-            or item.get("detailsUrl")
             or item.get("link")
-            or item.get("jobDetailUrl")
         )
         if not (title and company and url):
             return None
@@ -68,17 +68,18 @@ class DiceApifyCollector(ApifyCollector):
 
         return CollectedJob(
             source="dice",
-            external_id=str(item.get("id") or item.get("jobId") or url),
+            external_id=str(item.get("job_id") or item.get("guid") or url),
             url=url,
             title=str(title).strip(),
             company=str(company).strip(),
-            location=item.get("location") or item.get("place"),
-            salary=str(item.get("salary") or "") or None,
-            description=item.get("description") or item.get("descriptionText"),
+            location=item.get("location"),
+            salary=str(item.get("salary") or "").strip() or None,
+            description=item.get("summary") or item.get("description"),
             extras={
-                "posted": item.get("posted") or item.get("postedDate"),
-                "employment_type": item.get("employmentType"),
-                "skills": item.get("skills"),
-                "work_settings": item.get("workSettings") or item.get("work_settings"),
+                "posted_date": item.get("posted_date"),
+                "employment_type": item.get("employment_type"),
+                "is_remote": item.get("is_remote"),
+                "willing_to_sponsor": item.get("willing_to_sponsor"),
+                "easy_apply": item.get("easy_apply"),
             },
         )

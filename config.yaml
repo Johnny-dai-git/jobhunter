@@ -172,9 +172,9 @@ collectors:
     enabled: true
     backend: apify
     apify:
-      # clearpath/wellfound-api-ppe 的月度免费额度已用完
-      # 换 mscraper, 该 actor 是免费试用 + PPR
-      actor: mscraper/wellfound-jobs-scraper
+      # mscraper 要求月租, clearpath 之前是 actor 自己额度限制
+      # radeance 是纯 PPR ($0.05/job),无月租
+      actor: radeance/wellfound-job-listings-scraper
       input_overrides: {}
     max_per_run: 15
 
