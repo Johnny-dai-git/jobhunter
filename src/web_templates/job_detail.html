@@ -2,65 +2,79 @@
 {% block title %}#{{ job.id }} {{ job.title }} · JobHunter{% endblock %}
 {% block content %}
 
-<a href="/" style="font-size:13px; color:#6b7280; text-decoration:none;">← 回列表</a>
+<a href="/" class="back-link">← 回列表</a>
 
-<div class="card" style="margin-top:8px;">
-  <h2 style="margin:0;">{{ job.title }}</h2>
-  <div style="color:#6b7280; margin-top:4px;">
-    <strong>{{ job.company }}</strong> · {{ job.location or '-' }} · <span class="badge badge-gray">{{ job.source }}</span>
-    {% if job.posted_at %} · 📅 {{ job.posted_at.strftime('%Y-%m-%d') }}{% endif %}
+{# ============ Hero ============ #}
+<div class="hero">
+  <h1 class="hero-title">{{ job.title }}</h1>
+  <div class="hero-meta">
+    <strong style="color:var(--color-text); font-weight:600;">{{ job.company }}</strong>
+    <span class="hero-meta-sep">·</span>
+    <span>{{ job.location or '—' }}</span>
+    <span class="hero-meta-sep">·</span>
+    <span class="badge badge-gray">{{ job.source }}</span>
+    {% if job.posted_at %}
+      <span class="hero-meta-sep">·</span>
+      <span>📅 {{ job.posted_at.strftime('%Y-%m-%d') }}</span>
+    {% endif %}
   </div>
-  <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+  <div class="hero-badges">
     {% if job.work_mode == 'remote' %}<span class="badge badge-green">🏠 Remote</span>
     {% elif job.work_mode == 'hybrid' %}<span class="badge badge-yellow">🔀 Hybrid</span>
     {% elif job.work_mode == 'onsite' %}<span class="badge badge-gray">🏢 Onsite</span>{% endif %}
     {% if job.min_education and job.min_education != 'unspecified' %}
-      <span class="badge badge-gray" style="text-transform:uppercase">🎓 {{ job.min_education }}</span>
+      <span class="badge badge-indigo">🎓 {{ job.min_education|upper }}</span>
     {% endif %}
     {% if job.salary %}<span class="badge badge-green">💰 {{ job.salary }}</span>{% endif %}
+    {% if job.status == 'applied' %}<span class="badge badge-green">✓ Applied{% if job.applied_at %} · {{ job.applied_at.strftime('%Y-%m-%d') }}{% endif %}</span>{% endif %}
   </div>
-  <div style="margin-top:12px;">
-    <a href="{{ job.url }}" target="_blank" class="btn btn-secondary">🔗 查看原始 JD</a>
+  <div style="margin-top:16px;">
+    <a href="{{ job.url }}" target="_blank" class="btn btn-secondary btn-sm">🔗 查看原始 JD</a>
   </div>
 </div>
 
+{# ============ Score Card ============ #}
 {% if job.match_score is not none %}
 <div class="card">
-  <h3 style="margin-top:0;">6 维度评分</h3>
-  <div style="display:flex; align-items:center; gap:24px;">
-    <div style="text-align:center;">
-      <div style="font-size:14px; color:#6b7280;">Overall</div>
-      <div style="font-size:42px; font-weight:800; color:#111827; line-height:1;">{{ "%.0f"|format(job.match_score) }}</div>
+  <h3>匹配评分</h3>
+  <div style="display:flex; align-items:center; gap:32px; margin-top:4px;">
+    <div style="text-align:center; min-width:120px;">
+      <div class="score-big-label">Overall</div>
+      <div class="score-big">{{ "%.0f"|format(job.match_score) }}</div>
     </div>
     <div style="flex:1;">
       <div class="subscores">
-        <div class="subscore-cell"><div class="label">Background</div><div class="val">{{ "%.0f"|format(job.score_background or 0) }}<span style="font-size:11px; color:#9ca3af;">/10</span></div></div>
-        <div class="subscore-cell"><div class="label">Skills</div><div class="val">{{ "%.0f"|format(job.score_skills or 0) }}<span style="font-size:11px; color:#9ca3af;">/30</span></div></div>
-        <div class="subscore-cell"><div class="label">Experience</div><div class="val">{{ "%.0f"|format(job.score_experience or 0) }}<span style="font-size:11px; color:#9ca3af;">/30</span></div></div>
-        <div class="subscore-cell"><div class="label">Seniority</div><div class="val">{{ "%.0f"|format(job.score_seniority or 0) }}<span style="font-size:11px; color:#9ca3af;">/10</span></div></div>
-        <div class="subscore-cell"><div class="label">Authorization</div><div class="val">{{ "%.0f"|format(job.score_authorization or 0) }}<span style="font-size:11px; color:#9ca3af;">/10</span></div></div>
-        <div class="subscore-cell"><div class="label">Company</div><div class="val">{{ "%.0f"|format(job.score_company or 0) }}<span style="font-size:11px; color:#9ca3af;">/10</span></div></div>
+        <div class="subscore-cell"><div class="label">Background</div><div class="val">{{ "%.0f"|format(job.score_background or 0) }}<small>/10</small></div></div>
+        <div class="subscore-cell"><div class="label">Skills</div><div class="val">{{ "%.0f"|format(job.score_skills or 0) }}<small>/30</small></div></div>
+        <div class="subscore-cell"><div class="label">Experience</div><div class="val">{{ "%.0f"|format(job.score_experience or 0) }}<small>/30</small></div></div>
+        <div class="subscore-cell"><div class="label">Seniority</div><div class="val">{{ "%.0f"|format(job.score_seniority or 0) }}<small>/10</small></div></div>
+        <div class="subscore-cell"><div class="label">Authorization</div><div class="val">{{ "%.0f"|format(job.score_authorization or 0) }}<small>/10</small></div></div>
+        <div class="subscore-cell"><div class="label">Company</div><div class="val">{{ "%.0f"|format(job.score_company or 0) }}<small>/10</small></div></div>
       </div>
     </div>
   </div>
 
   {% if job.match_summary %}
-  <div style="margin-top:12px;"><strong>摘要：</strong>{{ job.match_summary }}</div>
+  <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--color-border);">
+    <h3>摘要</h3>
+    <div style="color:var(--color-text);">{{ job.match_summary }}</div>
+  </div>
   {% endif %}
 
   {% if job.match_connector %}
-  <div class="connector" style="margin-top:12px;"><strong>Connector：</strong>{{ job.match_connector }}</div>
+  <h3 style="margin-top:16px;">Connector · 求职信钩子</h3>
+  <div class="connector">{{ job.match_connector }}</div>
   {% endif %}
 
   {% if fit_bullets %}
-  <h3>Fit Bullets</h3>
+  <h3>Fit Bullets · 为什么匹配</h3>
   <ul class="bullets">
     {% for b in fit_bullets %}{% if b.strip() %}<li>{{ b }}</li>{% endif %}{% endfor %}
   </ul>
   {% endif %}
 
   {% if keywords_list %}
-  <h3>关键词 (ATS)</h3>
+  <h3>关键词 · ATS 优化</h3>
   <div>
     {% for k in keywords_list %}{% if k.strip() %}<span class="keyword">{{ k }}</span>{% endif %}{% endfor %}
   </div>
@@ -68,40 +82,40 @@
 </div>
 {% endif %}
 
+{# ============ Actions ============ #}
 <div class="card">
-  <h3 style="margin-top:0;">操作</h3>
+  <h3>操作</h3>
   <div class="actions">
-    <form method="post" action="/job/{{ job.id }}/tailor">
+    <form method="post" action="/job/{{ job.id }}/tailor" style="margin:0;">
       <button type="submit" class="btn btn-primary">
-        {% if job.tailored_resume_pdf_path %}🔄 重新生成简历+求职信{% else %}✨ Claude 改简历 + 求职信{% endif %}
+        {% if job.tailored_resume_pdf_path %}🔄 重新生成简历 + 求职信{% else %}✨ Claude 改简历 + 写求职信{% endif %}
       </button>
     </form>
 
     {% if job.tailored_resume_pdf_path %}
-    <a href="/job/{{ job.id }}/pdf" target="_blank" class="btn btn-success">📄 看 PDF</a>
-    <a href="/job/{{ job.id }}/md" target="_blank" class="btn btn-secondary">📝 看 MD</a>
+    <a href="/job/{{ job.id }}/pdf" target="_blank" class="btn btn-success">📄 查看 PDF</a>
+    <a href="/job/{{ job.id }}/md" target="_blank" class="btn btn-secondary">📝 查看 Markdown</a>
     {% endif %}
     {% if job.cover_letter_path %}
     <a href="/job/{{ job.id }}/cover" target="_blank" class="btn btn-secondary">✉ 求职信</a>
     {% endif %}
 
     {% if job.status != 'applied' %}
-    <form method="post" action="/job/{{ job.id }}/mark-applied">
+    <form method="post" action="/job/{{ job.id }}/mark-applied" style="margin:0;">
       <button type="submit" class="btn btn-secondary">✅ 标记已投</button>
     </form>
-    {% else %}
-    <span class="badge badge-green" style="padding:8px 14px;">✅ 已投于 {{ job.applied_at.strftime('%Y-%m-%d') if job.applied_at else '?' }}</span>
     {% endif %}
   </div>
 
   {% if job.tailored_resume_pdf_path %}
-  <div style="font-size:12px; color:#6b7280; margin-top:4px;">PDF: <code>{{ job.tailored_resume_pdf_path }}</code></div>
+  <div style="font-size:11px; color:var(--color-text-dim); margin-top:10px; font-family:monospace;">{{ job.tailored_resume_pdf_path }}</div>
   {% endif %}
 </div>
 
+{# ============ JD ============ #}
 {% if job.description %}
 <div class="card">
-  <h3 style="margin-top:0;">岗位描述 (JD)</h3>
+  <h3>岗位描述 (JD)</h3>
   <pre class="jd">{{ job.description }}</pre>
 </div>
 {% endif %}

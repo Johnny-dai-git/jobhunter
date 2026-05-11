@@ -2,12 +2,13 @@
 {% block title %}Jobs · JobHunter{% endblock %}
 {% block content %}
 
-{# 排序链接生成器: 保留其他查询参数 #}
+{# 排序链接 (列头可点击,与下拉同效) #}
 {% macro sort_link(field, label) %}
   {% set active = (sort == field) %}
   <a href="?min_score={{ min_score }}&status={{ status }}&sort={{ field }}"
-     style="color:{% if active %}#111827{% else %}#6b7280{% endif %};
-            text-decoration:none; font-weight:{% if active %}700{% else %}400{% endif %};">
+     style="color:{% if active %}var(--color-accent){% else %}inherit{% endif %};
+            text-decoration:none;
+            font-weight:{% if active %}800{% else %}inherit{% endif %};">
     {{ label }}{% if active %} ↓{% endif %}
   </a>
 {% endmacro %}
@@ -18,28 +19,28 @@
 
   <label for="status">状态</label>
   <select name="status" id="status">
-    <option value="active" {% if status == 'active' %}selected{% endif %}>active (含 scored/applied/...)</option>
+    <option value="active" {% if status == 'active' %}selected{% endif %}>active</option>
     <option value="all" {% if status == 'all' %}selected{% endif %}>全部</option>
-    <option value="scored" {% if status == 'scored' %}selected{% endif %}>scored 待定</option>
-    <option value="applied" {% if status == 'applied' %}selected{% endif %}>applied 已投</option>
-    <option value="archived" {% if status == 'archived' %}selected{% endif %}>archived 归档</option>
+    <option value="scored" {% if status == 'scored' %}selected{% endif %}>scored</option>
+    <option value="applied" {% if status == 'applied' %}selected{% endif %}>applied</option>
+    <option value="archived" {% if status == 'archived' %}selected{% endif %}>archived</option>
   </select>
 
   <label for="sort">排序</label>
   <select name="sort" id="sort">
     <option value="score"     {% if sort == 'score' %}selected{% endif %}>分数 (大 → 小)</option>
     <option value="salary"    {% if sort == 'salary' %}selected{% endif %}>薪资 (大 → 小)</option>
-    <option value="education" {% if sort == 'education' %}selected{% endif %}>学历 (PhD → Master → Bachelor)</option>
-    <option value="mode"      {% if sort == 'mode' %}selected{% endif %}>模式 (Remote → Hybrid → Onsite)</option>
+    <option value="education" {% if sort == 'education' %}selected{% endif %}>学历 (PhD → Bachelor)</option>
+    <option value="mode"      {% if sort == 'mode' %}selected{% endif %}>模式 (Remote → Onsite)</option>
     <option value="posted"    {% if sort == 'posted' %}selected{% endif %}>发布 (新 → 旧)</option>
     <option value="company"   {% if sort == 'company' %}selected{% endif %}>公司 (A → Z)</option>
   </select>
 
-  <button class="btn btn-secondary" type="submit">应用</button>
-  <span style="float:right; color:#6b7280; font-size:13px;">共 {{ total }} 个</span>
+  <button class="btn btn-secondary btn-sm" type="submit">应用</button>
+  <span class="filters-count">共 {{ total }} 个</span>
 </form>
 
-<div class="card" style="padding:0;">
+<div class="card card-flat">
   <table>
     <thead>
       <tr>
@@ -65,38 +66,45 @@
           {% elif s >= 75 %}<span class="score score-75">{{ "%.0f"|format(s) }}</span>
           {% else %}<span class="score score-low">{{ "%.0f"|format(s) }}</span>{% endif %}
         </td>
-        <td>
-          <a href="/job/{{ j.id }}" style="font-weight:600; color:#111827; text-decoration:none;">{{ j.title }}</a>
-          {% if j.match_summary %}<div style="font-size:12px; color:#6b7280; margin-top:2px;">{{ j.match_summary }}</div>{% endif %}
+        <td style="max-width: 320px;">
+          <a href="/job/{{ j.id }}" class="job-title">{{ j.title }}</a>
+          {% if j.match_summary %}<div class="job-summary">{{ j.match_summary }}</div>{% endif %}
         </td>
-        <td>{{ j.company }}</td>
-        <td><span style="font-size:13px; color:#6b7280;">{{ j.location or '-' }}</span></td>
+        <td><span style="font-weight:500;">{{ j.company }}</span></td>
+        <td><span style="color:var(--color-text-muted); font-size:13px;">{{ j.location or '—' }}</span></td>
         <td>
           {% if j.work_mode == 'remote' %}<span class="badge badge-green">🏠 Remote</span>
           {% elif j.work_mode == 'hybrid' %}<span class="badge badge-yellow">🔀 Hybrid</span>
           {% elif j.work_mode == 'onsite' %}<span class="badge badge-gray">🏢 Onsite</span>
-          {% else %}<span style="color:#9ca3af; font-size:12px;">-</span>{% endif %}
+          {% else %}<span style="color:var(--color-text-dim); font-size:12px;">—</span>{% endif %}
         </td>
         <td>
           {% if j.min_education and j.min_education != 'unspecified' %}
-            <span class="badge badge-gray" style="text-transform:uppercase">{{ j.min_education }}</span>
-          {% else %}<span style="color:#9ca3af; font-size:12px;">-</span>{% endif %}
+            <span class="badge badge-indigo">{{ j.min_education|upper }}</span>
+          {% else %}<span style="color:var(--color-text-dim); font-size:12px;">—</span>{% endif %}
         </td>
-        <td><span style="font-size:12px; color:#374151;">{{ j.salary or '-' }}</span></td>
-        <td><span style="font-size:12px; color:#6b7280;">
-          {% if j.posted_at %}{{ j.posted_at.strftime('%m-%d') }}{% else %}-{% endif %}
+        <td><span style="font-size:13px; color:var(--color-text);">{{ j.salary or '—' }}</span></td>
+        <td><span style="font-size:12px; color:var(--color-text-muted);">
+          {% if j.posted_at %}{{ j.posted_at.strftime('%m-%d') }}{% else %}—{% endif %}
         </span></td>
         <td><span class="badge badge-gray">{{ j.source }}</span></td>
         <td>
-          {% if j.status == 'applied' %}<span class="badge badge-green">applied</span>
+          {% if j.status == 'applied' %}<span class="badge badge-green">✓ applied</span>
           {% elif j.status == 'scored' %}<span class="badge badge-yellow">scored</span>
           {% elif j.status == 'archived' %}<span class="badge badge-gray">archived</span>
           {% else %}<span class="badge badge-gray">{{ j.status }}</span>{% endif %}
+          {% if j.tailored_resume_pdf_path %}<span class="badge badge-indigo" style="margin-left:4px;" title="已生成定制简历">📄</span>{% endif %}
         </td>
-        <td><a href="/job/{{ j.id }}" class="btn btn-secondary">查看</a></td>
+        <td><a href="/job/{{ j.id }}" class="btn btn-secondary btn-sm">查看</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="11" style="text-align:center; color:#6b7280; padding:30px;">没有匹配的岗位</td></tr>
+      <tr><td colspan="11">
+        <div class="empty">
+          <div class="empty-icon">🔍</div>
+          <div>没有匹配当前筛选条件的岗位</div>
+          <div style="margin-top:6px; font-size:12px;">试试把最低分调低,或切换状态</div>
+        </div>
+      </td></tr>
       {% endfor %}
     </tbody>
   </table>
