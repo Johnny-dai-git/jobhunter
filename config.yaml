@@ -139,12 +139,12 @@ collectors:
 
   indeed:
     enabled: true
-    backend: playwright           # 想切 apify 见下面注释
-    # backend: apify
-    # apify:
-    #   actor: misceres/indeed-scraper
-    cookie_file: data/cookies/indeed.json
-    max_per_run: 30
+    backend: apify
+    apify:
+      actor: misceres/indeed-scraper      # $5/1000 = $0.005/岗位
+      input_overrides: {}
+    cookie_file: data/cookies/indeed.json  # 仅 backend=playwright 时用
+    max_per_run: 12                        # ~$0.06 一次
 
   glassdoor:
     enabled: true

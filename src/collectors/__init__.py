@@ -13,6 +13,7 @@
 from .base import BaseCollector, CollectedJob
 from .glassdoor import GlassdoorCollector
 from .indeed import IndeedCollector
+from .indeed_apify import IndeedApifyCollector
 from .linkedin import LinkedInCollector
 from .linkedin_apify import LinkedInApifyCollector
 from .ziprecruiter import ZipRecruiterCollector
@@ -23,6 +24,7 @@ __all__ = [
     "LinkedInCollector",
     "LinkedInApifyCollector",
     "IndeedCollector",
+    "IndeedApifyCollector",
     "GlassdoorCollector",
     "ZipRecruiterCollector",
     "get_collector",
@@ -37,7 +39,7 @@ _REGISTRY: dict[str, dict[str, type[BaseCollector]]] = {
     },
     "indeed": {
         "playwright": IndeedCollector,
-        # "apify": IndeedApifyCollector,    # 待加
+        "apify": IndeedApifyCollector,
     },
     "glassdoor": {
         "playwright": GlassdoorCollector,
