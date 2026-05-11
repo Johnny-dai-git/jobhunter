@@ -2,22 +2,17 @@
 
 启动: `python -m src.main web` -> http://127.0.0.1:8765
 
-路由:
-    GET  /                              首页, 列出 scored 岗位
-    GET  /job/{id}                      单个岗位详情
-    POST /job/{id}/tailor               触发 tailor (Claude 改简历 + PDF)
-    GET  /job/{id}/pdf                  下载/查看 tailored resume PDF
-    GET  /job/{id}/md                   下载/查看 tailored resume MD
-    POST /job/{id}/mark-applied         标记已投递
+为了避开 fastapi/starlette/jinja2 版本冲突坑, 这版**不用 Jinja2Templates**,
+直接用 jinja2 自己渲染字符串后塞回 HTMLResponse.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 
 from .config import Config
@@ -31,10 +26,23 @@ from .tracker import mark_applied
 TEMPLATES_DIR = Path(__file__).resolve().parent / "web_templates"
 
 
+def _make_env() -> Environment:
+    """直接构造 Jinja2 Environment, 不走 starlette wrapper, 避开 cache_key bug."""
+    return Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        autoescape=select_autoescape(["html", "xml"]),
+        cache_size=0,  # 禁用缓存彻底避坑
+    )
+
+
 def create_app(config: Config) -> FastAPI:
     app = FastAPI(title="Job Agent")
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    env = _make_env()
     db_path = config.path("db_path")
+
+    def render(name: str, **ctx) -> HTMLResponse:
+        tpl = env.get_template(name)
+        return HTMLResponse(tpl.render(**ctx))
 
     def _get_job(job_id: int) -> Job:
         with session_scope(db_path) as session:
@@ -45,8 +53,8 @@ def create_app(config: Config) -> FastAPI:
             return job
 
     # ---- routes ----
-    @app.get("/", response_class=HTMLResponse)
-    def index(request: Request, min_score: float = 70.0, status: str = "active"):
+    @app.get("/")
+    def index(min_score: float = 70.0, status: str = "active"):
         with session_scope(db_path) as session:
             stmt = select(Job)
             if status == "active":
@@ -60,29 +68,23 @@ def create_app(config: Config) -> FastAPI:
             for j in jobs:
                 session.expunge(j)
 
-        return templates.TemplateResponse(
+        return render(
             "index.html",
-            {
-                "request": request,
-                "jobs": jobs,
-                "min_score": min_score,
-                "status": status,
-                "total": len(jobs),
-            },
+            jobs=jobs,
+            min_score=min_score,
+            status=status,
+            total=len(jobs),
         )
 
-    @app.get("/job/{job_id}", response_class=HTMLResponse)
-    def job_detail(request: Request, job_id: int):
+    @app.get("/job/{job_id}")
+    def job_detail(job_id: int):
         job = _get_job(job_id)
-        return templates.TemplateResponse(
+        return render(
             "job_detail.html",
-            {
-                "request": request,
-                "job": job,
-                "strengths_list": (job.match_strengths or "").splitlines(),
-                "fit_bullets": (job.match_fit_bullets or "").splitlines(),
-                "keywords_list": (job.match_keywords or "").splitlines(),
-            },
+            job=job,
+            strengths_list=(job.match_strengths or "").splitlines(),
+            fit_bullets=(job.match_fit_bullets or "").splitlines(),
+            keywords_list=(job.match_keywords or "").splitlines(),
         )
 
     @app.post("/job/{job_id}/tailor")
