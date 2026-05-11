@@ -66,10 +66,17 @@ preferences:
     - Kubernetes
     - LLM
 
-  # 排除关键词(出现就跳过)
+  # 排除关键词(出现就跳过,采集时即过滤,省 LLM 调用费)
+  # 借鉴 DailyJobMatch: 在评分前就剔除明显不符合的
   exclude_keywords:
     - Senior Director
     - VP
+    - intern
+    - internship
+    - student
+    - temporary
+    - contractor only
+    - postdoc
 
   # 经验年限范围(用于过滤明显不匹配的)
   years_of_experience:

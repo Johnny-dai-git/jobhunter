@@ -1,12 +1,14 @@
-"""岗位匹配评分器.
+"""岗位匹配评分器 (6 维度版).
 
-借鉴 n8n 工作流的"Structured Output Parser"思路: 用 Anthropic tool_use 强制 schema,
-比让模型输出 JSON 文本再正则提取靠谱得多 (成功率从 ~95% 提到 ~99.9%).
+借鉴 DailyJobMatch 的设计:
+- 6 个子维度评分(背景/技能/经验/资历/工作授权/公司类型)
+- 顺手提取 keywords / fit_bullets / connector,供 cover_letter 复用
+- 用 Anthropic tool_use 强制 schema,准确率 ~99.9%
 """
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import select
@@ -16,58 +18,100 @@ from .config import Config
 from .db import Job, JobStatus, session_scope
 
 
-# Tool schema: 强制模型把评分结果以这个结构调用
 SCORING_TOOL = {
     "name": "submit_match_score",
-    "description": "提交对该岗位与候选人简历的匹配评估结果",
+    "description": "提交对该岗位与候选人简历的 6 维度匹配评估结果",
     "input_schema": {
         "type": "object",
         "properties": {
             "score": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 100,
-                "description": "匹配度评分 0-100",
+                "type": "object",
+                "description": "6 维度子评分,子分相加等于 overall",
+                "properties": {
+                    "background_match":     {"type": "integer", "minimum": 0, "maximum": 10},
+                    "skills_overlap":       {"type": "integer", "minimum": 0, "maximum": 30},
+                    "experience_relevance": {"type": "integer", "minimum": 0, "maximum": 30},
+                    "seniority":            {"type": "integer", "minimum": 0, "maximum": 10},
+                    "authorization":        {"type": "integer", "minimum": 0, "maximum": 10},
+                    "company_score":        {"type": "integer", "minimum": 0, "maximum": 10},
+                    "overall":              {"type": "integer", "minimum": 0, "maximum": 100},
+                },
+                "required": [
+                    "background_match", "skills_overlap", "experience_relevance",
+                    "seniority", "authorization", "company_score", "overall",
+                ],
             },
             "summary": {
                 "type": "string",
                 "description": "一句话总结匹配情况,中文,不超过 50 字",
             },
-            "strengths": {
+            "keywords": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "命中点列表",
+                "description": "JD 里的关键技术/概念,5-10 个,用于 ATS 优化",
             },
-            "gaps": {
+            "fit_bullets": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "差距点列表",
+                "description": "为什么候选人 fit 这岗位的 3-5 条子弹点,英文,会复用到求职信",
+            },
+            "connector": {
+                "type": "string",
+                "description": "候选人和这家公司的具体连接点,一句话英文,会作为求职信钩子",
             },
             "recommend": {
                 "type": "boolean",
-                "description": "是否值得花时间投递",
+                "description": "是否推荐投递",
             },
         },
-        "required": ["score", "summary", "strengths", "gaps", "recommend"],
+        "required": ["score", "summary", "keywords", "fit_bullets", "connector", "recommend"],
     },
 }
 
 
 @dataclass
+class SubScores:
+    background: float = 0
+    skills: float = 0
+    experience: float = 0
+    seniority: float = 0
+    authorization: float = 0
+    company: float = 0
+    overall: float = 0
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SubScores":
+        return cls(
+            background=float(d.get("background_match", 0)),
+            skills=float(d.get("skills_overlap", 0)),
+            experience=float(d.get("experience_relevance", 0)),
+            seniority=float(d.get("seniority", 0)),
+            authorization=float(d.get("authorization", 0)),
+            company=float(d.get("company_score", 0)),
+            overall=float(d.get("overall", 0)),
+        )
+
+
+@dataclass
 class MatchResult:
-    score: float
+    score: float                # overall
+    sub_scores: SubScores
     summary: str
-    strengths: list[str]
-    gaps: list[str]
-    recommend: bool
+    keywords: list[str] = field(default_factory=list)
+    fit_bullets: list[str] = field(default_factory=list)
+    connector: str = ""
+    recommend: bool = False
 
     @classmethod
     def from_tool_input(cls, data: dict) -> "MatchResult":
+        sub = SubScores.from_dict(data.get("score") or {})
         return cls(
-            score=float(data.get("score", 0)),
+            score=sub.overall,
+            sub_scores=sub,
             summary=str(data.get("summary", "")).strip(),
-            strengths=list(data.get("strengths") or []),
-            gaps=list(data.get("gaps") or []),
+            keywords=list(data.get("keywords") or []),
+            fit_bullets=list(data.get("fit_bullets") or []),
+            connector=str(data.get("connector", "")).strip(),
             recommend=bool(data.get("recommend", False)),
         )
 
@@ -102,6 +146,11 @@ def score_job(
     raise RuntimeError("模型没返回 submit_match_score 工具调用")
 
 
+def _legacy_strengths_text(fit_bullets: list[str]) -> str:
+    """老字段 match_strengths 用 fit_bullets 填充,向后兼容."""
+    return "\n".join(f"- {b}" for b in fit_bullets) if fit_bullets else ""
+
+
 def score_pending(
     config: Config,
     resume_text: str,
@@ -126,10 +175,23 @@ def score_pending(
                 print(f"[!] 给 #{job.id} {job.title} @ {job.company} 评分失败: {e}")
                 continue
 
+            # 写入总分 + 子分 + 新字段
             job.match_score = result.score
             job.match_summary = result.summary
-            job.match_strengths = "\n".join(result.strengths)
-            job.match_gaps = "\n".join(result.gaps)
+            job.match_strengths = _legacy_strengths_text(result.fit_bullets)
+            # match_gaps 不再由模型直接给,可以从 sub-scores 倒推(可选,先留空)
+
+            job.score_background = result.sub_scores.background
+            job.score_skills = result.sub_scores.skills
+            job.score_experience = result.sub_scores.experience
+            job.score_seniority = result.sub_scores.seniority
+            job.score_authorization = result.sub_scores.authorization
+            job.score_company = result.sub_scores.company
+
+            job.match_keywords = "\n".join(result.keywords)
+            job.match_fit_bullets = "\n".join(result.fit_bullets)
+            job.match_connector = result.connector
+
             if result.score < auto_archive_below:
                 job.status = JobStatus.ARCHIVED.value
             else:

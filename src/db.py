@@ -53,11 +53,24 @@ class Job(Base):
     salary: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # 评分字段
+    # 评分字段 — 总分
     match_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     match_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     match_strengths: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     match_gaps: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # 6 维度子评分 (借鉴 DailyJobMatch)
+    score_background: Mapped[Optional[float]] = mapped_column(Float, nullable=True)       # 0-10
+    score_skills: Mapped[Optional[float]] = mapped_column(Float, nullable=True)            # 0-30
+    score_experience: Mapped[Optional[float]] = mapped_column(Float, nullable=True)        # 0-30
+    score_seniority: Mapped[Optional[float]] = mapped_column(Float, nullable=True)         # 0-10
+    score_authorization: Mapped[Optional[float]] = mapped_column(Float, nullable=True)     # 0-10
+    score_company: Mapped[Optional[float]] = mapped_column(Float, nullable=True)           # 0-10
+
+    # matcher 顺手提取的产物 (复用到 cover letter 生成,省 LLM 调用)
+    match_keywords: Mapped[Optional[str]] = mapped_column(Text, nullable=True)             # 换行分隔
+    match_fit_bullets: Mapped[Optional[str]] = mapped_column(Text, nullable=True)          # 换行分隔
+    match_connector: Mapped[Optional[str]] = mapped_column(Text, nullable=True)            # 一句话钩子
 
     # 状态
     status: Mapped[str] = mapped_column(String(32), default=JobStatus.NEW.value)

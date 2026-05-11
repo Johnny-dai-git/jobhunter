@@ -354,13 +354,32 @@ def show(job_id):
             sys.exit(1)
 
         console.print(f"[bold]#{job.id} {job.title}[/bold] @ {job.company}")
-        console.print(f"  Status: {job.status} | Score: {job.match_score}")
+        console.print(f"  Status: {job.status} | Overall: {job.match_score}")
         console.print(f"  URL: {job.url}")
         console.print(f"  Location: {job.location} | Salary: {job.salary}")
+
+        # 6 维度子分
+        if job.score_skills is not None:
+            tbl = Table(title="6 维度子分", show_header=False, box=None)
+            tbl.add_column("维度", style="bold")
+            tbl.add_column("分数", justify="right")
+            tbl.add_column("满分", justify="right", style="dim")
+            tbl.add_row("Background",       f"{job.score_background or 0:.0f}", "10")
+            tbl.add_row("Skills overlap",   f"{job.score_skills or 0:.0f}", "30")
+            tbl.add_row("Experience",       f"{job.score_experience or 0:.0f}", "30")
+            tbl.add_row("Seniority",        f"{job.score_seniority or 0:.0f}", "10")
+            tbl.add_row("Authorization",    f"{job.score_authorization or 0:.0f}", "10")
+            tbl.add_row("Company type",     f"{job.score_company or 0:.0f}", "10")
+            console.print(tbl)
+
         if job.match_summary:
             console.print(f"\n[bold]摘要:[/bold] {job.match_summary}")
-        if job.match_strengths:
-            console.print(f"\n[bold green]Strengths:[/bold green]\n{job.match_strengths}")
+        if job.match_connector:
+            console.print(f"\n[bold cyan]Connector (求职信钩子):[/bold cyan] {job.match_connector}")
+        if job.match_fit_bullets:
+            console.print(f"\n[bold green]Fit bullets:[/bold green]\n{job.match_fit_bullets}")
+        if job.match_keywords:
+            console.print(f"\n[bold magenta]Keywords:[/bold magenta] {', '.join(job.match_keywords.splitlines())}")
         if job.match_gaps:
             console.print(f"\n[bold yellow]Gaps:[/bold yellow]\n{job.match_gaps}")
         if job.tailored_resume_path:
