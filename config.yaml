@@ -31,21 +31,19 @@ model:
 
 # ====== 求职偏好 ======
 preferences:
-  # 目标岗位关键词(用于搜索和过滤)
-  # 根据简历(AI Infrastructure / ML Systems / LLM Serving / eBPF) 设置
+  # 目标岗位关键词(LinkedIn 搜索能识别的标准表述)
+  # 根据简历 AI Infrastructure / ML Systems / eBPF / LLM Serving 背景
   job_titles:
-    - AI Infrastructure Engineer
-    - Machine Learning Systems Engineer
-    - LLM Infrastructure Engineer
-    - ML Platform Engineer
-    - Distributed Systems Engineer
+    - Machine Learning Engineer
+    - ML Infrastructure Engineer
+    - AI Engineer
+    - Software Engineer Machine Learning
 
-  # 目标地点
+  # 目标地点 (用 LinkedIn 能识别的标准写法)
   locations:
-    - Remote
-    - San Francisco Bay Area
+    - United States
+    - San Francisco
     - New York
-    - Seattle
 
   # 工作类型
   job_types:
@@ -132,11 +130,12 @@ collectors:
     enabled: true
     backend: apify                # apify | playwright
     apify:
-      actor: bebity/linkedin-jobs-scraper      # https://apify.com/bebity/linkedin-jobs-scraper
-      # 可以追加任意 actor 自定义 input;_build_input() 会做基础默认
-      input_overrides: {}
+      # 当前用 harvestapi: $1 per 1000 jobs, 无需登录, 无月费
+      # https://apify.com/harvestapi/linkedin-job-search
+      actor: harvestapi/linkedin-job-search
+      input_overrides: {}         # 可以追加 actor 自定义 input
     cookie_file: data/cookies/linkedin.json    # 仅 backend=playwright 时用
-    max_per_run: 30
+    max_per_run: 24               # 4 keywords × 3 locations × 2/query = 24 (~$0.024)
 
   indeed:
     enabled: true
