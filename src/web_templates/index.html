@@ -13,8 +13,6 @@
 {% endmacro %}
 
 <form class="filters" method="get">
-  <input type="hidden" name="sort" value="{{ sort }}">
-
   <label for="min_score">最低分</label>
   <input type="number" name="min_score" id="min_score" value="{{ min_score }}" step="5" min="0" max="100">
 
@@ -25,6 +23,16 @@
     <option value="scored" {% if status == 'scored' %}selected{% endif %}>scored 待定</option>
     <option value="applied" {% if status == 'applied' %}selected{% endif %}>applied 已投</option>
     <option value="archived" {% if status == 'archived' %}selected{% endif %}>archived 归档</option>
+  </select>
+
+  <label for="sort">排序</label>
+  <select name="sort" id="sort">
+    <option value="score"     {% if sort == 'score' %}selected{% endif %}>分数 (大 → 小)</option>
+    <option value="salary"    {% if sort == 'salary' %}selected{% endif %}>薪资 (大 → 小)</option>
+    <option value="education" {% if sort == 'education' %}selected{% endif %}>学历 (PhD → Master → Bachelor)</option>
+    <option value="mode"      {% if sort == 'mode' %}selected{% endif %}>模式 (Remote → Hybrid → Onsite)</option>
+    <option value="posted"    {% if sort == 'posted' %}selected{% endif %}>发布 (新 → 旧)</option>
+    <option value="company"   {% if sort == 'company' %}selected{% endif %}>公司 (A → Z)</option>
   </select>
 
   <button class="btn btn-secondary" type="submit">应用</button>
