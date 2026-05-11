@@ -172,7 +172,12 @@
         {% endif %}
       </div>
       <div style="margin-top:16px;">
-        <a href="/" class="btn btn-primary">🔍 查看岗位列表 →</a>
+        {% if state.profile_id %}
+          <a href="/jobs?profile_id={{ state.profile_id }}" class="btn btn-primary">🔍 查看本次匹配的岗位 →</a>
+          <a href="/jobs" class="btn btn-secondary" style="margin-left:8px;">查看全部岗位</a>
+        {% else %}
+          <a href="/jobs" class="btn btn-primary">🔍 查看岗位列表 →</a>
+        {% endif %}
       </div>
     </div>
   {% elif state.phase == 'error' %}
@@ -187,7 +192,7 @@
       <div style="color:var(--color-text-muted);">耗时 {{ elapsed }}, 中途取消</div>
       <div style="margin-top:14px;">
         <a href="/onboarding" class="btn btn-secondary">回 onboarding</a>
-        <a href="/" class="btn btn-primary" style="margin-left:6px;">看现有岗位</a>
+        <a href="/jobs" class="btn btn-primary" style="margin-left:6px;">看现有岗位</a>
       </div>
     </div>
   {% else %}

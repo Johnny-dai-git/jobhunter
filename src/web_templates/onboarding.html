@@ -133,37 +133,49 @@
       <thead>
         <tr>
           <th style="padding:8px 10px;">时间</th>
-          <th style="padding:8px 10px;">描述</th>
-          <th style="padding:8px 10px;">简历</th>
+          <th style="padding:8px 10px;">画像</th>
+          <th style="padding:8px 10px;">岗位</th>
           <th style="padding:8px 10px;">状态</th>
           <th style="padding:8px 10px;"></th>
         </tr>
       </thead>
       <tbody>
         {% for h in history %}
+        {% set counts = job_counts.get(h.id, {'total':0, 'top':0}) %}
         <tr>
-          <td style="padding:8px 10px; color:var(--color-text-muted); font-size:12px;">
+          <td style="padding:10px; color:var(--color-text-muted); font-size:12px; white-space:nowrap;">
             {{ h.created_at.strftime('%m-%d %H:%M') }}
           </td>
-          <td style="padding:8px 10px;">
+          <td style="padding:10px;">
             <div style="font-weight:500;">{{ h.label or '(无描述)' }}</div>
-            <div style="font-size:11px; color:var(--color-text-dim); margin-top:2px; max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-              {{ h.user_description[:120] }}{% if h.user_description|length > 120 %}...{% endif %}
+            <div style="font-size:11px; color:var(--color-text-dim); margin-top:2px; max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              {{ h.user_description[:140] }}{% if h.user_description|length > 140 %}...{% endif %}
             </div>
+            {% if h.resume_filename %}<div style="font-size:11px; color:var(--color-text-dim); margin-top:2px;">📎 {{ h.resume_filename }}</div>{% endif %}
           </td>
-          <td style="padding:8px 10px; font-size:11px; color:var(--color-text-muted);">
-            {{ h.resume_filename or '—' }}
+          <td style="padding:10px;">
+            {% if counts.total > 0 %}
+              <a href="/jobs?profile_id={{ h.id }}" style="text-decoration:none;">
+                <span class="badge badge-indigo">{{ counts.total }} 个</span>
+                {% if counts.top > 0 %}<span class="badge badge-green" style="margin-left:4px;">{{ counts.top }} 高分</span>{% endif %}
+              </a>
+            {% else %}
+              <span style="color:var(--color-text-dim); font-size:12px;">—</span>
+            {% endif %}
           </td>
-          <td style="padding:8px 10px;">
+          <td style="padding:10px;">
             {% if h.id == current_id %}<span class="badge badge-green">✓ 当前</span>
             {% else %}<span class="badge badge-gray">历史</span>{% endif %}
           </td>
-          <td style="padding:8px 10px; text-align:right;">
+          <td style="padding:10px; text-align:right; white-space:nowrap;">
+            {% if counts.total > 0 %}
+              <a href="/jobs?profile_id={{ h.id }}" class="btn btn-secondary btn-sm">查看结果 →</a>
+            {% endif %}
             {% if h.id != current_id %}
               <form method="post" action="/profiles/{{ h.id }}/use" style="margin:0; display:inline;">
-                <button class="btn btn-secondary btn-sm" type="submit"
+                <button class="btn btn-primary btn-sm" type="submit" style="margin-left:4px;"
                         {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"{% endif %}>
-                  用这个 →
+                  用这个
                 </button>
               </form>
             {% endif %}

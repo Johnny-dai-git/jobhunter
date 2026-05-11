@@ -223,15 +223,66 @@ def create_app(config: Config) -> FastAPI:
 
     # ---- routes ----
     @app.get("/")
-    def index(
+    def root():
+        """根路径总是去 onboarding (历史 + 表单)."""
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    @app.get("/applied")
+    def applied_list(sort: str = "applied_at"):
+        """已投递追踪页. 列出所有 status in (applied/interview/offer/rejected) 的岗位."""
+        tracked_statuses = [
+            JobStatus.APPLIED.value,
+            JobStatus.INTERVIEW.value,
+            JobStatus.OFFER.value,
+            JobStatus.REJECTED.value,
+            JobStatus.SHORTLISTED.value,
+        ]
+        with session_scope(db_path) as session:
+            stmt = select(Job).where(Job.status.in_(tracked_statuses))
+            jobs = list(session.scalars(stmt).all())
+            for j in jobs:
+                session.expunge(j)
+
+        # 默认按 applied_at 降序 (没投的放最后)
+        if sort == "applied_at":
+            jobs.sort(key=lambda j: -(j.applied_at.timestamp() if j.applied_at else 0))
+        elif sort == "score":
+            jobs.sort(key=lambda j: -(j.match_score or 0))
+        elif sort == "status":
+            order = {"offer": 0, "interview": 1, "applied": 2, "shortlisted": 3, "rejected": 4}
+            jobs.sort(key=lambda j: order.get(j.status, 99))
+
+        return render(
+            "applied.html",
+            jobs=jobs,
+            sort=sort,
+            total=len(jobs),
+        )
+
+    @app.post("/job/{job_id}/status")
+    def update_status(job_id: int, to: str = Form(...)):
+        """通用状态切换. to in {shortlisted, applied, interview, offer, rejected, archived}"""
+        allowed = {s.value for s in JobStatus}
+        if to not in allowed:
+            raise HTTPException(400, f"非法状态 {to}, 允许: {sorted(allowed)}")
+        with session_scope(db_path) as session:
+            job = session.get(Job, job_id)
+            if not job:
+                raise HTTPException(404, "Job 不存在")
+            job.status = to
+            if to == JobStatus.APPLIED.value and not job.applied_at:
+                job.applied_at = datetime.utcnow()
+            session.add(job)
+            session.commit()
+        return RedirectResponse(url=f"/job/{job_id}", status_code=303)
+
+    @app.get("/jobs")
+    def jobs_list(
         min_score: float = 70.0,
         status: str = "active",
         sort: str = "score",
+        profile_id: int | None = None,
     ):
-        # 首次访问无 profile 则跳 onboarding
-        if not load_profile(config):
-            return RedirectResponse(url="/onboarding", status_code=303)
-
         with session_scope(db_path) as session:
             stmt = select(Job)
             if status == "active":
@@ -240,11 +291,19 @@ def create_app(config: Config) -> FastAPI:
                 stmt = stmt.where(Job.status == status)
             if min_score is not None:
                 stmt = stmt.where(Job.match_score >= min_score)
+            if profile_id is not None:
+                stmt = stmt.where(Job.profile_id == profile_id)
             jobs = list(session.scalars(stmt).all())
             for j in jobs:
                 session.expunge(j)
 
-        # Python 端排序 (salary/education/mode 都是字符串字段, SQL ORDER BY 难弄)
+            # 当前过滤 profile 的 label, 用于显示横幅
+            profile_label = None
+            if profile_id is not None:
+                from .db import Profile
+                p = session.get(Profile, profile_id)
+                profile_label = p.label if p else f"#{profile_id} (已删除)"
+
         sort_fn = SORTERS.get(sort, SORTERS["score"])
         jobs.sort(key=sort_fn)
 
@@ -255,6 +314,8 @@ def create_app(config: Config) -> FastAPI:
             status=status,
             sort=sort,
             total=len(jobs),
+            profile_id=profile_id,
+            profile_label=profile_label,
         )
 
     @app.get("/job/{job_id}")
@@ -324,6 +385,22 @@ def create_app(config: Config) -> FastAPI:
         profile = load_profile(config)
         history = list_profile_snapshots(config)
         current_id = get_current_profile_id(config)
+
+        # 每个 profile 的岗位计数 (展示在历史行)
+        from sqlalchemy import func
+        job_counts: dict[int, dict] = {}
+        with session_scope(db_path) as session:
+            for h in history:
+                total = session.scalar(
+                    select(func.count(Job.id)).where(Job.profile_id == h.id)
+                ) or 0
+                top = session.scalar(
+                    select(func.count(Job.id)).where(
+                        Job.profile_id == h.id, Job.match_score >= 75
+                    )
+                ) or 0
+                job_counts[h.id] = {"total": total, "top": top}
+
         return render(
             "onboarding.html",
             existing_desc=existing_desc,
@@ -331,6 +408,7 @@ def create_app(config: Config) -> FastAPI:
             supported_exts=", ".join(sorted(SUPPORTED_EXTS)),
             history=history,
             current_id=current_id,
+            job_counts=job_counts,
             pipeline_running=pipeline_state["running"],
         )
 

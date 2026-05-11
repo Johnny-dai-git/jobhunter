@@ -5,13 +5,25 @@
 {# 排序链接 (列头可点击,与下拉同效) #}
 {% macro sort_link(field, label) %}
   {% set active = (sort == field) %}
-  <a href="?min_score={{ min_score }}&status={{ status }}&sort={{ field }}"
+  <a href="?min_score={{ min_score }}&status={{ status }}&sort={{ field }}{% if profile_id %}&profile_id={{ profile_id }}{% endif %}"
      style="color:{% if active %}var(--color-accent){% else %}inherit{% endif %};
             text-decoration:none;
             font-weight:{% if active %}800{% else %}inherit{% endif %};">
     {{ label }}{% if active %} ↓{% endif %}
   </a>
 {% endmacro %}
+
+{% if profile_id and profile_label %}
+<div class="card" style="background:var(--color-accent-light); border-color:var(--color-accent);">
+  <div style="display:flex; align-items:center; justify-content:space-between;">
+    <div>
+      <span style="font-size:12px; color:var(--color-accent); font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">已过滤 · 画像</span>
+      <div style="font-weight:600; margin-top:2px;">{{ profile_label }}</div>
+    </div>
+    <a href="/jobs?min_score={{ min_score }}&status={{ status }}&sort={{ sort }}" class="btn btn-secondary btn-sm">✕ 看全部</a>
+  </div>
+</div>
+{% endif %}
 
 <form class="filters" method="get">
   <label for="min_score">最低分</label>

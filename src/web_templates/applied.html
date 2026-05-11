@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}已投递 · JobHunter{% endblock %}
+{% block content %}
+
+<div class="card" style="background: linear-gradient(135deg, var(--color-accent-light) 0%, #fff 100%);">
+  <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+    <div>
+      <h2 style="margin:0;">📬 投递追踪</h2>
+      <div style="color:var(--color-text-muted); font-size:13px; margin-top:4px;">
+        所有已投递 / 面试中 / 已收到 offer / 被拒的岗位 + 对应简历
+      </div>
+    </div>
+    <div style="display:flex; gap:6px;">
+      <a href="?sort=applied_at" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'applied_at' %}800{% else %}600{% endif %};">按投递时间</a>
+      <a href="?sort=score" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'score' %}800{% else %}600{% endif %};">按分数</a>
+      <a href="?sort=status" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'status' %}800{% else %}600{% endif %};">按状态</a>
+    </div>
+  </div>
+  <div style="margin-top:12px; display:flex; gap:16px; font-size:13px; color:var(--color-text-muted);">
+    {% set counts = namespace(applied=0, interview=0, offer=0, rejected=0) %}
+    {% for j in jobs %}
+      {% if j.status == 'applied' %}{% set counts.applied = counts.applied + 1 %}
+      {% elif j.status == 'interview' %}{% set counts.interview = counts.interview + 1 %}
+      {% elif j.status == 'offer' %}{% set counts.offer = counts.offer + 1 %}
+      {% elif j.status == 'rejected' %}{% set counts.rejected = counts.rejected + 1 %}{% endif %}
+    {% endfor %}
+    <span><strong style="color:var(--color-text);">{{ counts.applied }}</strong> 已投</span>
+    <span><strong style="color:var(--color-text);">{{ counts.interview }}</strong> 面试中</span>
+    <span><strong style="color:#15803d;">{{ counts.offer }}</strong> Offer</span>
+    <span><strong style="color:var(--color-text-muted);">{{ counts.rejected }}</strong> 被拒</span>
+    <span style="margin-left:auto;">共 {{ total }} 个</span>
+  </div>
+</div>
+
+<div class="card card-flat">
+  <table>
+    <thead>
+      <tr>
+        <th>Score</th>
+        <th>岗位</th>
+        <th>公司</th>
+        <th>投递日期</th>
+        <th>状态</th>
+        <th>简历 / 求职信</th>
+        <th>切换状态</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for j in jobs %}
+      <tr>
+        <td>
+          {% set s = j.match_score or 0 %}
+          {% if s >= 90 %}<span class="score score-90">{{ "%.0f"|format(s) }}</span>
+          {% elif s >= 75 %}<span class="score score-75">{{ "%.0f"|format(s) }}</span>
+          {% else %}<span class="score score-low">{{ "%.0f"|format(s) }}</span>{% endif %}
+        </td>
+        <td style="max-width:280px;">
+          <a href="/job/{{ j.id }}" class="job-title">{{ j.title }}</a>
+          <div class="job-summary">{{ j.location or '' }}{% if j.work_mode and j.work_mode != 'unspecified' %} · {{ j.work_mode }}{% endif %}</div>
+        </td>
+        <td><span style="font-weight:500;">{{ j.company }}</span></td>
+        <td><span style="font-size:13px; color:var(--color-text-muted);">
+          {% if j.applied_at %}{{ j.applied_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}
+        </span></td>
+        <td>
+          {% if j.status == 'applied' %}<span class="badge badge-indigo">📨 已投</span>
+          {% elif j.status == 'interview' %}<span class="badge badge-yellow">🎤 面试中</span>
+          {% elif j.status == 'offer' %}<span class="badge badge-green">🎉 Offer</span>
+          {% elif j.status == 'rejected' %}<span class="badge badge-gray">✗ 被拒</span>
+          {% elif j.status == 'shortlisted' %}<span class="badge badge-yellow">⭐ 入围</span>
+          {% else %}<span class="badge badge-gray">{{ j.status }}</span>{% endif %}
+        </td>
+        <td>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            {% if j.tailored_resume_pdf_path %}
+              <a href="/job/{{ j.id }}/pdf" target="_blank" class="badge badge-indigo" style="text-decoration:none;">📄 PDF</a>
+            {% endif %}
+            {% if j.tailored_resume_path %}
+              <a href="/job/{{ j.id }}/md" target="_blank" class="badge badge-gray" style="text-decoration:none;">📝 MD</a>
+            {% endif %}
+            {% if j.cover_letter_path %}
+              <a href="/job/{{ j.id }}/cover" target="_blank" class="badge badge-gray" style="text-decoration:none;">✉ Cover</a>
+            {% endif %}
+            {% if not j.tailored_resume_pdf_path and not j.cover_letter_path %}
+              <span style="color:var(--color-text-dim); font-size:11px;">—</span>
+            {% endif %}
+          </div>
+        </td>
+        <td>
+          <div style="display:flex; gap:4px; flex-wrap:wrap;">
+            {% if j.status != 'interview' %}
+            <form method="post" action="/job/{{ j.id }}/status" style="margin:0;">
+              <input type="hidden" name="to" value="interview">
+              <button class="btn btn-secondary btn-sm" type="submit" title="标记面试中">→ 面试</button>
+            </form>
+            {% endif %}
+            {% if j.status != 'offer' %}
+            <form method="post" action="/job/{{ j.id }}/status" style="margin:0;">
+              <input type="hidden" name="to" value="offer">
+              <button class="btn btn-success btn-sm" type="submit" title="标记 Offer">→ Offer</button>
+            </form>
+            {% endif %}
+            {% if j.status != 'rejected' %}
+            <form method="post" action="/job/{{ j.id }}/status" style="margin:0;">
+              <input type="hidden" name="to" value="rejected">
+              <button class="btn btn-secondary btn-sm" type="submit" title="标记被拒"
+                      onclick="return confirm('标记为被拒?')">→ 拒</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+        <td><a href="/job/{{ j.id }}" class="btn btn-secondary btn-sm">详情</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8">
+        <div class="empty">
+          <div class="empty-icon">📭</div>
+          <div>还没有任何已投递的岗位</div>
+          <div style="margin-top:6px; font-size:12px;">在 <a href="/jobs">所有岗位</a> 里找到感兴趣的, 点详情 → 标记已投</div>
+        </div>
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
