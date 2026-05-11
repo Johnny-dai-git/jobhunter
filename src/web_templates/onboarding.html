@@ -126,7 +126,7 @@
   {% if agent_state != 'uninitialized' %}
   <div class="card" style="background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border-left: 3px solid {% if agent_state == 'running' %}var(--color-success){% elif agent_state == 'scheduled' %}var(--color-accent){% else %}var(--color-text-dim){% endif %};">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-      <div>
+      <div style="flex:1; min-width:280px;">
         <h3 style="margin:0;">🤖 Agent 状态</h3>
         <div style="margin-top:6px; font-size:14px;">
           {% if agent_state == 'running' %}
@@ -140,6 +140,58 @@
             <span style="color:var(--color-text-muted); margin-left:8px;">没有定时任务,也没在跑</span>
           {% endif %}
         </div>
+
+        {# ============ 持久化状态: 当前跑 ============ #}
+        {% if cur_run %}
+        <div style="margin-top:12px; padding:10px 12px; background:rgba(22,163,74,0.08); border-radius:var(--radius-sm); font-size:13px;">
+          <div style="font-weight:600; margin-bottom:4px;">📡 实时: 流水线运行中</div>
+          <div style="display:grid; grid-template-columns: auto 1fr; gap:4px 10px; font-size:12px;">
+            <span style="color:var(--color-text-muted);">已运行</span><span>{{ cur_elapsed }}</span>
+            <span style="color:var(--color-text-muted);">当前阶段</span><span>{{ cur_run.phase }}{% if cur_run.current_platform %} · 平台 {{ cur_run.current_platform }}{% endif %}</span>
+            <span style="color:var(--color-text-muted);">用画像</span><span>{% if cur_run.profile_id %}#{{ cur_run.profile_id }} {{ cur_run.profile_label or '' }}{% else %}—{% endif %}</span>
+            <span style="color:var(--color-text-muted);">触发源</span><span>
+              {% if cur_run.trigger == 'cron' %}🕐 系统 cron
+              {% elif cur_run.trigger == 'web' %}🌐 web (点击)
+              {% else %}💻 CLI{% endif %}
+              · PID {{ cur_run.pid }}
+            </span>
+          </div>
+          <div style="margin-top:6px;"><a href="/onboarding/processing" style="color:var(--color-accent); font-size:12px;">查看详细进度 →</a></div>
+        </div>
+        {% endif %}
+
+        {# ============ 持久化状态: 上次跑 ============ #}
+        {% if last_run and not cur_run %}
+        <div style="margin-top:12px; padding:10px 12px; background:#f8fafc; border-radius:var(--radius-sm); font-size:13px; border:1px solid var(--color-border);">
+          <div style="font-weight:600; margin-bottom:4px;">
+            📋 上次跑:
+            {% if last_run.phase == 'done' %}<span style="color:var(--color-success);">✓ 成功</span>
+            {% elif last_run.phase == 'error' %}<span style="color:var(--color-danger);">✗ 出错</span>
+            {% elif last_run.phase == 'cancelled' %}<span style="color:var(--color-text-muted);">⏸ 取消</span>
+            {% elif last_run.phase == 'crashed' %}<span style="color:var(--color-danger);">💥 崩溃</span>
+            {% else %}{{ last_run.phase }}{% endif %}
+          </div>
+          <div style="display:grid; grid-template-columns: auto 1fr; gap:4px 10px; font-size:12px;">
+            <span style="color:var(--color-text-muted);">结束时间</span><span>{{ last_run.ended_at[:19].replace('T',' ') if last_run.ended_at else '—' }}</span>
+            <span style="color:var(--color-text-muted);">用时</span><span>{% if last_run.duration_sec %}{{ last_run.duration_sec // 60 }}m {{ last_run.duration_sec % 60 }}s{% else %}—{% endif %}</span>
+            <span style="color:var(--color-text-muted);">用画像</span><span>{% if last_run.profile_id %}#{{ last_run.profile_id }} {{ last_run.profile_label or '' }}{% else %}—{% endif %}</span>
+            <span style="color:var(--color-text-muted);">触发源</span><span>
+              {% if last_run.trigger == 'cron' %}🕐 系统 cron
+              {% elif last_run.trigger == 'web' %}🌐 web
+              {% else %}💻 CLI{% endif %}
+            </span>
+            {% if last_run.stats and last_run.stats.collect %}
+            <span style="color:var(--color-text-muted);">新增岗位</span><span>{{ last_run.stats.collect.total_new or 0 }}</span>
+            {% endif %}
+            {% if last_run.stats and last_run.stats.match %}
+            <span style="color:var(--color-text-muted);">完成评分</span><span>{{ last_run.stats.match.scored or 0 }}</span>
+            {% endif %}
+            {% if last_run.error %}
+            <span style="color:var(--color-danger);">错误</span><span style="color:var(--color-danger); font-family:monospace; font-size:11px;">{{ last_run.error[:200] }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
       </div>
       <div style="display:flex; gap:8px;">
         {% if agent_state in ['running', 'scheduled'] %}

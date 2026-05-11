@@ -18,5 +18,6 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate job-agent
 
 echo "=== $(date) JobHunter daily run ==="
+export JOBHUNTER_TRIGGER=cron
 python -m src.main run-all
 echo "=== Done $(date) ==="

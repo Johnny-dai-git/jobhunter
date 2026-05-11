@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 
+from . import agent_state
 from .collect import collect_all
 from .config import Config
 from .cover_letter import write_cover_letter
@@ -168,6 +169,13 @@ def create_app(config: Config) -> FastAPI:
                 profile_id=None,
             )
 
+        # 同步写持久化状态 (供其他进程/web session 看)
+        try:
+            agent_state.start_run(config, trigger="web")
+            agent_state.update_phase(config, pipeline_state["phase"])
+        except Exception:
+            pass
+
         try:
             if do_analyze:
                 profile = analyze_profile(config, user_description=user_description)
@@ -179,19 +187,46 @@ def create_app(config: Config) -> FastAPI:
                     resume_filename=resume_filename,
                 )
                 pipeline_state["profile_id"] = pid
+                # 同步当前画像信息到持久化状态
+                try:
+                    agent_state.update_phase(
+                        config, pipeline_state["phase"],
+                        profile_id=pid,
+                        profile_label=profile.summary[:80] if profile.summary else None,
+                    )
+                except Exception:
+                    pass
             else:
                 # 沿用现有当前画像 id
                 pipeline_state["profile_id"] = get_current_profile_id(config)
+                # 拿 label
+                try:
+                    if pipeline_state["profile_id"]:
+                        from .db import Profile
+                        with session_scope(db_path) as session:
+                            row = session.get(Profile, pipeline_state["profile_id"])
+                            label = row.label if row else None
+                        agent_state.update_phase(
+                            config, pipeline_state["phase"],
+                            profile_id=pipeline_state["profile_id"],
+                            profile_label=label,
+                        )
+                except Exception:
+                    pass
 
             if not _should_continue():
                 pipeline_state["phase"] = "cancelled"
                 return
 
             pipeline_state["phase"] = "collecting"
+            try: agent_state.update_phase(config, "collecting")
+            except Exception: pass
 
             def _on_platform(name: str):
                 pipeline_state["current_platform"] = name
                 pipeline_state["platform_started_at"] = datetime.now()
+                try: agent_state.set_platform(config, name)
+                except Exception: pass
 
             stats = collect_all(
                 config,
@@ -201,17 +236,28 @@ def create_app(config: Config) -> FastAPI:
             )
             pipeline_state["stats"]["collect"] = stats
             pipeline_state["current_platform"] = None
+            try:
+                agent_state.set_platform(config, None)
+                agent_state.update_phase(config, "collecting", stats={"collect": stats})
+            except Exception: pass
 
             if not _should_continue():
                 pipeline_state["phase"] = "cancelled"
                 return
 
             pipeline_state["phase"] = "matching"
+            try: agent_state.update_phase(config, "matching")
+            except Exception: pass
+
             resume_text = load_cached(config.path("resume_dir"))
             results = score_pending(config, resume_text, should_continue=_should_continue)
             pipeline_state["stats"]["match"] = {"scored": len(results)}
 
-            pipeline_state["phase"] = "cancelled" if not _should_continue() else "done"
+            final_phase = "cancelled" if not _should_continue() else "done"
+            pipeline_state["phase"] = final_phase
+            try:
+                agent_state.update_phase(config, final_phase, stats={"match": {"scored": len(results)}})
+            except Exception: pass
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -220,6 +266,16 @@ def create_app(config: Config) -> FastAPI:
         finally:
             pipeline_state["running"] = False
             pipeline_state["ended_at"] = datetime.now()
+            # 写最终持久化状态
+            try:
+                if pipeline_state.get("phase") == "error":
+                    agent_state.end_run(config, success=False, phase="error", error=pipeline_state.get("error"))
+                elif pipeline_state.get("phase") == "cancelled":
+                    agent_state.end_run(config, success=False, phase="cancelled")
+                else:
+                    agent_state.end_run(config, success=True, phase="done")
+            except Exception:
+                pass
 
 
     def _wait_for_cancel(timeout: float = 30) -> bool:
@@ -487,15 +543,29 @@ def create_app(config: Config) -> FastAPI:
         # Agent 总体状态
         has_profile = profile is not None
         has_schedule = cron_info["installed"] or scheduler.get_schedule_hours() > 0
-        is_running = pipeline_state["running"]
+        # 持久化状态 (含 cron 启动的进程)
+        persistent = agent_state.get_state(config)
+        cur_run = persistent.get("current_run")
+        last_run = persistent.get("last_run")
+        is_running = pipeline_state["running"] or (cur_run is not None)
         if not has_profile:
-            agent_state = "uninitialized"   # 还没 onboarding
+            agent_status = "uninitialized"
         elif is_running:
-            agent_state = "running"
+            agent_status = "running"
         elif has_schedule:
-            agent_state = "scheduled"
+            agent_status = "scheduled"
         else:
-            agent_state = "idle"
+            agent_status = "idle"
+
+        # 计算 elapsed
+        cur_elapsed = ""
+        if cur_run and cur_run.get("started_at"):
+            try:
+                start = datetime.fromisoformat(cur_run["started_at"])
+                secs = int((datetime.now() - start).total_seconds())
+                cur_elapsed = f"{secs}s" if secs < 60 else f"{secs // 60}m {secs % 60}s"
+            except Exception:
+                pass
 
         return render(
             "onboarding.html",
@@ -509,7 +579,11 @@ def create_app(config: Config) -> FastAPI:
             resume_files=resume_files,
             schedule=schedule_info,
             freshness=freshness_info,
-            agent_state=agent_state,
+            agent_state=agent_status,
+            persistent_state=persistent,
+            cur_run=cur_run,
+            last_run=last_run,
+            cur_elapsed=cur_elapsed,
         )
 
     @app.post("/onboarding/submit")
@@ -812,7 +886,7 @@ def create_app(config: Config) -> FastAPI:
             session.execute(_update(Profile).where(Profile.is_current).values(is_current=False))
             session.commit()
 
-        # 3. 清 pipeline 状态
+        # 3. 清 pipeline 状态 (内存 + 持久化)
         pipeline_state.update(
             running=False,
             phase="idle",
@@ -825,6 +899,10 @@ def create_app(config: Config) -> FastAPI:
             current_platform=None,
             platform_started_at=None,
         )
+        try:
+            agent_state.clear(config)
+        except Exception:
+            pass
         return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/profiles/{profile_id}/delete")

@@ -1,0 +1,415 @@
+{
+  "top_5_positions": [
+    {
+      "title": "Postdoctoral Researcher",
+      "direction": "academic-research",
+      "scores": {
+        "market_demand": 8,
+        "competition": 4,
+        "user_advantage": 9,
+        "composite": 43
+      },
+      "aliases": [
+        "Postdoctoral Fellow",
+        "Postdoctoral Associate",
+        "Postdoc",
+        "Research Fellow",
+        "Postdoctoral Research Scientist"
+      ],
+      "broader_terms": [
+        "Research Scientist",
+        "Research Associate",
+        "AI Researcher"
+      ],
+      "why_this_position": [
+        "7篇一作论文发表在ACM/IEEE/Springer顶刊顶会，覆盖ML系统、分布式训练、安全等方向",
+        "独立主导多项AI基础设施研究项目（DYNAMIX RL调度器、PRISM传输库、eBPF遥测系统），具备完整科研闭环能力",
+        "PhD课题直接对齐Postdoc研究岗：ML/LLM训练推理基础设施的安全、优化与可观测性"
+      ],
+      "market_evidence": "全球AI/ML博士后职位持续增长，顶级大学和工业实验室每年大量开放Postdoc招聘",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Postdoctoral%20Researcher%20AI%20ML"
+    },
+    {
+      "title": "Research Scientist",
+      "direction": "academic-research",
+      "scores": {
+        "market_demand": 7,
+        "competition": 5,
+        "user_advantage": 8,
+        "composite": 28
+      },
+      "aliases": [
+        "AI Research Scientist",
+        "Research Scientist Machine Learning",
+        "Staff Research Scientist",
+        "Senior Research Scientist",
+        "Research Associate"
+      ],
+      "broader_terms": [
+        "Member of Technical Staff",
+        "Applied Scientist"
+      ],
+      "why_this_position": [
+        "8篇论文（7篇一作）证明独立研究能力，覆盖ML系统优化、eBPF可观测性、分布式训练安全",
+        "长期从事AI基础设施研究，设计和实现了RL调度器、优先级传输库、GPU可观测性平台等系统级成果",
+        "Cisco/Broadcom工业经验+PhD训练形成工业界与学术界双重视角，适合Research Scientist角色"
+      ],
+      "market_evidence": "AI研究科学家需求旺盛，DeepMind/Google/Meta/Anthropic等持续扩张基础研究团队",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Research%20Scientist%20Machine%20Learning"
+    },
+    {
+      "title": "Research Scientist (Postdoc-Level)",
+      "direction": "academic-research",
+      "scores": {
+        "market_demand": 7,
+        "competition": 5,
+        "user_advantage": 7,
+        "composite": 25
+      },
+      "aliases": [
+        "Postdoctoral Research Scientist",
+        "Research Associate",
+        "Scientist I",
+        "AI Research Scientist",
+        "Research Staff"
+      ],
+      "broader_terms": [],
+      "why_this_position": [
+        "独立设计并部署了K8s上的LLM推理平台（NGINX→FastAPI→vLLM），达到91.3%峰值GPU利用率",
+        "在eBPF内核追踪领域有深度积累（PSketch、eHashPipe），Top-K准确率>96%",
+        "分布式训练经验覆盖PyTorch DDP/FSDP、Megatron-LM、BytePS等主流框架"
+      ],
+      "market_evidence": "AI研究岗招聘量年增30%+，产业实验室（FAIR/DeepMind/Google Brain）Postdoc-level需求旺盛",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Research%20Scientist%20AI%20Postdoc"
+    },
+    {
+      "title": "Assistant Professor",
+      "direction": "academic-teaching",
+      "scores": {
+        "market_demand": 6,
+        "competition": 6,
+        "user_advantage": 7,
+        "composite": 17
+      },
+      "aliases": [
+        "Tenure-Track Assistant Professor",
+        "Assistant Professor (Tenure-Track)",
+        "TTAP",
+        "Tenure-Track Faculty",
+        "Assistant Professor of Computer Science"
+      ],
+      "broader_terms": [
+        "Faculty Position",
+        "Academic Faculty"
+      ],
+      "why_this_position": [
+        "8篇论文+专利+独立主导多个研究项目，具备申请TTAP所需的扎实科研产出",
+        "教学潜力：曾跨部门主导产品（Midea Fun Oven II）从技术到落地的全流程，具备沟通与指导能力",
+        "研究方向（AI基础设施、ML系统、安全）是CS系热门招聘方向，需求持续增加"
+      ],
+      "market_evidence": "全球CS/AI教职招聘热度高，ML/Systems方向尤为紧缺，大量高校开放TTAP",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Assistant%20Professor%20Computer%20Science"
+    },
+    {
+      "title": "Lecturer / Teaching Faculty",
+      "direction": "academic-teaching",
+      "scores": {
+        "market_demand": 5,
+        "competition": 4,
+        "user_advantage": 5,
+        "composite": 15
+      },
+      "aliases": [
+        "Adjunct Professor",
+        "Visiting Professor",
+        "Teaching Assistant Professor",
+        "Instructor",
+        "Assistant Lecturer"
+      ],
+      "broader_terms": [
+        "Faculty"
+      ],
+      "why_this_position": [
+        "PhD candidate即将答辩，具备承担CS专业课程的理论基础（AI、ML系统、网络）",
+        "工业界经验（Cisco/Broadcom/Midea/Xiaomi）可转化为实践导向的教学案例",
+        "产品经理经验（Midea/Xiaomi）培养出了优秀的跨团队沟通和表达能力"
+      ],
+      "market_evidence": "全球高校扩张AI/CS相关课程，Lecturer/Teaching Faculty需求量稳步增长",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Lecturer%20Computer%20Science%20University"
+    }
+  ],
+  "target_locations": [
+    "Hong Kong",
+    "Singapore",
+    "United States",
+    "United Kingdom",
+    "Japan"
+  ],
+  "summary": "候选人明确追求Postdoc/教职学术路线，核心方向锁定academic-research + academic-teaching。最优投递：Postdoctoral Researcher、Research Scientist、Assistant Professor等岗位。推荐全球高校和研究所（HKU/NUS/ETH/Stanford/RIKEN），覆盖香港、新加坡、美、日、欧五大区域。",
+  "recommended_companies": {
+    "north_america": [
+      {
+        "name": "Case Western Reserve University",
+        "why_fit": "已在本校完成PhD研究，熟悉环境，可能留校做Postdoc/Research Faculty",
+        "hiring_signal": "CWRU工程学院持续招聘AI/ML方向博士后和研究岗",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Scientist",
+          "Research Associate"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "University of California, Berkeley",
+        "why_fit": "BAIR实验室世界顶级AI研究方向与候选人ML系统背景高度匹配",
+        "hiring_signal": "BAIR持续扩大Postdoc招聘，尤其在ML Systems和AI Infrastructure方向",
+        "example_roles": [
+          "Postdoctoral Scholar",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Stanford University",
+        "why_fit": "Stanford AI Lab (SAIL) 研究方向涵盖分布式ML系统和AI基础设施",
+        "hiring_signal": "SAIL近年扩招ML Systems方向的Postdoc和研究科学家",
+        "example_roles": [
+          "Postdoctoral Fellow",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Massachusetts Institute of Technology",
+        "why_fit": "MIT CSAIL在分布式系统和ML基础设施领域世界领先，匹配候选人核心技能",
+        "hiring_signal": "CSAIL多个ML Systems课题组常年招募博士后",
+        "example_roles": [
+          "Postdoctoral Associate",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Carnegie Mellon University",
+        "why_fit": "CMU机器学习系与候选人研究方向高度重合，且有Systems ML课题组",
+        "hiring_signal": "CMU MLD和RI持续招聘博士后和教职",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "University of Washington",
+        "why_fit": "UW CSE在ML系统和可观测性方向有强课题组，匹配eBPF和分布式训练背景",
+        "hiring_signal": "UW Allen School持续扩张AI基础设施研究方向",
+        "example_roles": [
+          "Postdoctoral Scholar",
+          "Research Associate"
+        ],
+        "careers_url": ""
+      }
+    ],
+    "hong_kong": [
+      {
+        "name": "The University of Hong Kong",
+        "why_fit": "HKU CS/AI方向扩张迅速，AI基础设施研究团队与候选人背景匹配",
+        "hiring_signal": "HKU近年大力招聘AI/ML方向博士后和助理教授，经费充足",
+        "example_roles": [
+          "Postdoctoral Fellow",
+          "Research Assistant Professor"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "The Chinese University of Hong Kong",
+        "why_fit": "CUHK系统工程系在ML系统和分布式计算领域有活跃研究组",
+        "hiring_signal": "CUHK AI方向持续招聘博士后，提供有竞争力的薪资",
+        "example_roles": [
+          "Postdoctoral Fellow",
+          "Research Associate"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Hong Kong University of Science and Technology",
+        "why_fit": "HKUST CSE在AI基础设施和ML系统方向有多个活跃课题组",
+        "hiring_signal": "HKUST积极招聘AI方向博士后和研究助理教授",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Scientist",
+          "Research Associate"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "City University of Hong Kong",
+        "why_fit": "CityU CS系在AI/ML方向投入大量资源，招聘需求旺盛",
+        "hiring_signal": "CityU推出多项博士后资助计划，吸引国际人才",
+        "example_roles": [
+          "Postdoctoral Fellow",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "The Hong Kong Polytechnic University",
+        "why_fit": "PolyU Computing系在ML/DL系统方向有研究团队",
+        "hiring_signal": "PolyU近年AI方向招聘活跃，提供博士后和教职岗位",
+        "example_roles": [
+          "Postdoctoral Fellow",
+          "Research Associate"
+        ],
+        "careers_url": ""
+      }
+    ],
+    "singapore": [
+      {
+        "name": "National University of Singapore",
+        "why_fit": "NUS Computing在AI Systems方向亚洲领先，匹配候选人ML基础设施研究背景",
+        "hiring_signal": "NUS AI方向持续大量招聘博士后和研究科学家",
+        "example_roles": [
+          "Research Fellow",
+          "Postdoctoral Fellow",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Nanyang Technological University",
+        "why_fit": "NTU在分布式ML系统和AI安全方向有多个强课题组",
+        "hiring_signal": "NTU近年AI/HPC方向投入巨大，博士后岗位充裕",
+        "example_roles": [
+          "Research Fellow",
+          "Postdoctoral Researcher"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Singapore Management University",
+        "why_fit": "SMU信息系统学院在AI/ML应用方向招聘活跃",
+        "hiring_signal": "SMU扩大AI研究团队，提供博士后和研究岗",
+        "example_roles": [
+          "Postdoctoral Fellow",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "A*STAR (Agency for Science, Technology and Research)",
+        "why_fit": "A*STAR下属I2R研究所专注AI基础设施和ML系统研究",
+        "hiring_signal": "A*STAR提供大量Research Scientist和Postdoc奖学金计划",
+        "example_roles": [
+          "Research Scientist",
+          "Postdoctoral Researcher",
+          "Research Fellow"
+        ],
+        "careers_url": ""
+      }
+    ],
+    "japan": [
+      {
+        "name": "The University of Tokyo",
+        "why_fit": "东大情报理工在AI系统和分布式计算方向研究实力亚洲顶尖",
+        "hiring_signal": "东大持续招聘AI/ML方向博士后和特任研究员",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Project Research Associate"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Kyoto University",
+        "why_fit": "京大在社会情报学和AI系统方向有活跃课题组",
+        "hiring_signal": "京大AI方向招聘博士后和助教，提供JSPS等资助机会",
+        "example_roles": [
+          "Postdoctoral Fellow",
+          "Research Associate"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "RIKEN Center for Advanced Intelligence Project",
+        "why_fit": "RIKEN AIP是日本顶级AI研究机构，ML系统方向匹配候选人背景",
+        "hiring_signal": "RIKEN持续招聘Postdoc和研究Scientist，薪资在日本有竞争力",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Tokyo Institute of Technology",
+        "why_fit": "东工大在AI/ML和分布式系统领域研究活跃",
+        "hiring_signal": "东工大近年扩大国际研究员招聘，博士后岗位增多",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Associate"
+        ],
+        "careers_url": ""
+      }
+    ],
+    "europe": [
+      {
+        "name": "ETH Zurich",
+        "why_fit": "ETH在ML系统和分布式计算领域全球顶尖，与候选人研究方向高度匹配",
+        "hiring_signal": "ETH D-INFK持续招聘博士后和研究科学家，经费充足",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "University of Cambridge",
+        "why_fit": "剑桥ML Systems Lab在分布式训练和AI基础设施方向有世界级研究",
+        "hiring_signal": "剑桥计算机系积极招聘AI/ML方向博士后",
+        "example_roles": [
+          "Postdoctoral Research Associate",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "Max Planck Institute for Software Systems",
+        "why_fit": "MPI-SWS在分布式系统和AI基础设施方向有多个研究组",
+        "hiring_signal": "MPI提供独立博士后研究员岗位，自由度极高",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "University of Oxford",
+        "why_fit": "牛津计算机系在ML Systems和AI安全方向研究活跃",
+        "hiring_signal": "牛津近年来扩大AI研究方向招聘，博士后岗位持续开放",
+        "example_roles": [
+          "Postdoctoral Research Assistant",
+          "Research Fellow"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "IMDEA Networks Institute",
+        "why_fit": "IMDEA在AI网络基础设施和eBPF方向有特别匹配的研究组",
+        "hiring_signal": "IMDEA Networks持续招募Postdoc，尤其对系统/网络背景候选人",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Scientist"
+        ],
+        "careers_url": ""
+      },
+      {
+        "name": "TU Munich (TUM)",
+        "why_fit": "TUM在AI系统和高性能计算方向德国领先，匹配候选人分布式训练背景",
+        "hiring_signal": "TUM AI方向持续招聘博士后和教职，慕尼黑AI生态活跃",
+        "example_roles": [
+          "Postdoctoral Researcher",
+          "Research Associate"
+        ],
+        "careers_url": ""
+      }
+    ]
+  }
+}
