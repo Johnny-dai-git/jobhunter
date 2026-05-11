@@ -14,18 +14,19 @@ providers:
 # - 高频任务 (matcher): v4-flash, 便宜快
 # - 质量任务 (tailor / cover_letter / apply / trends): v4-pro, 1M context, 强 tool_use
 model:
+  # DeepSeek 实际可用模型: deepseek-chat (通用,支持 tool_use) / deepseek-reasoner (推理)
   matcher:
     provider: deepseek
-    name: deepseek-v4-flash
+    name: deepseek-chat
   tailor:
     provider: deepseek
-    name: deepseek-v4-pro
+    name: deepseek-chat
   cover_letter:
     provider: deepseek
-    name: deepseek-v4-pro
+    name: deepseek-chat
   trends:
     provider: deepseek
-    name: deepseek-v4-pro
+    name: deepseek-chat
   max_tokens: 4096
 
 # ====== 求职偏好 ======

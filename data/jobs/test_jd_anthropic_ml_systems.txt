@@ -1,0 +1,28 @@
+About the Role
+
+We're hiring a Member of Technical Staff to work on Anthropic's training and inference infrastructure for large language models. You'll work on the systems that train and serve Claude at scale across thousands of GPUs.
+
+Responsibilities
+- Build and optimize distributed training infrastructure for trillion-parameter LLMs across H100/A100 clusters
+- Develop high-performance inference serving systems with sub-100ms latency requirements
+- Profile and debug performance bottlenecks in collective communication (NCCL, all-reduce, all-gather)
+- Design observability tooling for GPU workloads, network telemetry, and training stability
+- Collaborate with research teams on novel parallelism strategies (TP/PP/FSDP/sequence parallel)
+
+Required
+- 3+ years of experience in distributed systems or ML infrastructure
+- Strong Python and C/C++ skills
+- Deep experience with PyTorch (DDP/FSDP), Megatron-LM, or similar distributed training frameworks
+- Familiarity with Kubernetes-based ML platforms
+- Experience profiling and debugging at the systems level (network, kernel, GPU)
+
+Nice to Have
+- Experience with vLLM or other LLM serving frameworks
+- Publications at top systems/ML venues (MLSys, NSDI, SOSP, OSDI)
+- eBPF / kernel tracing background
+- Experience with NCCL internals
+- Knowledge of GPU architecture (CUDA, NVLink, RDMA)
+
+Location: San Francisco (hybrid 3 days/week) or Remote in US
+Compensation: $250,000 - $410,000 + equity
+Work Authorization: Must have or be able to obtain US work authorization. Visa sponsorship considered for exceptional candidates.
