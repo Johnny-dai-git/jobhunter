@@ -121,7 +121,7 @@
     {% endif %}
   {% endset %}
   {% set phases = [
-    ('analyzing', '分析简历 + 用户描述', 'DeepSeek 生成 Top-5 搜索 title'),
+    ('analyzing', '分析简历 + 用户描述', 'DeepSeek 生成 Top-10 搜索 title (再模糊扩展)'),
     ('collecting', '采集岗位', collect_hint | trim | safe),
     ('matching', '匹配评分', '6 维度评估每个新岗位'),
     ('done', '完成', '准备进入岗位列表'),

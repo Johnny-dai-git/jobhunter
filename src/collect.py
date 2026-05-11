@@ -64,7 +64,7 @@ def collect_all(
     """跑指定平台 (默认所有 enabled) 的采集器,返回统计.
 
     搜索 keywords 来源优先级:
-    1. data/resume/_profile.json (analyze-profile 生成的 Top-5 搜索 title)
+    1. data/resume/_profile.json (analyze-profile 生成的 Top-10 + 模糊扩展)
     2. config.yaml preferences.job_titles (fallback)
 
     should_continue: callable; 每个平台开始前调用一次, 返回 False 就提前退出
@@ -76,15 +76,20 @@ def collect_all(
     platforms = platforms or PLATFORMS
 
     profile = load_profile(config)
-    if profile and profile.top_5_positions:
-        # 包含 primary + aliases, 撒大网. 默认上限 12.
-        keywords = profile.search_titles(include_aliases=True, limit=12)
+    if profile and profile.top_10_positions:
+        # 第一段: 10 个 primary; 第二段: aliases + broader_terms 模糊扩展. 上限 40.
+        keywords = profile.search_titles(
+            include_aliases=True, include_broader=True, limit=40
+        )
         locations = (
             profile.target_locations
             or config.preferences.get("locations")
             or []
         )
-        print(f"[collect] 用 profile 推断的 {len(keywords)} 个搜索词 (含 aliases): {keywords}")
+        print(
+            f"[collect] 用 profile 推断的 {len(keywords)} 个搜索词 "
+            f"(Top-10 primary + aliases + broader_terms): {keywords}"
+        )
     else:
         keywords = config.preferences.get("job_titles") or []
         locations = config.preferences.get("locations") or []

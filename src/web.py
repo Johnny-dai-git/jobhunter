@@ -782,7 +782,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/profiles/{profile_id}")
     def profile_detail(profile_id: int):
-        """单个历史画像详情: 完整描述 + Top-5 + 区域公司 + 本画像跑出的岗位."""
+        """单个历史画像详情: 完整描述 + Top-10 + 区域公司 + 本画像跑出的岗位."""
         from .db import Profile
         from .profile_analyzer import ProfileAnalysis
         import json as _json

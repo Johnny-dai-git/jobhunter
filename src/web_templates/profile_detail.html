@@ -63,9 +63,9 @@
 </div>
 {% endif %}
 
-{# ============ Top 5 Positions ============ #}
+{# ============ Top 10 Positions ============ #}
 <div class="card">
-  <h3 style="margin-top:0;">🏆 Top 5 投递方向 (按 composite 降序)</h3>
+  <h3 style="margin-top:0;">🏆 Top 10 投递方向 (按 composite 降序)</h3>
   <table style="font-size:13px;">
     <thead>
       <tr>
@@ -78,7 +78,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for p in analysis.top_5_positions %}
+      {% for p in analysis.top_10_positions %}
       <tr>
         <td style="font-weight:700;">{{ loop.index }}</td>
         <td style="max-width:240px;">

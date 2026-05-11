@@ -66,10 +66,10 @@ def parse_resume():
 @cli.command("analyze-profile")
 @click.option("--force", is_flag=True, help="覆盖现有 _profile.json 重新分析")
 def analyze_profile_cmd(force):
-    """让 DeepSeek 读你的简历, 推断 Top-5 能力方向 + 真实搜索 title.
+    """让 DeepSeek 读你的简历, 推断 Top-10 能力方向 + 真实搜索 title.
 
-    结果存到 data/resume/_profile.json. 后续 collect 会优先用它的 titles
-    取代 config.yaml 里的 job_titles.
+    第一步定 10 个 primary, 然后 collect 阶段用 aliases + broader_terms 模糊扩展.
+    结果存到 data/resume/_profile.json.
     """
     config = _load_config()
     existing = load_profile(config)
@@ -90,7 +90,7 @@ def _print_profile(profile):
     console.print(f"[bold]核心定位:[/bold] {profile.summary}\n")
 
     tbl = Table(
-        title="Top 5 最优投递岗位 (按 composite 降序)",
+        title="Top 10 最优投递岗位 (按 composite 降序)",
         show_lines=True,
     )
     tbl.add_column("#", style="bold")
@@ -98,7 +98,7 @@ def _print_profile(profile):
     tbl.add_column("Dir", style="dim")
     tbl.add_column("M/C/A→Comp", justify="center", style="bold cyan")
     tbl.add_column("为什么投这个", style="dim")
-    for i, p in enumerate(profile.top_5_positions, 1):
+    for i, p in enumerate(profile.top_10_positions, 1):
         s = p.scores
         why = "\n".join(f"• {w}" for w in p.why_this_position[:3])
         titles_block = f"[bold]{p.title}[/bold]"
@@ -119,29 +119,23 @@ def _print_profile(profile):
         "A = user_advantage  Comp = composite[/dim]"
     )
 
-    # 汇总收集器用的搜索词
-    all_terms = profile.search_titles(include_aliases=True, limit=20)
+    # 汇总收集器用的搜索词 (Top-10 primary + aliases + broader_terms 模糊扩展)
+    all_terms = profile.search_titles(
+        include_aliases=True, include_broader=True, limit=40
+    )
     console.print(
-        f"\n[bold]Collect 实际会用 {len(all_terms)} 个搜索词 (含 aliases):[/bold]"
+        f"\n[bold]Collect 实际会用 {len(all_terms)} 个搜索词 "
+        f"(Top-10 primary + aliases + broader_terms):[/bold]"
     )
     for t in all_terms:
         console.print(f"  • {t}")
-
-    broader = []
-    for p in profile.top_5_positions:
-        broader.extend(p.broader_terms)
-    if broader:
-        console.print(
-            f"\n[dim]Broader terms (默认不用,可能噪音大):[/dim]\n  "
-            + ", ".join(set(broader))
-        )
 
     console.print(
         f"\n[bold]目标地点:[/bold] " + ", ".join(profile.target_locations)
     )
 
     console.print("\n[bold]LinkedIn 直链 (primary title):[/bold]")
-    for p in profile.top_5_positions:
+    for p in profile.top_10_positions:
         console.print(f"  • [link]{p.linkedin_search_url}[/link]")
 
     # 区域公司推荐

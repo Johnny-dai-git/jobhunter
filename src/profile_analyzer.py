@@ -1,15 +1,20 @@
 """简历画像分析器: 让 DeepSeek 综合"市场热度 × 竞争强度 × 候选人优势"
-为候选人找出 Top-5 最优投递岗位.
+为候选人找出 Top-10 最优投递岗位.
 
-设计原则 (跟之前一版的不同):
+两段式策略:
+1. **第一步: 确定 Top-10 primary** — DeepSeek 必须产出**恰好 10 个**主 title (高精度).
+2. **第二步: 模糊扩展** — 每个 primary 自带 2-5 个 aliases + 0-3 个 broader_terms,
+   collect 阶段把这些一并扔给搜索引擎, 撒大网兜更多潜在命中.
+
+设计原则:
 1. **三维评分**: market_demand / competition (越低越好) / user_advantage
    composite = market_demand * (10 - competition) * user_advantage / 10  范围 0-100.
-2. **方向限制**: 仅 engineering / research-engineering, 排除管理/产品/销售岗.
+2. **方向限制**: engineering / research-engineering / academic-research / academic-teaching.
 3. **Title 强制为市场真实高频称谓**, 不允许造词.
 4. **Schema 严格**, tool_use 强制结构化输出, code 可靠解析.
 
-输出存到 data/resume/_profile.json. 后续 collect 自动读取 top_5_positions
-的 title 列表作为搜索关键词.
+输出存到 data/resume/_profile.json. 后续 collect 自动读取 top_10_positions
+的 title + aliases (+ broader_terms) 作为搜索关键词.
 """
 from __future__ import annotations
 
@@ -52,15 +57,15 @@ _COMPANY_LIST_SCHEMA = {
 
 PROFILE_TOOL: dict[str, Any] = {
     "name": "submit_profile_analysis",
-    "description": "提交对候选人的 Top-5 最优投递岗位分析",
+    "description": "提交对候选人的 Top-10 最优投递岗位分析",
     "input_schema": {
         "type": "object",
         "properties": {
-            "top_5_positions": {
+            "top_10_positions": {
                 "type": "array",
-                "minItems": 5,
-                "maxItems": 5,
-                "description": "Top 5 投递岗位, 按 composite 降序",
+                "minItems": 10,
+                "maxItems": 10,
+                "description": "Top 10 投递岗位, 按 composite 降序. 后续会用 aliases + broader_terms 模糊扩展.",
                 "items": {
                     "type": "object",
                     "properties": {
@@ -160,7 +165,7 @@ PROFILE_TOOL: dict[str, Any] = {
                 "description": "候选人核心定位+投递策略(<=80字,中文)",
             },
         },
-        "required": ["top_5_positions", "target_locations", "recommended_companies", "summary"],
+        "required": ["top_10_positions", "target_locations", "recommended_companies", "summary"],
     },
 }
 
@@ -275,17 +280,19 @@ class RegionalCompanies:
 
 @dataclass
 class ProfileAnalysis:
-    top_5_positions: list[Position]
+    top_10_positions: list[Position]
     target_locations: list[str]
     summary: str
     recommended_companies: RegionalCompanies = field(default_factory=RegionalCompanies)
 
     @classmethod
     def from_tool_input(cls, data: dict) -> "ProfileAnalysis":
-        positions = [Position.from_dict(p) for p in (data.get("top_5_positions") or [])]
+        # 新 schema 是 top_10_positions; 兼容老 schema 还在用 top_5_positions
+        raw = data.get("top_10_positions") or data.get("top_5_positions") or []
+        positions = [Position.from_dict(p) for p in raw]
         positions.sort(key=lambda p: -p.scores.composite)
         return cls(
-            top_5_positions=positions,
+            top_10_positions=positions,
             target_locations=list(data.get("target_locations") or []),
             summary=str(data.get("summary", "")),
             recommended_companies=RegionalCompanies.from_dict(data.get("recommended_companies") or {}),
@@ -293,7 +300,7 @@ class ProfileAnalysis:
 
     def to_dict(self) -> dict:
         return {
-            "top_5_positions": [
+            "top_10_positions": [
                 {
                     "title": p.title,
                     "direction": p.direction,
@@ -304,7 +311,7 @@ class ProfileAnalysis:
                     "market_evidence": p.market_evidence,
                     "linkedin_search_url": p.linkedin_search_url,
                 }
-                for p in self.top_5_positions
+                for p in self.top_10_positions
             ],
             "target_locations": self.target_locations,
             "summary": self.summary,
@@ -313,48 +320,62 @@ class ProfileAnalysis:
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProfileAnalysis":
-        positions = [Position.from_dict(p) for p in data.get("top_5_positions", [])]
+        # 兼容老 JSON 文件 (top_5_positions) 和新 (top_10_positions)
+        raw = data.get("top_10_positions") or data.get("top_5_positions") or []
+        positions = [Position.from_dict(p) for p in raw]
         positions.sort(key=lambda p: -p.scores.composite)
         return cls(
-            top_5_positions=positions,
+            top_10_positions=positions,
             target_locations=data.get("target_locations", []),
             summary=data.get("summary", ""),
             recommended_companies=RegionalCompanies.from_dict(data.get("recommended_companies") or {}),
         )
 
     def search_titles(
-        self, *, include_aliases: bool = True, include_broader: bool = False, limit: int = 12
+        self, *, include_aliases: bool = True, include_broader: bool = True, limit: int = 40
     ) -> list[str]:
-        """聚合 5 个 position 的搜索词. 默认包含 aliases (扩大命中面), 不含 broader.
+        """聚合 10 个 position 的搜索词. 模糊扩展默认全开 — primary + aliases + broader.
 
-        去重 case-insensitive, 保持顺序 (primary 优先, 然后是 aliases).
+        流程: 先 10 个 primary 兜底, 再展开 aliases (同义词), 再展开 broader_terms
+        (隐藏机会). 去重 case-insensitive, 保持顺序.
         """
         seen: set[str] = set()
         out: list[str] = []
-        for p in self.top_5_positions:
-            # 先收 primary
-            terms = [p.title]
-            if include_aliases:
-                terms += p.aliases
-            if include_broader:
-                terms += p.broader_terms
-            for t in terms:
-                t_clean = (t or "").strip()
-                t_low = t_clean.lower()
-                if t_clean and t_low not in seen:
-                    seen.add(t_low)
-                    out.append(t_clean)
-                if len(out) >= limit:
-                    return out
+        # 先把所有 primary 收齐 (确保 Top-10 一个不漏)
+        for p in self.top_10_positions:
+            t = (p.title or "").strip()
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                out.append(t)
+        # 再模糊扩展: aliases 然后 broader_terms
+        for tier in ("aliases", "broader"):
+            for p in self.top_10_positions:
+                terms: list[str] = []
+                if tier == "aliases" and include_aliases:
+                    terms = list(p.aliases)
+                elif tier == "broader" and include_broader:
+                    terms = list(p.broader_terms)
+                for t in terms:
+                    t_clean = (t or "").strip()
+                    if t_clean and t_clean.lower() not in seen:
+                        seen.add(t_clean.lower())
+                        out.append(t_clean)
+                    if len(out) >= limit:
+                        return out
         return out
 
     def primary_titles(self) -> list[str]:
-        """只取 5 个 primary title (老逻辑兼容)."""
-        return [p.title for p in self.top_5_positions if p.title]
+        """只取 10 个 primary title."""
+        return [p.title for p in self.top_10_positions if p.title]
 
-    # 向后兼容: 旧代码用过 unique_search_titles
-    def unique_search_titles(self, limit: int = 12) -> list[str]:
-        return self.search_titles(include_aliases=True, limit=limit)
+    # 向后兼容: 旧代码用过 unique_search_titles / top_5_positions
+    def unique_search_titles(self, limit: int = 40) -> list[str]:
+        return self.search_titles(include_aliases=True, include_broader=True, limit=limit)
+
+    @property
+    def top_5_positions(self) -> list[Position]:
+        """老接口兼容: 返回前 5 个 (按 composite 已排序)."""
+        return self.top_10_positions[:5]
 
 
 def _profile_path(config: Config) -> Path:
@@ -466,7 +487,11 @@ def load_profile(config: Config) -> ProfileAnalysis | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         # 兼容旧版本格式 (top_directions): 如果是旧版,返回 None 强制重新生成
-        if "top_directions" in data and "top_5_positions" not in data:
+        if (
+            "top_directions" in data
+            and "top_5_positions" not in data
+            and "top_10_positions" not in data
+        ):
             print("[profile] 旧版 _profile.json 不兼容,请跑 `analyze-profile --force` 重新生成")
             return None
         return ProfileAnalysis.from_dict(data)
@@ -476,7 +501,7 @@ def load_profile(config: Config) -> ProfileAnalysis | None:
 
 
 def analyze_profile(config: Config, user_description: str | None = None) -> ProfileAnalysis:
-    """读取简历 + 用户自描述求职需求, 调 DeepSeek 做 Top-5 三维度评分分析.
+    """读取简历 + 用户自描述求职需求, 调 DeepSeek 做 Top-10 三维度评分分析.
 
     user_description 是用户自由输入的"我想找什么样的工作"自然语言,
     优先级高于 config.preferences. 如果传 None 则尝试从磁盘加载.
