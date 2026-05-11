@@ -10,15 +10,29 @@ SUPPORTED_EXTS = {".pdf", ".docx", ".md", ".txt"}
 
 def find_resume(resume_dir: Path) -> Path:
     """在 resume_dir 中找到最新的简历文件."""
-    if not resume_dir.exists():
-        raise FileNotFoundError(f"简历目录不存在: {resume_dir}")
-    files = [p for p in resume_dir.iterdir() if p.suffix.lower() in SUPPORTED_EXTS]
+    files = list_resumes(resume_dir)
     if not files:
         raise FileNotFoundError(
             f"在 {resume_dir} 中没有找到简历文件 (支持: {sorted(SUPPORTED_EXTS)})"
         )
-    # 取最新修改的
-    return max(files, key=lambda p: p.stat().st_mtime)
+    return files[0]
+
+
+def list_resumes(resume_dir: Path) -> list[Path]:
+    """列出 resume_dir 下所有合法简历文件,按 mtime 降序 (最新在前). 找不到目录返回 [].
+
+    忽略以下划线开头的内部缓存文件 (_parsed.txt / _user_description.txt / _profile.json).
+    """
+    if not resume_dir.exists():
+        return []
+    files = [
+        p for p in resume_dir.iterdir()
+        if p.suffix.lower() in SUPPORTED_EXTS
+        and not p.name.startswith("_")
+        and not p.name.startswith(".")
+    ]
+    files.sort(key=lambda p: -p.stat().st_mtime)
+    return files
 
 
 def read_pdf(path: Path) -> str:

@@ -122,31 +122,63 @@
     </p>
   </div>
 
-  {# ============ Resume 管理 (独立上传, 不触发流水线) ============ #}
+  {# ============ Resume 管理 (列表 + 上传) ============ #}
   <div class="card">
-    <h3 style="margin-top:0;">📎 当前简历</h3>
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
-      {% if current_resume %}
-        <div>
-          <div style="font-weight:600;">{{ current_resume.filename }}</div>
-          <div style="font-size:12px; color:var(--color-text-muted); margin-top:2px;">
-            {{ current_resume.size_kb }} KB · 最后更新 {{ current_resume.modified }}
-          </div>
-        </div>
-      {% else %}
-        <div style="color:var(--color-text-muted); font-style:italic;">
-          还没有简历, 用下面表单上传
-        </div>
-      {% endif %}
-      <form method="post" action="/resume/upload" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; margin:0;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <h3 style="margin:0;">📎 我的简历 ({{ resume_files|length }} 份)</h3>
+      <form method="post" action="/resume/upload" enctype="multipart/form-data" style="display:flex; gap:6px; align-items:center; margin:0;">
         <input type="file" name="resume" accept=".pdf,.docx,.md,.txt" required
-               style="padding:6px 8px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm); font-size:12px;">
-        <button type="submit" class="btn btn-secondary btn-sm">⬆ 上传/替换</button>
+               style="padding:5px 8px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm); font-size:12px;">
+        <button type="submit" class="btn btn-primary btn-sm">⬆ 上传</button>
       </form>
     </div>
+
+    {% if resume_files %}
+    <table style="font-size:13px;">
+      <thead>
+        <tr>
+          <th>文件名</th>
+          <th>大小</th>
+          <th>修改时间</th>
+          <th>状态</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resume_files %}
+        <tr>
+          <td style="font-weight:500;">{{ r.filename }}</td>
+          <td style="color:var(--color-text-muted); font-size:12px;">{{ r.size_kb }} KB</td>
+          <td style="color:var(--color-text-muted); font-size:12px;">{{ r.modified }}</td>
+          <td>
+            {% if loop.first %}<span class="badge badge-green">✓ 激活</span>
+            {% else %}<span class="badge badge-gray">备用</span>{% endif %}
+          </td>
+          <td style="text-align:right; white-space:nowrap;">
+            {% if not loop.first %}
+              <form method="post" action="/resume/{{ r.filename }}/activate" style="margin:0; display:inline;">
+                <button type="submit" class="btn btn-secondary btn-sm"
+                        onclick="return confirm('把 {{ r.filename }} 设为当前激活简历?')">激活</button>
+              </form>
+            {% endif %}
+            <form method="post" action="/resume/{{ r.filename }}/delete" style="margin:0; display:inline;">
+              <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);"
+                      onclick="return confirm('删除 {{ r.filename }}? 这个操作不可恢复.')">删除</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="color:var(--color-text-muted); font-style:italic; padding:12px 0;">
+      还没上传过简历. 用上面 [⬆ 上传] 按钮加一份.
+    </div>
+    {% endif %}
+
     <div style="font-size:11px; color:var(--color-text-dim); margin-top:10px;">
-      💡 上传后**不会自动重跑流水线**. 下次 run-all / refresh / 切换画像时会自动用新的简历.
-      如果想立刻用新简历重跑当前画像, 上传完点 [⟳ 重跑] 按钮.
+      💡 上传新简历会成为"激活"状态,下次任何流水线 (refresh / 重跑 / 切画像 / cron) 自动用激活的简历.
+      老简历保留作为备份, 可以随时点[激活]切回去.
     </div>
   </div>
 

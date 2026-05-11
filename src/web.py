@@ -33,7 +33,7 @@ from .profile_analyzer import (
     save_profile_snapshot,
     save_user_description,
 )
-from .resume_reader import SUPPORTED_EXTS, load_cached, parse_and_cache
+from .resume_reader import SUPPORTED_EXTS, list_resumes, load_cached, parse_and_cache
 from .tailor import tailor_for_job
 from .tracker import mark_applied
 
@@ -411,19 +411,16 @@ def create_app(config: Config) -> FastAPI:
                 ) or 0
                 job_counts[h.id] = {"total": total, "top": top}
 
-        # 当前简历状态
-        from .resume_reader import find_resume
-        current_resume: dict[str, Any] | None = None
-        try:
-            resume_path = find_resume(config.path("resume_dir"))
-            stat = resume_path.stat()
-            current_resume = {
-                "filename": resume_path.name,
-                "size_kb": round(stat.st_size / 1024, 1),
-                "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
-            }
-        except FileNotFoundError:
-            current_resume = None
+        # 所有上传过的简历, mtime 降序 (第一个是当前激活的)
+        resume_dir = config.path("resume_dir")
+        resume_files: list[dict[str, Any]] = []
+        for p in list_resumes(resume_dir):
+            st = p.stat()
+            resume_files.append({
+                "filename": p.name,
+                "size_kb": round(st.st_size / 1024, 1),
+                "modified": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+            })
 
         return render(
             "onboarding.html",
@@ -434,7 +431,7 @@ def create_app(config: Config) -> FastAPI:
             current_id=current_id,
             job_counts=job_counts,
             pipeline_running=pipeline_state["running"],
-            current_resume=current_resume,
+            resume_files=resume_files,
         )
 
     @app.post("/onboarding/submit")
@@ -521,6 +518,44 @@ def create_app(config: Config) -> FastAPI:
             is_current=(row.id == current_id),
             pipeline_running=pipeline_state["running"],
         )
+
+    def _safe_resume_path(filename: str) -> Path:
+        resume_dir = config.path("resume_dir")
+        target = (resume_dir / filename).resolve()
+        # 防 path traversal
+        if resume_dir.resolve() not in target.parents and target.parent != resume_dir.resolve():
+            raise HTTPException(400, "非法文件名")
+        if not target.exists():
+            raise HTTPException(404, f"简历不存在: {filename}")
+        if target.suffix.lower() not in SUPPORTED_EXTS:
+            raise HTTPException(400, "不支持的格式")
+        return target
+
+    @app.post("/resume/{filename}/activate")
+    def activate_resume(filename: str):
+        """把一个旧简历设为当前 (touch 文件让它 mtime 最新)."""
+        target = _safe_resume_path(filename)
+        target.touch()
+        try:
+            parse_and_cache(config.path("resume_dir"))
+        except Exception as e:
+            raise HTTPException(500, f"重新解析失败: {e}")
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    @app.post("/resume/{filename}/delete")
+    def delete_resume(filename: str):
+        target = _safe_resume_path(filename)
+        target.unlink()
+        # 还有其他简历就重新解析最新的; 否则清空 cache
+        resume_dir = config.path("resume_dir")
+        remaining = list_resumes(resume_dir)
+        if remaining:
+            parse_and_cache(resume_dir)
+        else:
+            cache = resume_dir / "_parsed.txt"
+            if cache.exists():
+                cache.unlink()
+        return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/resume/upload")
     async def upload_resume_only(resume: UploadFile = File(...)):
