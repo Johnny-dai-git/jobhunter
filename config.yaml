@@ -32,16 +32,20 @@ model:
 # ====== 求职偏好 ======
 preferences:
   # 目标岗位关键词(用于搜索和过滤)
+  # 根据简历(AI Infrastructure / ML Systems / LLM Serving / eBPF) 设置
   job_titles:
-    - Software Engineer
-    - Machine Learning Engineer
-    - Backend Engineer
+    - AI Infrastructure Engineer
+    - Machine Learning Systems Engineer
+    - LLM Infrastructure Engineer
+    - ML Platform Engineer
+    - Distributed Systems Engineer
 
   # 目标地点
   locations:
     - Remote
     - San Francisco Bay Area
     - New York
+    - Seattle
 
   # 工作类型
   job_types:
@@ -60,9 +64,13 @@ preferences:
     - Python
 
   nice_to_have_skills:
-    - Go
+    - PyTorch
     - Kubernetes
     - LLM
+    - NCCL
+    - eBPF
+    - vLLM
+    - CUDA
 
   # 排除关键词(出现就跳过,采集时即过滤,省 LLM 调用费)
   # 借鉴 DailyJobMatch: 在评分前就剔除明显不符合的
@@ -112,27 +120,42 @@ digest:
 
 # 注: job-agent 不自动投递. 你看完邮件,在网站上手动投完,跑 `mark-applied --job-id N` 记录即可.
 
+# ====== Apify (第三方爬虫即服务,反爬由他们维护) ======
+apify:
+  api_token_env: APIFY_API_TOKEN
+  default_timeout_sec: 600        # 等待 Actor 跑完的最大秒数
+
 # ====== 采集器 ======
+# 每个平台可单独配 backend: apify (用 Apify Actor) 或 playwright (自己爬)
 collectors:
   linkedin:
     enabled: true
-    # 你需要先在浏览器登录,然后导出 cookie 到此文件(见 docs/collectors.md)
-    cookie_file: data/cookies/linkedin.json
-    # 单次采集上限(避免触发反爬)
+    backend: apify                # apify | playwright
+    apify:
+      actor: bebity/linkedin-jobs-scraper      # https://apify.com/bebity/linkedin-jobs-scraper
+      # 可以追加任意 actor 自定义 input;_build_input() 会做基础默认
+      input_overrides: {}
+    cookie_file: data/cookies/linkedin.json    # 仅 backend=playwright 时用
     max_per_run: 30
 
   indeed:
     enabled: true
+    backend: playwright           # 想切 apify 见下面注释
+    # backend: apify
+    # apify:
+    #   actor: misceres/indeed-scraper
     cookie_file: data/cookies/indeed.json
     max_per_run: 30
 
   glassdoor:
     enabled: true
+    backend: playwright
     cookie_file: data/cookies/glassdoor.json
     max_per_run: 20
 
   ziprecruiter:
     enabled: true
+    backend: playwright
     cookie_file: data/cookies/ziprecruiter.json
     max_per_run: 30
 
