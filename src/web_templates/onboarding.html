@@ -158,8 +158,8 @@
             <form method="post" action="/resume/{{ r.filename }}/activate" style="margin:0; display:inline;">
               <button type="submit" class="btn btn-primary btn-sm"
                       {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"
-                      {% else %}onclick="return confirm('用 {{ r.filename }} 重新跑流水线 (collect + match)?')"{% endif %}>
-                🔄 用这份重跑
+                      {% else %}onclick="return confirm('用 {{ r.filename }} 激活并跑流水线 (collect + match)?')"{% endif %}>
+                🔄 激活
               </button>
             </form>
             <form method="post" action="/resume/{{ r.filename }}/delete" style="margin:0; display:inline;">
@@ -237,22 +237,22 @@
             {% if h.id != current_id %}
               <form method="post" action="/profiles/{{ h.id }}/use" style="margin:0; display:inline;">
                 <button class="btn btn-primary btn-sm" type="submit" style="margin-left:4px;"
-                        {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"{% else %}onclick="return confirm('切换到这个画像并重新跑流水线?')"{% endif %}>
-                  🔄 重新激活
+                        {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"{% else %}onclick="return confirm('切换到这个画像并跑流水线?')"{% endif %}>
+                  🔄 激活
                 </button>
-              </form>
-              <form method="post" action="/profiles/{{ h.id }}/delete" style="margin:0; display:inline;">
-                <button class="btn btn-secondary btn-sm" type="submit" style="color:var(--color-danger); margin-left:4px;"
-                        onclick="return confirm('删除这个画像? 这个操作不可恢复. 该画像下的岗位会保留 (profile_id 置空).')">删除</button>
               </form>
             {% else %}
               <form method="post" action="/refresh" style="margin:0; display:inline;">
                 <button class="btn btn-secondary btn-sm" type="submit" style="margin-left:4px;"
-                        {% if pipeline_running %}disabled{% else %}onclick="return confirm('用当前画像重新跑流水线 (collect + match)?')"{% endif %}>
-                  ⟳ 重跑
+                        {% if pipeline_running %}disabled{% else %}onclick="return confirm('用当前画像跑流水线 (collect + match)?')"{% endif %}>
+                  ⟳ 激活
                 </button>
               </form>
             {% endif %}
+            <form method="post" action="/profiles/{{ h.id }}/delete" style="margin:0; display:inline;">
+              <button class="btn btn-secondary btn-sm" type="submit" style="color:var(--color-danger); margin-left:4px;"
+                      onclick="return confirm('{% if h.id == current_id %}这是当前画像. 删除后会自动激活次新的画像 (没有就回到 onboarding). {% endif %}删除 \&quot;{{ h.label[:30] }}\&quot;? 操作不可恢复. 该画像下的岗位会保留 (profile_id 置空).')">删除</button>
+            </form>
           </td>
         </tr>
         {% endfor %}
@@ -281,9 +281,14 @@
     <div class="field">
       <label><span class="step-num">2</span>上传你的简历 (PDF / DOCX / MD / TXT)</label>
       <div class="hint">
-        {% if has_profile %}已有简历缓存. 上传新文件会替换;不上传则继续用旧的.{% else %}支持的格式: {{ supported_exts }}{% endif %}
+        {% if resume_files %}
+          上传的简历会**加入上面"我的简历"列表**并成为激活简历. 不上传则用当前激活的 ({{ resume_files[0].filename }}).
+        {% else %}
+          首次使用必须上传一份简历. 支持格式: {{ supported_exts }}.
+        {% endif %}
       </div>
-      <input type="file" name="resume" accept=".pdf,.docx,.md,.txt" {% if not has_profile %}required{% endif %} class="file-input">
+      <input type="file" name="resume" accept=".pdf,.docx,.md,.txt"
+             {% if not resume_files %}required{% endif %} class="file-input">
     </div>
 
     <div class="loading-note">

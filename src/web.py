@@ -606,21 +606,48 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/profiles/{profile_id}/delete")
     def delete_profile(profile_id: int):
-        """删除一个历史画像. 当前激活的画像不允许删 (先切走再删)."""
+        """删除任意画像. 如果删的是当前激活的, 自动激活下一个最新的画像;
+        没有其他画像则清空 _profile.json + _user_description.txt, 用户需重新 onboarding.
+        """
         from .db import Profile
         from sqlalchemy import update as _update
+        was_current = False
         with session_scope(db_path) as session:
             row = session.get(Profile, profile_id)
             if not row:
                 raise HTTPException(404, "画像不存在")
-            if row.is_current:
-                raise HTTPException(400, "不能删除当前激活的画像. 先切换到别的画像再来删.")
-            # 解绑该画像下的所有 jobs (保留岗位记录, 只是 profile_id 置 NULL)
+            was_current = bool(row.is_current)
+            # 解绑该画像下的所有 jobs
             session.execute(
                 _update(Job).where(Job.profile_id == profile_id).values(profile_id=None)
             )
             session.delete(row)
             session.commit()
+
+        # 如果删的是 current,激活次新的;没有就清空 JSON
+        if was_current:
+            with session_scope(db_path) as session:
+                next_row = session.scalar(
+                    select(Profile).order_by(Profile.created_at.desc()).limit(1)
+                )
+                if next_row:
+                    next_id = next_row.id
+                else:
+                    next_id = None
+
+            if next_id is not None:
+                try:
+                    activate_profile_snapshot(config, next_id)
+                except Exception as e:
+                    print(f"[delete] 自动激活次新画像失败: {e}")
+            else:
+                # 没有别的画像了, 清空 JSON + 用户描述, 回到无 profile 状态
+                resume_dir = config.path("resume_dir")
+                for fname in ("_profile.json", "_user_description.txt"):
+                    f = resume_dir / fname
+                    if f.exists():
+                        f.unlink()
+
         return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.get("/onboarding/processing")
