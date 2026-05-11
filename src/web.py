@@ -383,6 +383,16 @@ def create_app(config: Config) -> FastAPI:
     def onboarding_form():
         existing_desc = load_user_description(config) or ""
         profile = load_profile(config)
+
+        # 老 JSON 自动迁移到 DB (只跑一次): 如果有 _profile.json 但 DB 里没对应 row,
+        # 就插一行历史. 之后历史 table 就有内容了.
+        if profile and not get_current_profile_id(config):
+            save_profile_snapshot(
+                config, profile,
+                user_description=existing_desc or "(从旧 _profile.json 自动导入)",
+                resume_filename=None,
+            )
+
         history = list_profile_snapshots(config)
         current_id = get_current_profile_id(config)
 

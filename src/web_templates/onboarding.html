@@ -174,8 +174,15 @@
             {% if h.id != current_id %}
               <form method="post" action="/profiles/{{ h.id }}/use" style="margin:0; display:inline;">
                 <button class="btn btn-primary btn-sm" type="submit" style="margin-left:4px;"
-                        {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"{% endif %}>
-                  用这个
+                        {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"{% else %}onclick="return confirm('切换到这个画像并重新跑流水线?')"{% endif %}>
+                  🔄 重新激活
+                </button>
+              </form>
+            {% else %}
+              <form method="post" action="/refresh" style="margin:0; display:inline;">
+                <button class="btn btn-secondary btn-sm" type="submit" style="margin-left:4px;"
+                        {% if pipeline_running %}disabled{% else %}onclick="return confirm('用当前画像重新跑流水线 (collect + match)?')"{% endif %}>
+                  ⟳ 重跑
                 </button>
               </form>
             {% endif %}
