@@ -7,17 +7,21 @@
 """
 from __future__ import annotations
 
+import threading
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 
+from .collect import collect_all
 from .config import Config
 from .cover_letter import write_cover_letter
 from .db import Job, JobStatus, init_db, session_scope
+from .matcher import score_pending
 from .profile_analyzer import (
     analyze_profile,
     load_profile,
@@ -104,6 +108,55 @@ def create_app(config: Config) -> FastAPI:
     app = FastAPI(title="JobHunter")
     env = _make_env()
     db_path = config.path("db_path")
+
+    # ===== 后台流水线状态 (单实例够用,多用户场景需换 DB) =====
+    pipeline_state: dict[str, Any] = {
+        "running": False,
+        "phase": "idle",            # idle | analyzing | collecting | matching | done | error
+        "started_at": None,
+        "ended_at": None,
+        "error": None,
+        "stats": {},                # collect_all 返回的 stats + match 结果
+    }
+    pipeline_lock = threading.Lock()
+
+    def _run_pipeline_bg(do_analyze: bool, user_description: str | None = None):
+        """后台跑 [analyze_profile] -> collect -> match. 失败也能 graceful exit."""
+        with pipeline_lock:
+            if pipeline_state["running"]:
+                return  # 防止重入
+            pipeline_state.update(
+                running=True,
+                phase="analyzing" if do_analyze else "collecting",
+                started_at=datetime.now(),
+                ended_at=None,
+                error=None,
+                stats={},
+            )
+
+        try:
+            if do_analyze:
+                profile = analyze_profile(config, user_description=user_description)
+                save_profile(config, profile)
+
+            pipeline_state["phase"] = "collecting"
+            stats = collect_all(config)
+            pipeline_state["stats"]["collect"] = stats
+
+            pipeline_state["phase"] = "matching"
+            resume_text = load_cached(config.path("resume_dir"))
+            results = score_pending(config, resume_text)
+            pipeline_state["stats"]["match"] = {"scored": len(results)}
+
+            pipeline_state["phase"] = "done"
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            pipeline_state["phase"] = "error"
+            pipeline_state["error"] = str(e)
+        finally:
+            pipeline_state["running"] = False
+            pipeline_state["ended_at"] = datetime.now()
 
     def render(name: str, **ctx) -> HTMLResponse:
         tpl = env.get_template(name)
@@ -227,6 +280,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/onboarding/submit")
     async def onboarding_submit(
+        background_tasks: BackgroundTasks,
         description: str = Form(...),
         resume: UploadFile | None = File(None),
     ):
@@ -244,7 +298,6 @@ def create_app(config: Config) -> FastAPI:
                 raise HTTPException(400, "上传文件为空")
             target = resume_dir / resume.filename
             target.write_bytes(content)
-            # 重新解析
             try:
                 parse_and_cache(resume_dir)
             except Exception as e:
@@ -259,16 +312,41 @@ def create_app(config: Config) -> FastAPI:
         # 3) 确认 DB 在
         init_db(config.path("db_path"))
 
-        # 4) 跑 analyze-profile
-        try:
-            profile = analyze_profile(config, user_description=desc)
-            save_profile(config, profile)
-        except Exception as e:
-            raise HTTPException(500, f"画像分析失败: {e}")
+        # 4) 不再阻塞: analyze + collect + match 都丢后台
+        if pipeline_state["running"]:
+            raise HTTPException(409, "已有流水线在跑,等它结束再试")
+        background_tasks.add_task(_run_pipeline_bg, True, desc)
 
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(url="/onboarding/processing", status_code=303)
+
+    @app.get("/onboarding/processing")
+    def onboarding_processing():
+        return render(
+            "processing.html",
+            state=pipeline_state,
+            elapsed=_elapsed(pipeline_state),
+        )
+
+    @app.post("/refresh")
+    def refresh(background_tasks: BackgroundTasks):
+        """主页点 'Refresh' 时手动重跑 collect + match (不重做 analyze)."""
+        if pipeline_state["running"]:
+            raise HTTPException(409, "已有流水线在跑")
+        background_tasks.add_task(_run_pipeline_bg, False, None)
+        return RedirectResponse(url="/onboarding/processing", status_code=303)
 
     return app
+
+
+def _elapsed(state: dict) -> str:
+    if not state.get("started_at"):
+        return ""
+    end = state.get("ended_at") or datetime.now()
+    delta = end - state["started_at"]
+    secs = int(delta.total_seconds())
+    if secs < 60:
+        return f"{secs}s"
+    return f"{secs // 60}m {secs % 60}s"
 
 
 def _find_free_port(host: str, start: int, max_tries: int = 20) -> int:

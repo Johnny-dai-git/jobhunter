@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}处理中 · JobHunter{% endblock %}
+{% block content %}
+
+{# 没结束时自动刷新; 完成或失败就不再刷 #}
+{% if state.phase in ['analyzing', 'collecting', 'matching'] %}
+  <meta http-equiv="refresh" content="3">
+{% endif %}
+
+<style>
+  .pipeline-wrap { max-width: 720px; margin: 0 auto; padding-top: 12px; }
+  .phase-list { list-style: none; padding: 0; margin: 24px 0; }
+  .phase {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  .phase-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .phase-pending { color: var(--color-text-dim); }
+  .phase-pending .phase-icon { background: #f1f5f9; color: var(--color-text-dim); }
+  .phase-active .phase-icon {
+    background: var(--color-accent);
+    color: white;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .phase-active { background: var(--color-accent-light); border-color: var(--color-accent); }
+  .phase-done .phase-icon { background: var(--color-success); color: white; }
+  .phase-error .phase-icon { background: var(--color-danger); color: white; }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.85; }
+  }
+
+  .phase-label { flex: 1; font-weight: 600; }
+  .phase-detail { color: var(--color-text-muted); font-size: 12px; }
+  .pipeline-header {
+    text-align: center;
+    margin: 12px 0 24px;
+  }
+  .pipeline-header h1 {
+    font-size: 22px;
+    font-weight: 800;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .pipeline-header p { color: var(--color-text-muted); margin: 0; font-size: 14px; }
+  .elapsed {
+    display: inline-block;
+    background: white;
+    border: 1px solid var(--color-border);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-family: 'SF Mono', monospace;
+  }
+  .done-banner {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    border: 1px solid #86efac;
+    color: #14532d;
+    padding: 18px 22px;
+    border-radius: var(--radius);
+    margin: 16px 0;
+    text-align: center;
+  }
+  .done-banner h2 { margin: 0 0 6px; font-size: 18px; }
+  .done-stats {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .done-stat-box {
+    background: rgba(255,255,255,0.6);
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+  }
+  .done-stat-val { font-size: 22px; font-weight: 800; }
+  .done-stat-label { font-size: 11px; color: #166534; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .error-banner {
+    background: var(--color-danger-light);
+    border: 1px solid #fca5a5;
+    color: #7f1d1d;
+    padding: 18px 22px;
+    border-radius: var(--radius);
+    margin: 16px 0;
+  }
+  .error-banner h2 { margin: 0 0 6px; font-size: 16px; }
+</style>
+
+<div class="pipeline-wrap">
+  <div class="pipeline-header">
+    <h1>🤖 智能匹配中</h1>
+    <p>AI 正在分析简历 → 从 5 个平台抓岗位 → 6 维度评分</p>
+    {% if state.started_at %}<div style="margin-top:8px;"><span class="elapsed">⏱ 已用时 {{ elapsed }}</span></div>{% endif %}
+  </div>
+
+  {# 4 个阶段 #}
+  {% set phases = [
+    ('analyzing', '分析简历 + 用户描述', 'DeepSeek 生成 Top-5 搜索 title'),
+    ('collecting', '采集岗位', '5 平台并行: LinkedIn / Indeed / YC / Dice / HN'),
+    ('matching', '匹配评分', '6 维度评估每个新岗位'),
+    ('done', '完成', '准备进入岗位列表'),
+  ] %}
+  {% set order = ['analyzing', 'collecting', 'matching', 'done'] %}
+  {% set current_idx = order.index(state.phase) if state.phase in order else (4 if state.phase == 'error' else 0) %}
+
+  <ul class="phase-list">
+    {% for key, label, hint in phases %}
+      {% set idx = loop.index0 %}
+      {% if state.phase == 'error' %}
+        {% set cls = 'phase-error' if idx == current_idx else ('phase-done' if idx < current_idx else 'phase-pending') %}
+        {% set icon = '✕' if idx == current_idx else ('✓' if idx < current_idx else loop.index) %}
+      {% elif idx < current_idx %}
+        {% set cls = 'phase-done' %}{% set icon = '✓' %}
+      {% elif idx == current_idx %}
+        {% set cls = 'phase-active' %}{% set icon = loop.index %}
+      {% else %}
+        {% set cls = 'phase-pending' %}{% set icon = loop.index %}
+      {% endif %}
+      <li class="phase {{ cls }}">
+        <span class="phase-icon">{{ icon }}</span>
+        <div style="flex:1;">
+          <div class="phase-label">{{ label }}</div>
+          <div class="phase-detail">{{ hint }}</div>
+        </div>
+        {# 阶段完成数据 #}
+        {% if key == 'collecting' and state.stats.collect %}
+          <span class="badge badge-green">+ {{ state.stats.collect.total_new }} 新</span>
+        {% endif %}
+        {% if key == 'matching' and state.stats.match %}
+          <span class="badge badge-green">{{ state.stats.match.scored }} 评分</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+
+  {% if state.phase == 'done' %}
+    <div class="done-banner">
+      <h2>🎉 匹配完成!</h2>
+      <div>共用时 {{ elapsed }}</div>
+      <div class="done-stats">
+        {% if state.stats.collect %}
+        <div class="done-stat-box">
+          <div class="done-stat-val">{{ state.stats.collect.total_new }}</div>
+          <div class="done-stat-label">新增岗位</div>
+        </div>
+        {% endif %}
+        {% if state.stats.match %}
+        <div class="done-stat-box">
+          <div class="done-stat-val">{{ state.stats.match.scored }}</div>
+          <div class="done-stat-label">完成评分</div>
+        </div>
+        {% endif %}
+      </div>
+      <div style="margin-top:16px;">
+        <a href="/" class="btn btn-primary">🔍 查看岗位列表 →</a>
+      </div>
+    </div>
+  {% elif state.phase == 'error' %}
+    <div class="error-banner">
+      <h2>❌ 流水线出错</h2>
+      <div style="font-family:monospace; font-size:12px; background:rgba(255,255,255,0.5); padding:8px; border-radius:4px; margin-top:8px;">{{ state.error }}</div>
+      <div style="margin-top:12px;"><a href="/onboarding" class="btn btn-secondary">回去重试</a></div>
+    </div>
+  {% else %}
+    <div style="text-align:center; margin-top:24px; color:var(--color-text-muted); font-size:13px;">
+      ⏳ 整个过程约需 3-8 分钟. 这个页面每 3 秒自动刷新, 别关.
+    </div>
+  {% endif %}
+
+</div>
+
+{% endblock %}
