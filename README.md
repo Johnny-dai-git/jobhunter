@@ -1,19 +1,19 @@
 # Job Agent
 
-一个基于 Claude Agent SDK 的个人求职助手 (全自动版).
+一个基于 DeepSeek V4 的个人求职助手. **不自动投递,只发邮件**.
 
 ## 它能做什么
 
 - **自动采集**: 每天定时从 LinkedIn / Indeed / Glassdoor / ZipRecruiter 抓最近 24h 的新岗位
-- **智能评分**: 用 Claude (tool_use 强制结构化输出) 给每个岗位打分,生成命中点 + 差距分析
-- **简历定制**: 针对每个岗位重写简历重点 (不捏造经历)
-- **求职信生成**: 基于 JD 写真针对性的 cover letter
-- **半自动投递**: Claude 看页面、调 Playwright 自己填表,默认在提交按钮前暂停等你确认
-- **每日 digest**: 把 Top-N 高匹配岗位拼成漂亮 HTML 邮件发到你信箱
-- **市场趋势分析**: 基于已采集岗位生成趋势报告 — 主要 player / 技术栈热度 / 薪资水位 / 给你的具体建议
-- **追踪面板**: SQLite 记录每个岗位的状态、评分、生成产物路径
+- **6 维度智能评分**: 背景 / 技能 / 经验 / 资历 / 工作授权 / 公司类型 — 每岗位返回可解释的子分
+- **关键词预过滤**: 采集时就剔除 intern/student/postdoc 等明显不符合的岗位,省 LLM 钱
+- **简历定制**: 针对感兴趣的岗位重写简历重点
+- **求职信生成**: 复用 matcher 提取的 connector / fit_bullets,一次生成针对性 cover letter
+- **每日邮件**: Top-N 高匹配岗位拼成 HTML digest 发到你信箱
+- **市场趋势报告**: 主要 Player / 技术栈热度 / 薪资水位 / 给你的具体建议
+- **手动投递追踪**: 你在网站上自己投完之后跑 `mark-applied` 记录状态
 
-借鉴了 n8n 工作流的设计(定时触发 / 24h 时间窗 / 结构化输出 / 邮件 digest),用 Python + Claude tool_use 实现.
+**不做的事**: 自动填表 / 自动点击提交按钮 / 任何不可逆动作.
 
 ---
 
@@ -23,7 +23,8 @@
 
 ```bash
 cd job-agent
-python3 -m venv .venv && source .venv/bin/activate
+conda create -n job-agent python=3.12 -y
+conda activate job-agent
 pip install -r requirements.txt
 playwright install chromium
 ```
@@ -32,93 +33,103 @@ playwright install chromium
 
 ```bash
 cp .env.example .env
-# 编辑 .env, 填 ANTHROPIC_API_KEY
-# 如果要发邮件 digest,再加 SMTP_PASSWORD
+# 编辑 .env, 填 DEEPSEEK_API_KEY
+# 如果要发邮件 digest, 再填 SMTP_PASSWORD
 ```
 
 编辑 `config.yaml`:
 - `preferences.job_titles` / `locations`: 要搜什么岗位
+- `preferences.exclude_keywords`: 不想看的关键词
 - `digest.to`: 收件邮箱
-- `apply.candidate`: 投递时用的姓名/邮箱/电话/工作授权等
 
 把简历 PDF/DOCX 放进 `data/resume/`.
 
 ### 3. 一次性准备
 
 ```bash
-# 初始化数据库
-python3 -m src.main init
+python -m src.main init                                 # 建数据库
+python -m src.main parse-resume                         # 解析简历
 
-# 解析简历
-python3 -m src.main parse-resume
-
-# 登录各招聘平台 (会打开浏览器,手动登一下,自动保存 cookies)
-python3 -m src.main login --platform linkedin
-python3 -m src.main login --platform indeed
-python3 -m src.main login --platform ziprecruiter
-python3 -m src.main login --platform glassdoor
+# 登录各招聘平台 (会打开浏览器, 手动登一下, 自动保存 cookies)
+python -m src.main login --platform linkedin
+python -m src.main login --platform indeed
+python -m src.main login --platform ziprecruiter
+python -m src.main login --platform glassdoor
 ```
 
 ### 4. 跑起来
 
-**手动单步**:
+**单步**:
 ```bash
-python3 -m src.main collect              # 采集所有平台
-python3 -m src.main match                # 评分
-python3 -m src.main list --min-score 70  # 看高分
-python3 -m src.main tailor --job-id 5    # 给 #5 生成简历+求职信
-python3 -m src.main apply --job-id 5     # 半自动投 #5
-python3 -m src.main digest               # 生成今日 digest
+python -m src.main collect                # 采集所有平台
+python -m src.main match                  # 6 维度评分
+python -m src.main list --min-score 70    # 看高分
+python -m src.main show --job-id 5        # 看详情 (含子分 + fit_bullets + connector)
+python -m src.main tailor --job-id 5      # 给 #5 生成定制简历 + 求职信
+python -m src.main mark-applied --job-id 5 --note "通过公司官网投递"
+python -m src.main digest                 # 生成今日 digest 邮件
+python -m src.main trends --email         # 生成趋势报告并邮件发送
 ```
 
-**一键全流程**:
+**一键全流程** (不含投递):
 ```bash
-python3 -m src.main run-all
+python -m src.main run-all
+# 流程: collect → match → digest 邮件 → 趋势报告邮件
 ```
 
-**每天定时跑** (cron):
+**每天自动跑** (cron):
 ```bash
 crontab -e
-# 加一行:
+# 加一行 (每天 7:30):
 30 7 * * *  /home/johnny/Documents/Claude/Projects/job-agent/scripts/daily.sh >> /tmp/job-agent.log 2>&1
+# 加一行 (每周日 9 点跑趋势分析):
+0 9 * * 0   /home/johnny/Documents/Claude/Projects/job-agent/scripts/weekly.sh >> /tmp/job-agent.log 2>&1
 ```
 
 ---
 
 ## 命令速查
 
-| 命令 | 作用 |
+| 命令 | 用途 |
 |---|---|
 | `init` | 建数据库和目录 |
 | `parse-resume` | 解析简历缓存 |
 | `login --platform X` | 登录某平台保存 cookies |
-| `collect [--platform X]` | 采集岗位 |
+| `collect [--platform X]` | 采集岗位 (过滤排除关键词) |
 | `add-job` | 手动加一个岗位 |
-| `match` | 给未评分的打分 |
+| `match` | 6 维度评分 |
 | `list [--min-score N]` | 查看追踪表 |
-| `show --job-id N` | 看某岗位详情 |
-| `tailor --job-id N` | 生成定制简历+求职信 |
-| `apply --job-id N [--auto-submit]` | 半自动投递 |
-| `mark-applied --job-id N` | 手动标记已投 |
+| `show --job-id N` | 看某岗位详情 (含 6 维度子分) |
+| `tailor --job-id N` | 生成定制简历 + 求职信 |
+| `mark-applied --job-id N` | 标记你手动投了 |
 | `digest` | 生成今日 HTML digest |
-| `trends [--days N] [--min-score N]` | 生成市场趋势报告 (主要 player / 技术栈 / 薪资 / 建议) |
-| `run-all [--with-trends]` | 一键 collect → match → digest [→ trends] |
+| `trends [--email]` | 生成市场趋势报告 |
+| `run-all` | 一键 collect → match → digest 邮件 → 趋势邮件 |
 
 ---
 
-## 投递助手怎么工作的
+## 6 维度评分
 
-1. 用 Playwright 打开应聘页 (Chromium 可见模式,你能看到全过程)
-2. Claude 通过 tool_use 调下面的工具:
-   - `read_page`: 看页面上有哪些 form 字段
-   - `fill_field` / `select_option` / `click` / `upload_file`: 填表
-   - `screenshot`: 不确定时截图自己看
-   - `ready_to_submit`: 准备好提交,**默认会暂停问你 y/n**
-   - `give_up`: 遇到不会的问题(coding test / 长篇 essay)就放弃
-3. 全程在浏览器里发生,你随时能介入
-4. `auto_submit=true` 才会真的自动点提交
+借鉴 [DailyJobMatch](https://github.com/chunxubioinfor/DailyJobMatch) 的设计:
 
-为什么不用死写脚本? 因为不同 ATS (Greenhouse / Lever / Workday / Taleo) 表单千差万别,死脚本维护成本极高. 让 Claude 看页面理解字段含义,鲁棒得多.
+| 维度 | 满分 | 在评什么 |
+|---|---|---|
+| `background_match` | 10 | 行业/领域匹配度 |
+| `skills_overlap` | 30 | 技术栈交集 (权重最高) |
+| `experience_relevance` | 30 | 经验和岗位职责对齐度 (权重最高) |
+| `seniority` | 10 | 资历层级匹配 |
+| `authorization` | 10 | 工作授权/签证匹配 |
+| `company_score` | 10 | 公司类型偏好匹配 |
+| **`overall`** | **100** | 加权总分 |
+
+`show --job-id N` 会用表格显示每个子分,让你知道为什么 78 分 (而不是 95)。
+
+Matcher 同时返回:
+- **`keywords`** — JD 关键词,ATS 优化用
+- **`fit_bullets`** — 3-5 条"为什么 fit"的子弹点,直接复用到求职信第二段
+- **`connector`** — 一句话钩子,直接作为求职信第一句
+
+这样 `tailor` 命令生成求职信时就不用重新问 LLM 这些问题,省一次调用.
 
 ---
 
@@ -132,36 +143,38 @@ job-agent/
 ├── config.yaml
 ├── pyproject.toml
 ├── scripts/
-│   └── daily.sh             # cron 入口
+│   ├── daily.sh             # cron 入口 (每日)
+│   └── weekly.sh            # cron 入口 (每周)
 ├── src/
 │   ├── main.py              # CLI
 │   ├── config.py
 │   ├── db.py                # SQLite (Job + Event)
 │   ├── auth.py              # 各平台登录 + cookie 保存
 │   ├── resume_reader.py
-│   ├── agent.py             # Claude 调用封装
-│   ├── matcher.py           # 评分 (tool_use 结构化输出)
+│   ├── agent.py             # LLM 调用工厂 (Claude / DeepSeek 共用)
+│   ├── matcher.py           # 6 维度评分 (tool_use 结构化输出)
 │   ├── tailor.py            # 简历定制
-│   ├── cover_letter.py      # 求职信生成
-│   ├── apply_assist.py      # 半自动投递 (tool_use + Playwright)
+│   ├── cover_letter.py      # 求职信生成 (复用 matcher 的 connector/fit_bullets)
+│   ├── tracker.py           # 手动投递状态标记
 │   ├── digest.py            # 每日 HTML 邮件
-│   ├── collect.py           # 采集编排器
+│   ├── trends.py            # 市场趋势分析
+│   ├── collect.py           # 采集编排 (含 exclude_keywords 过滤)
 │   └── collectors/
-│       ├── _browser.py      # Playwright 共用
+│       ├── _browser.py
 │       ├── linkedin.py
 │       ├── indeed.py
 │       ├── glassdoor.py
 │       └── ziprecruiter.py
 ├── prompts/
-│   ├── matcher.md
+│   ├── matcher.md           # 6 维度评分 prompt
 │   ├── tailor.md
-│   ├── cover_letter.md
-│   └── apply_system.md      # 投递助手 system prompt
+│   ├── cover_letter.md      # 复用 connector/fit_bullets 的 prompt
+│   └── trends.md
 └── data/
-    ├── resume/              # 你的简历
-    ├── cookies/             # 登录态 (gitignore)
+    ├── resume/              # 你的简历放这儿
+    ├── cookies/             # 平台登录态 (gitignore)
     ├── jobs/
-    ├── outputs/             # 生成的简历/求职信/截图/digest
+    ├── outputs/             # 生成的简历/求职信/digest/趋势报告
     └── jobs.db
 ```
 
@@ -169,8 +182,8 @@ job-agent/
 
 ## 重要提示
 
-- **遵守平台 ToS**: LinkedIn 等平台禁止自动化. 本工具用"已登录用户视角"+ 限速 + 限量 (默认 30 个/平台/次),风险可控. 大规模爬取请用官方 API.
-- **API 成本**: 每次 match ~¥0.05, tailor + cover ~¥0.2, apply ~¥0.5–1. 一天跑下来通常 < ¥10.
-- **隐私**: 简历内容会发到 Anthropic API. cookies 只在本地. 数据库里没有密码.
-- **投递可逆性**: `apply` 默认在提交前暂停. `--auto-submit` 之后不可逆,慎用.
-- **选择器会失效**: 各平台经常改 DOM. 如果 collector 抓不到东西,按 collector 文件里的 selector 适配最新页面结构.
+- **不自动投递**: 这是设计选择. 投错的简历删不掉. 邮件看完后你自己去网站投, 跑 `mark-applied` 记录.
+- **遵守平台 ToS**: 直接爬 LinkedIn 等平台风险存在. 本工具用"已登录用户视角" + 限速 + 限量 (默认 30 个/平台/次).
+- **API 成本**: 全 DeepSeek 路由,一天约 ¥1-2.
+- **隐私**: 简历内容会发到 DeepSeek API. cookies 只在本地. 数据库里没有密码.
+- **选择器会失效**: 各平台经常改 DOM. 如果 collector 抓不到东西, 按 collector 文件里的 selector 适配最新页面结构.

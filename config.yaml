@@ -23,9 +23,6 @@ model:
   cover_letter:
     provider: deepseek
     name: deepseek-v4-pro
-  apply:
-    provider: deepseek
-    name: deepseek-v4-pro
   trends:
     provider: deepseek
     name: deepseek-v4-pro
@@ -112,20 +109,7 @@ digest:
     # 应用专用密码 (Gmail 需要),建议放在 .env 里读
     password_env: SMTP_PASSWORD
 
-# ====== 投递助手 ======
-apply:
-  # 默认在点提交按钮前暂停等你确认.设 true 后会真的自动点!
-  auto_submit: false
-  # 候选人通用信息(投递时会用到的字段)
-  candidate:
-    name: ""
-    email: ""
-    phone: ""
-    linkedin: ""
-    github: ""
-    portfolio: ""
-    work_authorization: "Yes"
-    require_sponsorship: "No"
+# 注: job-agent 不自动投递. 你看完邮件,在网站上手动投完,跑 `mark-applied --job-id N` 记录即可.
 
 # ====== 采集器 ======
 collectors:

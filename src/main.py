@@ -9,7 +9,6 @@ from rich.console import Console
 from rich.table import Table
 from sqlalchemy import select
 
-from .apply_assist import assist_apply, mark_applied as _mark_applied
 from .auth import login_and_save
 from .collect import collect_all, PLATFORMS
 from .config import Config
@@ -19,6 +18,7 @@ from .digest import run_digest
 from .matcher import score_pending
 from .resume_reader import load_cached, parse_and_cache
 from .tailor import tailor_for_job
+from .tracker import mark_applied as _mark_applied
 from .trends import generate_report as generate_trends_report
 
 
@@ -228,39 +228,11 @@ def tailor(job_id, name, no_cover):
         console.print(f"[green]✓[/green] 求职信: {cover_path}")
 
 
-@cli.command()
-@click.option("--job-id", type=int, required=True)
-@click.option(
-    "--auto-submit",
-    is_flag=True,
-    default=None,
-    help="覆盖配置: 真自动点提交按钮 (危险!)",
-)
-def apply(job_id, auto_submit):
-    """半自动投递: 打开浏览器,Claude 看页面填表,默认在提交前暂停."""
-    config = _load_config()
-    if auto_submit:
-        console.print(
-            "[bold red]⚠️  你启用了 --auto-submit, agent 会自动点提交按钮![/bold red]"
-        )
-        if input("确认继续? [y/N]: ").strip().lower() != "y":
-            console.print("已取消")
-            return
-
-    result = assist_apply(config, job_id, auto_submit=auto_submit)
-    if result["submitted"]:
-        console.print(f"[green]✓ 已投递[/green] #{job_id}")
-    elif result["given_up"]:
-        console.print(f"[yellow]agent 放弃: {result['given_up']}[/yellow]")
-    else:
-        console.print("[yellow]未投递 (用户取消或对话结束)[/yellow]")
-
-
 @cli.command("mark-applied")
 @click.option("--job-id", type=int, required=True)
-@click.option("--note", default=None)
+@click.option("--note", default=None, help="可选备注,比如 '通过公司官网投递'")
 def mark_applied(job_id, note):
-    """手动标记某岗位为已投递."""
+    """你手动投完后告诉 agent: 这岗位已投. 仅做状态记录,不触发任何动作."""
     config = _load_config()
     _mark_applied(config, job_id, note)
     console.print(f"[green]✓[/green] #{job_id} 已标记为 applied")
