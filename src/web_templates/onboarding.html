@@ -122,6 +122,34 @@
     </p>
   </div>
 
+  {# ============ Resume 管理 (独立上传, 不触发流水线) ============ #}
+  <div class="card">
+    <h3 style="margin-top:0;">📎 当前简历</h3>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+      {% if current_resume %}
+        <div>
+          <div style="font-weight:600;">{{ current_resume.filename }}</div>
+          <div style="font-size:12px; color:var(--color-text-muted); margin-top:2px;">
+            {{ current_resume.size_kb }} KB · 最后更新 {{ current_resume.modified }}
+          </div>
+        </div>
+      {% else %}
+        <div style="color:var(--color-text-muted); font-style:italic;">
+          还没有简历, 用下面表单上传
+        </div>
+      {% endif %}
+      <form method="post" action="/resume/upload" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; margin:0;">
+        <input type="file" name="resume" accept=".pdf,.docx,.md,.txt" required
+               style="padding:6px 8px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm); font-size:12px;">
+        <button type="submit" class="btn btn-secondary btn-sm">⬆ 上传/替换</button>
+      </form>
+    </div>
+    <div style="font-size:11px; color:var(--color-text-dim); margin-top:10px;">
+      💡 上传后**不会自动重跑流水线**. 下次 run-all / refresh / 切换画像时会自动用新的简历.
+      如果想立刻用新简历重跑当前画像, 上传完点 [⟳ 重跑] 按钮.
+    </div>
+  </div>
+
   {# ============ 历史画像 ============ #}
   {% if history %}
   <div class="card">

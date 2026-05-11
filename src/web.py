@@ -411,6 +411,20 @@ def create_app(config: Config) -> FastAPI:
                 ) or 0
                 job_counts[h.id] = {"total": total, "top": top}
 
+        # 当前简历状态
+        from .resume_reader import find_resume
+        current_resume: dict[str, Any] | None = None
+        try:
+            resume_path = find_resume(config.path("resume_dir"))
+            stat = resume_path.stat()
+            current_resume = {
+                "filename": resume_path.name,
+                "size_kb": round(stat.st_size / 1024, 1),
+                "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+            }
+        except FileNotFoundError:
+            current_resume = None
+
         return render(
             "onboarding.html",
             existing_desc=existing_desc,
@@ -420,6 +434,7 @@ def create_app(config: Config) -> FastAPI:
             current_id=current_id,
             job_counts=job_counts,
             pipeline_running=pipeline_state["running"],
+            current_resume=current_resume,
         )
 
     @app.post("/onboarding/submit")
@@ -506,6 +521,27 @@ def create_app(config: Config) -> FastAPI:
             is_current=(row.id == current_id),
             pipeline_running=pipeline_state["running"],
         )
+
+    @app.post("/resume/upload")
+    async def upload_resume_only(resume: UploadFile = File(...)):
+        """单独上传/替换简历, 不触发流水线. 后续任何 run-all / refresh 都用最新的."""
+        if not resume.filename:
+            raise HTTPException(400, "未选择文件")
+        ext = Path(resume.filename).suffix.lower()
+        if ext not in SUPPORTED_EXTS:
+            raise HTTPException(400, f"不支持的格式 {ext}. 仅支持: {sorted(SUPPORTED_EXTS)}")
+        content = await resume.read()
+        if not content:
+            raise HTTPException(400, "上传文件为空")
+        resume_dir = config.path("resume_dir")
+        target = resume_dir / resume.filename
+        target.write_bytes(content)
+        # 强制重新解析,刷新 _parsed.txt 缓存
+        try:
+            parse_and_cache(resume_dir)
+        except Exception as e:
+            raise HTTPException(500, f"解析失败: {e}")
+        return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/profiles/{profile_id}/use")
     def use_profile(profile_id: int, background_tasks: BackgroundTasks):
