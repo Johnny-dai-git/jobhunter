@@ -77,6 +77,7 @@ class Job(Base):
 
     # 生成的产物路径
     tailored_resume_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    tailored_resume_pdf_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     cover_letter_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
 
     # 时间戳

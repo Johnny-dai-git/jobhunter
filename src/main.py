@@ -383,6 +383,16 @@ def trends(days, min_score, formats, email):
         console.print(f"[green]✓[/green] {fmt}: {p}")
 
 
+@cli.command()
+@click.option("--host", default="127.0.0.1")
+@click.option("--port", type=int, default=8765)
+def web(host, port):
+    """启动本地 web UI: 查看岗位 / 点击触发 Claude 改简历 + PDF."""
+    from .web import run_server
+    config = _load_config()
+    run_server(config, host=host, port=port)
+
+
 @cli.command("run-all")
 @click.option(
     "--platform",

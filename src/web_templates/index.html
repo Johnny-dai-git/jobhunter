@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Jobs · Job Agent{% endblock %}
+{% block content %}
+
+<form class="filters" method="get">
+  <label for="min_score">最低分</label>
+  <input type="number" name="min_score" id="min_score" value="{{ min_score }}" step="5" min="0" max="100">
+
+  <label for="status">状态</label>
+  <select name="status" id="status">
+    <option value="active" {% if status == 'active' %}selected{% endif %}>active (含 scored/applied/...)</option>
+    <option value="all" {% if status == 'all' %}selected{% endif %}>全部</option>
+    <option value="scored" {% if status == 'scored' %}selected{% endif %}>scored 待定</option>
+    <option value="applied" {% if status == 'applied' %}selected{% endif %}>applied 已投</option>
+    <option value="archived" {% if status == 'archived' %}selected{% endif %}>archived 归档</option>
+  </select>
+
+  <button class="btn btn-secondary" type="submit">应用</button>
+  <span style="float:right; color:#6b7280; font-size:13px;">共 {{ total }} 个</span>
+</form>
+
+<div class="card" style="padding:0;">
+  <table>
+    <thead>
+      <tr>
+        <th>Score</th>
+        <th>岗位</th>
+        <th>公司</th>
+        <th>地点</th>
+        <th>来源</th>
+        <th>状态</th>
+        <th>产物</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for j in jobs %}
+      <tr>
+        <td>
+          {% set s = j.match_score or 0 %}
+          {% if s >= 90 %}<span class="score score-90">{{ "%.0f"|format(s) }}</span>
+          {% elif s >= 75 %}<span class="score score-75">{{ "%.0f"|format(s) }}</span>
+          {% else %}<span class="score score-low">{{ "%.0f"|format(s) }}</span>{% endif %}
+        </td>
+        <td>
+          <a href="/job/{{ j.id }}" style="font-weight:600; color:#111827; text-decoration:none;">{{ j.title }}</a>
+          {% if j.match_summary %}<div style="font-size:12px; color:#6b7280; margin-top:2px;">{{ j.match_summary }}</div>{% endif %}
+        </td>
+        <td>{{ j.company }}</td>
+        <td><span style="font-size:13px; color:#6b7280;">{{ j.location or '-' }}</span></td>
+        <td><span class="badge badge-gray">{{ j.source }}</span></td>
+        <td>
+          {% if j.status == 'applied' %}<span class="badge badge-green">applied</span>
+          {% elif j.status == 'scored' %}<span class="badge badge-yellow">scored</span>
+          {% elif j.status == 'archived' %}<span class="badge badge-gray">archived</span>
+          {% else %}<span class="badge badge-gray">{{ j.status }}</span>{% endif %}
+        </td>
+        <td>
+          {% if j.tailored_resume_pdf_path %}<span class="badge badge-green">📄 PDF</span>{% endif %}
+          {% if j.cover_letter_path %}<span class="badge badge-green">✉</span>{% endif %}
+        </td>
+        <td><a href="/job/{{ j.id }}" class="btn btn-secondary">查看</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="text-align:center; color:#6b7280; padding:30px;">没有匹配的岗位</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
