@@ -9,7 +9,7 @@
 设计原则:
 1. **三维评分**: market_demand / competition (越低越好) / user_advantage
    composite = market_demand * (10 - competition) * user_advantage / 10  范围 0-100.
-2. **方向限制**: engineering / research-engineering / academic-research / academic-teaching.
+2. **方向限制**: 仅 industry — engineering / research-engineering. 不做 academic.
 3. **Title 强制为市场真实高频称谓**, 不允许造词.
 4. **Schema 严格**, tool_use 强制结构化输出, code 可靠解析.
 
@@ -78,10 +78,8 @@ PROFILE_TOOL: dict[str, Any] = {
                             "enum": [
                                 "engineering",
                                 "research-engineering",
-                                "academic-research",
-                                "academic-teaching",
                             ],
-                            "description": "engineering | research-engineering | academic-research (postdoc/RS) | academic-teaching (Asst Prof/TTAP)",
+                            "description": "engineering (SWE/MLE/Backend/Platform/Infra) | research-engineering (Anthropic/DeepMind 类工业实验室). 仅 industry, 不做 academic.",
                         },
                         "scores": {
                             "type": "object",
