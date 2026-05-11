@@ -11,7 +11,10 @@ from .config import Config
 from .db import Job, JobStatus, session_scope
 
 
-PLATFORMS = ["linkedin", "indeed", "glassdoor", "ziprecruiter"]
+PLATFORMS = [
+    "linkedin", "indeed", "glassdoor", "ziprecruiter",
+    "yc", "wellfound", "dice", "hackernews",
+]
 
 
 def matches_excluded(cj: CollectedJob, excluded: list[str]) -> str | None:

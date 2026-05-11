@@ -154,10 +154,42 @@ collectors:
 
   ziprecruiter:
     # 暂禁用: ZipRecruiter 用 Cloudflare Bot Fight 防爬,Playwright+cookies 也过不去.
-    # Apify 上无便宜可靠的 jobs scraper. 对 AI Infra 等技术岗位密度低,跳过.
     enabled: false
     backend: playwright
     cookie_file: data/cookies/ziprecruiter.json
+    max_per_run: 30
+
+  # ====== 创业公司专门库 ======
+  yc:
+    enabled: true
+    backend: apify
+    apify:
+      actor: artemlazarevm/yc-jobs-scraper       # YC startup jobs
+      input_overrides: {}
+    max_per_run: 15
+
+  wellfound:
+    enabled: true
+    backend: apify
+    apify:
+      actor: clearpath/wellfound-api-ppe         # Wellfound (AngelList) PPR
+      input_overrides: {}
+    max_per_run: 15
+
+  # ====== 美国传统科技岗位库 ======
+  dice:
+    enabled: true
+    backend: apify
+    apify:
+      actor: scrapestorm/dice-jobs-scraper-fast-cheap
+      input_overrides: {}
+    max_per_run: 15
+
+  # ====== HackerNews 社区招聘帖 ======
+  hackernews:
+    # 直连 HN Firebase + Algolia API,完全免费,不需要 Apify
+    enabled: true
+    backend: api
     max_per_run: 30
 
 # ====== 路径 ======
