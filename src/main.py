@@ -142,6 +142,28 @@ def _print_profile(profile):
     for p in profile.top_5_positions:
         console.print(f"  • [link]{p.linkedin_search_url}[/link]")
 
+    # 区域公司推荐
+    if profile.recommended_companies:
+        console.print(
+            "\n[bold green]目标公司清单 (按区域,背景匹配 + 积极扩张):[/bold green]"
+        )
+        for region_label, companies in profile.recommended_companies.regions():
+            if not companies:
+                continue
+            tbl = Table(title=f"🌍 {region_label} ({len(companies)} 家)", show_lines=True)
+            tbl.add_column("公司", style="bold")
+            tbl.add_column("为什么 fit", style="dim", overflow="fold")
+            tbl.add_column("扩张/招聘信号", overflow="fold")
+            tbl.add_column("例子 roles", style="cyan", overflow="fold")
+            for c in companies:
+                tbl.add_row(
+                    c.name,
+                    c.why_fit,
+                    c.hiring_signal,
+                    "\n".join(c.example_roles),
+                )
+            console.print(tbl)
+
 
 @cli.command()
 @click.option(

@@ -23,6 +23,30 @@ from .config import Config
 from .resume_reader import load_cached
 
 
+_COMPANY_LIST_SCHEMA = {
+    "type": "array",
+    "minItems": 3,
+    "maxItems": 8,
+    "items": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "why_fit": {"type": "string", "description": "为什么对候选人 fit (中文,<=50字)"},
+            "hiring_signal": {"type": "string", "description": "当前扩张/招聘信号 (中文,<=50字)"},
+            "example_roles": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 1,
+                "maxItems": 3,
+                "description": "可能的具体岗位 title 例子 (英文)",
+            },
+            "careers_url": {"type": "string", "description": "招聘页 URL (可选)"},
+        },
+        "required": ["name", "why_fit", "hiring_signal", "example_roles"],
+    },
+}
+
+
 PROFILE_TOOL: dict[str, Any] = {
     "name": "submit_profile_analysis",
     "description": "提交对候选人的 Top-5 最优投递岗位分析",
@@ -110,12 +134,24 @@ PROFILE_TOOL: dict[str, Any] = {
                 "maxItems": 5,
                 "description": "推荐目标地点 (LinkedIn 可识别)",
             },
+            "recommended_companies": {
+                "type": "object",
+                "description": "按 5 个区域分组的目标公司清单 (背景匹配+积极扩张)",
+                "properties": {
+                    "north_america": _COMPANY_LIST_SCHEMA,
+                    "hong_kong": _COMPANY_LIST_SCHEMA,
+                    "singapore": _COMPANY_LIST_SCHEMA,
+                    "japan": _COMPANY_LIST_SCHEMA,
+                    "europe": _COMPANY_LIST_SCHEMA,
+                },
+                "required": ["north_america", "hong_kong", "singapore", "japan", "europe"],
+            },
             "summary": {
                 "type": "string",
                 "description": "候选人核心定位+投递策略(<=80字,中文)",
             },
         },
-        "required": ["top_5_positions", "target_locations", "summary"],
+        "required": ["top_5_positions", "target_locations", "recommended_companies", "summary"],
     },
 }
 
@@ -170,20 +206,80 @@ class Position:
 
 
 @dataclass
+class Company:
+    name: str
+    why_fit: str = ""
+    hiring_signal: str = ""
+    example_roles: list[str] = field(default_factory=list)
+    careers_url: str = ""
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Company":
+        return cls(
+            name=str(d.get("name", "")).strip(),
+            why_fit=str(d.get("why_fit", "")),
+            hiring_signal=str(d.get("hiring_signal", "")),
+            example_roles=list(d.get("example_roles") or []),
+            careers_url=str(d.get("careers_url", "")),
+        )
+
+
+@dataclass
+class RegionalCompanies:
+    north_america: list[Company] = field(default_factory=list)
+    hong_kong: list[Company] = field(default_factory=list)
+    singapore: list[Company] = field(default_factory=list)
+    japan: list[Company] = field(default_factory=list)
+    europe: list[Company] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RegionalCompanies":
+        if not d:
+            return cls()
+        return cls(
+            north_america=[Company.from_dict(c) for c in (d.get("north_america") or [])],
+            hong_kong=[Company.from_dict(c) for c in (d.get("hong_kong") or [])],
+            singapore=[Company.from_dict(c) for c in (d.get("singapore") or [])],
+            japan=[Company.from_dict(c) for c in (d.get("japan") or [])],
+            europe=[Company.from_dict(c) for c in (d.get("europe") or [])],
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "north_america": [asdict(c) for c in self.north_america],
+            "hong_kong": [asdict(c) for c in self.hong_kong],
+            "singapore": [asdict(c) for c in self.singapore],
+            "japan": [asdict(c) for c in self.japan],
+            "europe": [asdict(c) for c in self.europe],
+        }
+
+    def regions(self) -> list[tuple[str, list[Company]]]:
+        """按显示顺序返回 (region_label, companies)."""
+        return [
+            ("北美 (US/Canada)", self.north_america),
+            ("香港", self.hong_kong),
+            ("新加坡", self.singapore),
+            ("日本", self.japan),
+            ("欧洲", self.europe),
+        ]
+
+
+@dataclass
 class ProfileAnalysis:
     top_5_positions: list[Position]
     target_locations: list[str]
     summary: str
+    recommended_companies: RegionalCompanies = field(default_factory=RegionalCompanies)
 
     @classmethod
     def from_tool_input(cls, data: dict) -> "ProfileAnalysis":
         positions = [Position.from_dict(p) for p in (data.get("top_5_positions") or [])]
-        # 强制按 composite 降序 (模型有时不严格)
         positions.sort(key=lambda p: -p.scores.composite)
         return cls(
             top_5_positions=positions,
             target_locations=list(data.get("target_locations") or []),
             summary=str(data.get("summary", "")),
+            recommended_companies=RegionalCompanies.from_dict(data.get("recommended_companies") or {}),
         )
 
     def to_dict(self) -> dict:
@@ -203,6 +299,7 @@ class ProfileAnalysis:
             ],
             "target_locations": self.target_locations,
             "summary": self.summary,
+            "recommended_companies": self.recommended_companies.to_dict(),
         }
 
     @classmethod
@@ -213,6 +310,7 @@ class ProfileAnalysis:
             top_5_positions=positions,
             target_locations=data.get("target_locations", []),
             summary=data.get("summary", ""),
+            recommended_companies=RegionalCompanies.from_dict(data.get("recommended_companies") or {}),
         )
 
     def search_titles(

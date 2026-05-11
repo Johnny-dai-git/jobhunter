@@ -1,157 +1,413 @@
 {
   "top_5_positions": [
     {
-      "title": "Machine Learning Engineer",
-      "direction": "engineering",
-      "scores": {
-        "market_demand": 9,
-        "competition": 6,
-        "user_advantage": 9,
-        "composite": 81
-      },
-      "aliases": [
-        "ML Engineer",
-        "AI/ML Engineer",
-        "ML Software Engineer",
-        "Machine Learning Software Engineer",
-        "Engineer, Machine Learning"
-      ],
-      "broader_terms": [
-        "Software Engineer (ML focus at AI companies)",
-        "Member of Technical Staff (Anthropic/OpenAI)"
-      ],
-      "why_this_position": [
-        "使用 PyTorch DDP/FSDP、Megatron-LM、NCCL 训练大模型，具备全栈 ML 经验",
-        "独立搭建 K8s + vLLM + FastAPI 推理平台，支持 HPA、MIG 分区和 GPU time-slicing",
-        "7 篇一作论文涵盖分布式训练优化、强化学习调度（DYNAMIX）、LLM serving 等领域",
-        "熟悉从数据并行到混合并行的全谱系分布式策略，论文验证 8-64 GPUs 规模"
-      ],
-      "market_evidence": "LLM 应用爆发，各行业 AI 落地持续推高 MLE 需求，每天大量新岗位",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Machine+Learning+Engineer"
-    },
-    {
-      "title": "AI Infrastructure Engineer",
+      "title": "ML Infrastructure Engineer",
       "direction": "engineering",
       "scores": {
         "market_demand": 8,
-        "competition": 5,
-        "user_advantage": 10,
-        "composite": 80
-      },
-      "aliases": [
-        "ML Infrastructure Engineer",
-        "AI Platform Engineer",
-        "ML Platform Engineer",
-        "AI Systems Engineer",
-        "ML Systems Engineer"
-      ],
-      "broader_terms": [
-        "Infrastructure Engineer",
-        "Platform Engineer",
-        "Systems Engineer"
-      ],
-      "why_this_position": [
-        "核心研究聚焦 AI Infrastructure（安全、优化、可观测性），PhD 课题即此方向",
-        "构建 4 层 GPU 可观测性栈（DCGM + Prometheus + Grafana + vLLM metrics）",
-        "开发 eBPF 内核级网络流遥测（PSketch: 96% Top-K 精度）和系统资源 Profiling",
-        "自托管 K8s 推理平台含 GitOps CI/CD 50+ 部署，91.3% 峰值 GPU 利用率"
-      ],
-      "market_evidence": "AI 公司急需专精 GPU 集群、推理/训练基础设施的工程师，供给严重不足",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=AI+Infrastructure+Engineer"
-    },
-    {
-      "title": "Research Engineer",
-      "direction": "research-engineering",
-      "scores": {
-        "market_demand": 7,
-        "competition": 6,
+        "competition": 4,
         "user_advantage": 9,
-        "composite": 63
+        "composite": 43
       },
       "aliases": [
-        "AI Research Engineer",
-        "Research Engineer, ML",
-        "Applied Research Engineer",
-        "AI Researcher",
-        "Member of Technical Staff (Research)"
+        "ML Infra Engineer",
+        "ML Systems Engineer",
+        "AI Infrastructure Engineer",
+        "Deep Learning Infrastructure Engineer",
+        "Machine Learning Infrastructure Engineer"
       ],
       "broader_terms": [
-        "Research Scientist (applied track at some companies)",
-        "Software Engineer, Research"
+        "Software Engineer (ML Infra)",
+        "Infrastructure Engineer",
+        "Platform Engineer (ML)"
       ],
       "why_this_position": [
-        "8 篇论文（7 篇一作）发表于 IEEE/ACM/Springer，研究经验扎实",
-        "从 RL 调度（DYNAMIX）到 eBPF 遥测再到 side-channel attack，跨领域系统研究能力",
-        "独立完成从论文选题、方案设计、实验验证到论文撰写的完整闭环",
-        "PhD Candidate in CS（AI Infrastructure），具备前沿研究视野"
+        "独立设计了 K8s LLM 推理平台（NGINX→FastAPI→vLLM），含 GitOps CI/CD 和 GPU time-slicing/MIG 弹性伸缩",
+        "构建了 4 层 GPU 可观测性（DCGM + Prometheus + Grafana）覆盖 GPU 硬件/vLLM/FastAPI/K8s 集群",
+        "设计了 eBPF 内核级网络流优先级追踪（PSketch），Top-K accuracy 达 96%，开销 <1.1% @10Gbps",
+        "在 Lambda Labs A100 上验证了 MIG 7×1g.5gb 和 HPA 1↔7 弹性伸缩，峰值 GPU 利用率 91.3%"
       ],
-      "market_evidence": "AI 实验室和前沿公司需要能 bridge 研究和工程的复合型人才，岗位稳中有升",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Research+Engineer+ML"
-    },
-    {
-      "title": "ML Platform Engineer",
-      "direction": "engineering",
-      "scores": {
-        "market_demand": 7,
-        "competition": 5,
-        "user_advantage": 8,
-        "composite": 56
-      },
-      "aliases": [
-        "ML Platform Software Engineer",
-        "Machine Learning Platform Engineer",
-        "AI Platform Software Engineer",
-        "ML Infrastructure Platform Engineer"
-      ],
-      "broader_terms": [
-        "Platform Engineer",
-        "Software Engineer, Infrastructure"
-      ],
-      "why_this_position": [
-        "搭建 K8s + ArgoCD + GitHub Actions GitOps 流水线，管理 50+ 部署",
-        "精通 Slurm、Kubernetes、Docker 等编排和调度工具",
-        "构建 GPU 集群 HPA 自动扩缩容策略（MIG 7x1g.5gb, HPA 1↔7）",
-        "Cisco/Broadcom 系统软件工程背景，理解大规模生产环境"
-      ],
-      "market_evidence": "企业 ML 平台化趋势明显，ML Platform 团队在 mid-size/large 公司快速扩张",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=ML+Platform+Engineer"
+      "market_evidence": "LLM 训练/推理基础设施需求爆发，各 AI 公司疯狂招聘 ML Infra 工程师",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=ML%20Infrastructure%20Engineer"
     },
     {
       "title": "GPU Compute Engineer",
       "direction": "engineering",
       "scores": {
         "market_demand": 6,
-        "competition": 4,
-        "user_advantage": 7,
-        "composite": 42
+        "competition": 3,
+        "user_advantage": 8,
+        "composite": 33
       },
       "aliases": [
-        "GPU Engineer",
-        "GPU Software Engineer",
-        "HPC Engineer",
         "GPU Systems Engineer",
-        "Compute Infrastructure Engineer"
+        "CUDA Engineer",
+        "GPU Software Engineer",
+        "Compute Infrastructure Engineer",
+        "GPU Kernel Engineer"
       ],
       "broader_terms": [
-        "Engineer (Nvidia compute roles)",
-        "Systems Software Engineer"
+        "Systems Software Engineer",
+        "Performance Engineer",
+        "HPC Engineer"
       ],
       "why_this_position": [
-        "精通 GPU 多实例分区（MIG）、GPU time-slicing、HPA 等 GPU 资源管理",
-        "8-64 A100 GPU 规模分布式训练经验，NCEL/BytePS 通信优化",
-        "构建 GPU 可观测性栈（DCGM Exporter + Prometheus），监控 GPU 硬件指标",
-        "NCCL 通信调度和传输层优化（UDP 替代方案，15-21% LLM 吞吐提升）"
+        "深入使用 NCCL、CUDA、Megatron-LM、FSDP 进行分布式训练优化",
+        "设计了 eHashPipe eBPF 内存/CPU 追踪框架，分辨率比 top/htop 高 10-14 倍",
+        "在 8-64 A100 GPU 上验证了分布式训练调度和通信优化，熟悉 GPU time-slicing/MIG",
+        "熟悉 NPU/ASIC（Broadcom BCM SDK），具备底层硬件和系统软件经验"
       ],
-      "market_evidence": "GPU 集群建设和推理优化为 AI Infra 核心方向，Nvidia 及云厂商持续扩招",
-      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=GPU+Compute+Engineer"
+      "market_evidence": "GPU 算力需求爆炸，NVIDIA/AWS/Google 持续招聘 GPU 软件工程人才",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=GPU%20Engineer"
+    },
+    {
+      "title": "Research Engineer",
+      "direction": "research-engineering",
+      "scores": {
+        "market_demand": 7,
+        "competition": 5,
+        "user_advantage": 9,
+        "composite": 31
+      },
+      "aliases": [
+        "AI Research Engineer",
+        "Research Engineer, ML",
+        "Member of Technical Staff (Research)",
+        "Deep Learning Research Engineer",
+        "Applied Research Engineer"
+      ],
+      "broader_terms": [
+        "Software Engineer (Research)",
+        "Research Scientist (Engineering track)"
+      ],
+      "why_this_position": [
+        "8 篇论文（7 篇一作），发表于 IEEE、ACM、Springer，涵盖 ML 训练安全/优化/可观测性",
+        "设计了 DYNAMIX：基于 PPO 强化学习的自适应 batch 调度器，在 8-64 A100 上实现 46% 加速",
+        "设计了 PRISM：基于优先级的分布式训练传输层库，LLM 吞吐提升 15-21%",
+        "实现了训练时侧信道攻击恢复完整 DNN 架构，layer-type 准确率 >97%"
+      ],
+      "market_evidence": "AI 实验室和 AGI 初创公司（OpenAI/Anthropic/DeepMind）大量招 research hiring",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Research%20Engineer%20ML"
+    },
+    {
+      "title": "Machine Learning Engineer",
+      "direction": "engineering",
+      "scores": {
+        "market_demand": 10,
+        "competition": 7,
+        "user_advantage": 7,
+        "composite": 21
+      },
+      "aliases": [
+        "ML Engineer",
+        "AI/ML Engineer",
+        "Machine Learning Software Engineer",
+        "ML Software Engineer",
+        "Engineer, Machine Learning"
+      ],
+      "broader_terms": [
+        "Member of Technical Staff (MTS)",
+        "Software Engineer (AI/ML)"
+      ],
+      "why_this_position": [
+        "训练了 PubMedBERT 和 Qwen-7B，使用 PyTorch DDP/FSDP（ZeRO-3）+ FlashAttention + activation checkpointing",
+        "构建了 115-label HCC 多标签分类器实现 0.775 macro-F1 / 0.936 macro-AUC",
+        "使用 NeMo + Megatron-LM（TP=1, PP=1）进行全参数训练，避免 OOM",
+        "有丰富的 PyTorch DDP/FSDP、Megatron-LM、BytePS 实践经验"
+      ],
+      "market_evidence": "ML Engineer 是所有 tech 公司最大量招聘的岗位之一，持续高需求",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Machine%20Learning%20Engineer"
+    },
+    {
+      "title": "Applied AI Engineer",
+      "direction": "engineering",
+      "scores": {
+        "market_demand": 9,
+        "competition": 6,
+        "user_advantage": 6,
+        "composite": 21
+      },
+      "aliases": [
+        "Applied Machine Learning Engineer",
+        "AI Software Engineer",
+        "Applied AI/ML Engineer",
+        "LLM Engineer",
+        "AI Application Engineer"
+      ],
+      "broader_terms": [
+        "Software Engineer (AI)",
+        "Full Stack ML Engineer"
+      ],
+      "why_this_position": [
+        "独立搭建了基于 vLLM 的 LLM 推理平台并在 K8s 上实现自动伸缩（HPA/MIG）",
+        "用 domain-adapted LLM（Qwen-7B）+ few-shot prompting 解决临床编码任务",
+        "有产品经理经验（Midea 获红点奖、Xiaomi IoT），能将 AI 技术与产品落地结合",
+        "熟悉 FastAPI/REST API/gRPC 等工程化部署方案"
+      ],
+      "market_evidence": "LLM 应用层爆发，各行业公司都需要能将模型落地的 AI 工程人才",
+      "linkedin_search_url": "https://www.linkedin.com/jobs/search/?keywords=Applied%20AI%20Engineer"
     }
   ],
   "target_locations": [
     "San Francisco Bay Area",
     "New York City",
     "Seattle",
-    "Austin",
-    "Boston/Cambridge"
+    "Singapore",
+    "Tokyo"
   ],
-  "summary": "AI Infra + ML Engineer 方向博士候选人，精通 K8s/vLLM/eBPF/PyTorch 分布式训练全栈。优先投递 MLE 和 AI Infra 岗位，辅以 Research Engineer 和 GPU 工程方向，主攻旧金山、纽约、西雅图、奥斯汀、波士顿。"
+  "summary": "AI Infrastructure 博士候选人，8 篇论文（7 一作），精通 K8s/vLLM/eBPF/FSDP/Megatron-LM。最优方向：ML Infrastructure Engineer > GPU Compute Engineer > Research Engineer > ML Engineer > Applied AI Engineer。目标：北美 AI 公司（Anthropic/OpenAI/NVIDIA）+ 新加坡/日本/欧洲 Top AI 实验室。",
+  "recommended_companies": {
+    "north_america": [
+      {
+        "name": "Anthropic",
+        "why_fit": "需要 LLM 推理/训练基础设施人才，候选人 K8s+vLLM+eBPF 经验直接匹配",
+        "hiring_signal": "2024 年多轮融资，估值超 200 亿，持续大规模招聘 MTS 和研究工程师",
+        "example_roles": [
+          "Member of Technical Staff (Infra)",
+          "Research Engineer - ML Systems",
+          "Software Engineer - Training Infra"
+        ],
+        "careers_url": "https://www.anthropic.com/careers"
+      },
+      {
+        "name": "OpenAI",
+        "why_fit": "候选人 Megatron-LM/FSDP/vLLM 分布式训练经验完美匹配其大规模模型训练需求",
+        "hiring_signal": "2024 年估值超 1500 亿，AGI 团队持续扩张 infra 岗位",
+        "example_roles": [
+          "Research Engineer - Scaling",
+          "Infrastructure Engineer - ML",
+          "Software Engineer - Training Infra"
+        ],
+        "careers_url": "https://openai.com/careers"
+      },
+      {
+        "name": "NVIDIA",
+        "why_fit": "候选人 GPU 系统软件、NCCL、CUDA、分布式训练经验高度匹配",
+        "hiring_signal": "2024 年持续大规模招聘，NeMo/Megatron 团队扩展，GPU infra 岗位激增",
+        "example_roles": [
+          "GPU Compute Engineer",
+          "ML Systems Software Engineer",
+          "CUDA Engineer"
+        ],
+        "careers_url": "https://nvidia.wd5.myworkdayjobs.com/"
+      },
+      {
+        "name": "Meta",
+        "why_fit": "大规模 PyTorch 分布式训练团队需要 FSDP/NCCL 专家，候选人论文有深度匹配",
+        "hiring_signal": "2024 年 AI infra 团队持续扩张，Llama 模型系列推动训练/推理 infra 招聘",
+        "example_roles": [
+          "AI Research Scientist - Systems",
+          "ML Infrastructure Engineer",
+          "Software Engineer - AI Systems"
+        ],
+        "careers_url": "https://www.metacareers.com/"
+      },
+      {
+        "name": "Together AI",
+        "why_fit": "专注 LLM 推理基础设施，候选人 vLLM/K8s/eBPF 经验直接命中",
+        "hiring_signal": "2024 年完成大规模融资，积极扩张 infra 和 research 团队",
+        "example_roles": [
+          "ML Infrastructure Engineer",
+          "Research Engineer",
+          "Systems Engineer"
+        ],
+        "careers_url": "https://www.together.ai/careers"
+      },
+      {
+        "name": "Lambda Labs",
+        "why_fit": "候选人已在 Lambda Labs 集群做过大量实验，熟悉其 Infra",
+        "hiring_signal": "2024 年 GPU Cloud 业务高速增长，持续招聘系统软件工程师",
+        "example_roles": [
+          "GPU Cloud Engineer",
+          "ML Systems Engineer",
+          "Infrastructure Engineer"
+        ],
+        "careers_url": "https://lambdalabs.com/careers"
+      },
+      {
+        "name": "Databricks (Mosaic ML)",
+        "why_fit": "需要分布式训练和推理系统专家，候选人的 Megatron-LM/FSDP 经验匹配",
+        "hiring_signal": "Mosaic ML 团队整合后持续招聘 ML systems 人才",
+        "example_roles": [
+          "ML Infrastructure Engineer",
+          "Research Engineer - ML Systems",
+          "Software Engineer - LLM Infra"
+        ],
+        "careers_url": "https://www.databricks.com/company/careers"
+      }
+    ],
+    "hong_kong": [
+      {
+        "name": "HKUST AI Research Center",
+        "why_fit": "候选人有丰富学术发表经验，HKUST 有多个 AI 实验室招收 research engineer",
+        "hiring_signal": "香港政府大力支持 AI 研究，InnoHK 项目持续招聘",
+        "example_roles": [
+          "Research Engineer",
+          "AI Systems Engineer"
+        ],
+        "careers_url": "https://hkust.edu.hk/careers"
+      },
+      {
+        "name": "Sino Group (AI Lab)",
+        "why_fit": "香港地产集团数字化转型，AI infra 需求增长",
+        "hiring_signal": "正在组建 AI 团队进行智能楼宇和 IoT 项目",
+        "example_roles": [
+          "AI Engineer",
+          "ML Infrastructure Engineer"
+        ],
+        "careers_url": "https://www.sino.com/careers"
+      },
+      {
+        "name": "ASTRI (香港应用科技研究院)",
+        "why_fit": "政府资助的 AI 研究机构，基础设施和系统方向匹配候选人",
+        "hiring_signal": "持续招聘 AI 系统方向 research engineer",
+        "example_roles": [
+          "Research Engineer - AI",
+          "Systems Engineer"
+        ],
+        "careers_url": "https://www.astri.org/careers"
+      }
+    ],
+    "singapore": [
+      {
+        "name": "ByteDance (Singapore)",
+        "why_fit": "大规模分布式训练需求，候选人 NCCL/Megatron/FSDP 经验匹配",
+        "hiring_signal": "新加坡作为亚太总部持续扩张 AI infra 团队",
+        "example_roles": [
+          "ML Infrastructure Engineer",
+          "Research Engineer - Systems",
+          "GPU Compute Engineer"
+        ],
+        "careers_url": "https://careers.bytedance.com/"
+      },
+      {
+        "name": "Sea Group (Garena/Shopee)",
+        "why_fit": "东南亚最大科技公司，AI 推荐/搜索系统需要 ML infra 人才",
+        "hiring_signal": "AI 团队持续扩建，招聘 ML 系统方向工程师",
+        "example_roles": [
+          "ML Engineer - Infra",
+          "Research Engineer",
+          "AI Infrastructure Engineer"
+        ],
+        "careers_url": "https://careers.shopee.sg/"
+      },
+      {
+        "name": "GovTech Singapore",
+        "why_fit": "新加坡政府 AI 项目，需要安全的 ML 基础设施（候选人 side-channel 研究背景加分）",
+        "hiring_signal": "智慧国计划持续推进，AI 系统团队扩编",
+        "example_roles": [
+          "AI Engineer",
+          "ML Systems Engineer"
+        ],
+        "careers_url": "https://www.govtech.gov.sg/careers/"
+      },
+      {
+        "name": "AI Singapore",
+        "why_fit": "国家 AI 研究计划，需要 research engineer 做 LLM 基础设施",
+        "hiring_signal": "SEA-LION 项目持续扩张，招聘研究工程人才",
+        "example_roles": [
+          "Research Engineer",
+          "ML Systems Engineer"
+        ],
+        "careers_url": "https://aisingapore.org/careers/"
+      }
+    ],
+    "japan": [
+      {
+        "name": "Preferred Networks (PFN)",
+        "why_fit": "日本顶级 AI 公司，自研深度学习框架和分布式训练系统",
+        "hiring_signal": "持续招聘 ML 系统工程师，在千叶建设大规模 GPU 集群",
+        "example_roles": [
+          "Research Engineer - ML Systems",
+          "Infrastructure Engineer",
+          "GPU Compute Engineer"
+        ],
+        "careers_url": "https://www.preferred-networks.jp/en/careers"
+      },
+      {
+        "name": "Sony AI",
+        "why_fit": "AI 研究和应用并重，需要 research engineer 做 LLM 训练/推理系统",
+        "hiring_signal": "Sony AI 团队持续扩张，在东京招聘研究工程师",
+        "example_roles": [
+          "Research Engineer",
+          "ML Systems Engineer"
+        ],
+        "careers_url": "https://www.sony.com/en/SonyInfo/careers/"
+      },
+      {
+        "name": "Rakuten (AI Lab)",
+        "why_fit": "日本最大电商，大规模 ML 推荐系统需要 infra 人才",
+        "hiring_signal": "AI 团队持续招聘，投资 GPU 基础设施",
+        "example_roles": [
+          "ML Infrastructure Engineer",
+          "AI Engineer"
+        ],
+        "careers_url": "https://corp.rakuten.co.jp/careers/"
+      },
+      {
+        "name": "Toyota Research Institute - Advanced Development (Tokyo)",
+        "why_fit": "自动驾驶 AI 系统需要分布式训练和 GPU 基础设施专家",
+        "hiring_signal": "TRI Tokyo 持续招聘 AI 系统方向人才",
+        "example_roles": [
+          "Research Engineer",
+          "ML Systems Engineer"
+        ],
+        "careers_url": "https://www.tri.global/careers"
+      }
+    ],
+    "europe": [
+      {
+        "name": "Mistral AI (France)",
+        "why_fit": "欧洲最热 AI 公司，需要 LLM 训练/推理系统专家，候选人 FSDP/Megatron 经验匹配",
+        "hiring_signal": "2024 年估值超 60 亿欧元，大规模招聘 research engineer 和 infra 工程师",
+        "example_roles": [
+          "Research Engineer - Training Infra",
+          "ML Infrastructure Engineer",
+          "Systems Engineer"
+        ],
+        "careers_url": "https://mistral.ai/careers"
+      },
+      {
+        "name": "DeepMind (London)",
+        "why_fit": "需要研究工程师做大规模分布式训练系统，候选人论文方向高度匹配",
+        "hiring_signal": "Google 持续投资，DeepMind 团队扩张 ML 系统方向",
+        "example_roles": [
+          "Research Engineer - ML Systems",
+          "Software Engineer - Infrastructure"
+        ],
+        "careers_url": "https://deepmind.com/careers"
+      },
+      {
+        "name": "Hugging Face (Paris)",
+        "why_fit": "LLM 推理/部署平台，候选人 vLLM/K8s/eBPF 经验完美匹配",
+        "hiring_signal": "持续融资扩张，招聘 ML 系统和基础设施工程师",
+        "example_roles": [
+          "ML Infrastructure Engineer",
+          "Research Engineer",
+          "Software Engineer - ML Infra"
+        ],
+        "careers_url": "https://huggingface.co/careers"
+      },
+      {
+        "name": "Samsung AI Center (Cambridge/Paris)",
+        "why_fit": "AI 研究与系统工程结合，需要分布式训练和 LLM 部署专家",
+        "hiring_signal": "欧洲研发中心持续扩张 AI 团队",
+        "example_roles": [
+          "Research Engineer",
+          "ML Systems Engineer"
+        ],
+        "careers_url": "https://research.samsung.com/careers"
+      },
+      {
+        "name": "Cerebras (UK Office)",
+        "why_fit": "AI 芯片公司需要系统软件工程师，候选人底层系统和分布式训练经验匹配",
+        "hiring_signal": "UK 办公室扩张，招聘系统软件工程师",
+        "example_roles": [
+          "Systems Software Engineer",
+          "ML Compiler Engineer"
+        ],
+        "careers_url": "https://www.cerebras.net/careers"
+      }
+    ]
+  }
 }
