@@ -443,6 +443,7 @@ def create_app(config: Config) -> FastAPI:
             "last": scheduler.get_last_run(),
             "next": scheduler.get_next_run(),
         }
+        freshness_info = {"hours": int(config.freshness.get("max_age_hours", 24))}
 
         return render(
             "onboarding.html",
@@ -455,6 +456,7 @@ def create_app(config: Config) -> FastAPI:
             pipeline_running=pipeline_state["running"],
             resume_files=resume_files,
             schedule=schedule_info,
+            freshness=freshness_info,
         )
 
     @app.post("/onboarding/submit")
@@ -623,6 +625,22 @@ def create_app(config: Config) -> FastAPI:
     @app.post("/schedule/set")
     def set_schedule(hours: int = Form(...)):
         scheduler.set_schedule_hours(hours)
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    @app.post("/freshness/set")
+    def set_freshness(hours: int = Form(...)):
+        """设置抓取时间窗 (config.freshness 会自动读这个值)."""
+        import json as _json
+        settings_path = config.path("resume_dir").parent / "settings.json"
+        try:
+            data = _json.loads(settings_path.read_text()) if settings_path.exists() else {}
+        except Exception:
+            data = {}
+        data["freshness_hours"] = max(1, int(hours))
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(
+            _json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+        )
         return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/pipeline/cancel")

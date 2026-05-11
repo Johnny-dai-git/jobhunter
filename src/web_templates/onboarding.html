@@ -312,6 +312,44 @@
     </div>
   </div>
 
+  {# ============ 抓取时间窗 ============ #}
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <h3 style="margin:0;">🕐 抓取时间窗</h3>
+      <span style="font-size:11px; color:var(--color-text-muted);">只看多久内发布的岗位</span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.06em;">当前</div>
+        <div style="font-weight:600; margin-top:2px;">
+          {% if freshness.hours <= 24 %}24 小时内
+          {% elif freshness.hours <= 72 %}3 天内
+          {% elif freshness.hours <= 168 %}一周内
+          {% elif freshness.hours <= 336 %}两周内
+          {% elif freshness.hours <= 720 %}一个月内
+          {% else %}{{ freshness.hours }} 小时{% endif %}
+        </div>
+      </div>
+
+      <form method="post" action="/freshness/set" style="margin:0; margin-left:auto; display:flex; gap:8px; align-items:center;">
+        <label style="font-size:12px; color:var(--color-text-muted); margin-right:4px;">时间窗</label>
+        <select name="hours" style="padding:6px 10px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm); font-size:13px;">
+          <option value="24"  {% if freshness.hours == 24  %}selected{% endif %}>24 小时内</option>
+          <option value="72"  {% if freshness.hours == 72  %}selected{% endif %}>3 天内</option>
+          <option value="168" {% if freshness.hours == 168 %}selected{% endif %}>一周内</option>
+          <option value="336" {% if freshness.hours == 336 %}selected{% endif %}>两周内</option>
+          <option value="720" {% if freshness.hours == 720 %}selected{% endif %}>一个月内</option>
+        </select>
+        <button type="submit" class="btn btn-secondary btn-sm">保存</button>
+      </form>
+    </div>
+
+    <div style="font-size:11px; color:var(--color-text-dim); margin-top:10px;">
+      💡 影响下次 collect 时给招聘平台传的 "发布时间" 过滤参数. 时间窗越长,新岗位越多但旧的也会被翻出来.
+    </div>
+  </div>
+
   {% if pipeline_running %}
   <div class="card" style="background:#fef3c7; border-color:#fde68a;">
     ⚠️ 当前有流水线在跑. 提交新画像会自动中断它, 然后用新画像重新跑.

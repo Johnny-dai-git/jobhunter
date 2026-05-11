@@ -101,7 +101,19 @@ class Config:
 
     @property
     def freshness(self) -> dict[str, Any]:
-        return self.raw.get("freshness", {})
+        base = dict(self.raw.get("freshness", {}))
+        # web UI 通过 data/settings.json 覆盖
+        try:
+            import json as _json
+            settings_path = self.project_root / "data" / "settings.json"
+            if settings_path.exists():
+                data = _json.loads(settings_path.read_text(encoding="utf-8"))
+                v = data.get("freshness_hours")
+                if v is not None:
+                    base["max_age_hours"] = int(v)
+        except Exception:
+            pass
+        return base
 
     @property
     def digest(self) -> dict[str, Any]:
