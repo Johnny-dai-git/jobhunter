@@ -9,6 +9,7 @@ from sqlalchemy import select
 from .collectors import CollectedJob, get_collector
 from .config import Config
 from .db import Job, JobStatus, session_scope
+from .profile_analyzer import load_profile
 
 
 PLATFORMS = [
@@ -34,12 +35,32 @@ def matches_excluded(cj: CollectedJob, excluded: list[str]) -> str | None:
 
 
 def collect_all(config: Config, platforms: Optional[list[str]] = None) -> dict:
-    """跑指定平台 (默认所有 enabled) 的采集器,返回统计."""
+    """跑指定平台 (默认所有 enabled) 的采集器,返回统计.
+
+    搜索 keywords 来源优先级:
+    1. data/resume/_profile.json (analyze-profile 生成的 Top-5 搜索 title)
+    2. config.yaml preferences.job_titles (fallback)
+    """
     platforms = platforms or PLATFORMS
-    keywords = config.preferences.get("job_titles") or []
-    locations = config.preferences.get("locations") or []
+
+    profile = load_profile(config)
+    if profile and profile.top_directions:
+        keywords = profile.unique_search_titles(limit=5)
+        locations = (
+            profile.target_locations
+            or config.preferences.get("locations")
+            or []
+        )
+        print(f"[collect] 用 profile 推断的搜索 title: {keywords}")
+    else:
+        keywords = config.preferences.get("job_titles") or []
+        locations = config.preferences.get("locations") or []
+        print(f"[collect] 用 config.yaml 里的 job_titles: {keywords}")
+
     if not keywords or not locations:
-        raise RuntimeError("config.preferences 里需要先填 job_titles 和 locations")
+        raise RuntimeError(
+            "找不到搜索关键词 — 先跑 `analyze-profile` 或在 config.yaml 里填 job_titles + locations"
+        )
 
     excluded = config.preferences.get("exclude_keywords") or []
     db_path = config.path("db_path")

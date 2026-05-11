@@ -16,6 +16,7 @@ from .cover_letter import write_cover_letter
 from .db import Job, JobStatus, init_db, session_scope
 from .digest import run_digest
 from .matcher import score_pending
+from .profile_analyzer import analyze_profile as _analyze_profile, load_profile, save_profile
 from .resume_reader import load_cached, parse_and_cache
 from .tailor import tailor_for_job
 from .tracker import mark_applied as _mark_applied
@@ -58,6 +59,56 @@ def parse_resume():
     resume_dir = config.path("resume_dir")
     src, text = parse_and_cache(resume_dir)
     console.print(f"[green]✓[/green] 已解析: {src.name} ({len(text)} 字符)")
+
+
+@cli.command("analyze-profile")
+@click.option("--force", is_flag=True, help="覆盖现有 _profile.json 重新分析")
+def analyze_profile_cmd(force):
+    """让 DeepSeek 读你的简历, 推断 Top-5 能力方向 + 真实搜索 title.
+
+    结果存到 data/resume/_profile.json. 后续 collect 会优先用它的 titles
+    取代 config.yaml 里的 job_titles.
+    """
+    config = _load_config()
+    existing = load_profile(config)
+    if existing and not force:
+        console.print("[yellow]已有 profile 缓存, 加 --force 强制重新分析.[/yellow]")
+        _print_profile(existing)
+        return
+
+    console.print("[cyan]→ DeepSeek 正在读你的简历...[/cyan]")
+    profile = _analyze_profile(config)
+    path = save_profile(config, profile)
+    console.print(f"[green]✓[/green] 已保存到 {path}\n")
+    _print_profile(profile)
+
+
+def _print_profile(profile):
+    """打印 profile 结果给用户看."""
+    console.print(f"[bold]核心定位:[/bold] {profile.summary}\n")
+
+    tbl = Table(title="Top 5 能力方向", show_lines=True)
+    tbl.add_column("#", style="bold")
+    tbl.add_column("方向")
+    tbl.add_column("为什么 fit", style="dim")
+    tbl.add_column("搜索 title")
+    for i, d in enumerate(profile.top_directions, 1):
+        tbl.add_row(
+            str(i),
+            d.name,
+            d.why_match,
+            "\n".join(d.search_titles),
+        )
+    console.print(tbl)
+
+    unique = profile.unique_search_titles(limit=5)
+    console.print(
+        f"\n[bold]去重后的 Top 5 搜索 title (collect 会用这些):[/bold]\n  "
+        + ", ".join(unique)
+    )
+    console.print(
+        f"\n[bold]目标地点:[/bold] " + ", ".join(profile.target_locations)
+    )
 
 
 @cli.command()

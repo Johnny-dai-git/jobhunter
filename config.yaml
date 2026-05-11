@@ -27,6 +27,9 @@ model:
   trends:
     provider: deepseek
     name: deepseek-chat
+  profile_analyzer:
+    provider: deepseek
+    name: deepseek-chat
   max_tokens: 4096
 
 # ====== 求职偏好 ======
@@ -107,13 +110,13 @@ digest:
   enabled: true
   top_n: 15
   # 收件邮箱
-  to: ""
-  # SMTP (可选,留空则只生成 HTML 文件不发邮件)
+  to: yxd429@case.edu
+  # SMTP
   smtp:
     host: smtp.gmail.com
     port: 587
-    username: ""
-    # 应用专用密码 (Gmail 需要),建议放在 .env 里读
+    username: pittsburghdaidai@gmail.com
+    # 应用专用密码 (Gmail 需要),从 .env 里读 SMTP_PASSWORD
     password_env: SMTP_PASSWORD
 
 # 注: job-agent 不自动投递. 你看完邮件,在网站上手动投完,跑 `mark-applied --job-id N` 记录即可.

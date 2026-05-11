@@ -1,0 +1,57 @@
+{
+  "top_directions": [
+    {
+      "name": "分布式 ML 训练性能优化",
+      "why_match": "DYNAMIX 项目用 PPO 调度器实现 46% wall-clock speedup; PRISM 项目 AllReduce 梯度分类实现 15-21% LLM 吞吐提升",
+      "search_titles": [
+        "Machine Learning Engineer",
+        "Software Engineer, Machine Learning",
+        "Distributed Systems Engineer"
+      ]
+    },
+    {
+      "name": "LLM 推理服务工程",
+      "why_match": "独立设计 K8s LLM 推理平台(NGINX→FastAPI→vLLM),GitOps CI/CD 50+部署,91.3%峰值 GPU 利用率",
+      "search_titles": [
+        "Machine Learning Engineer",
+        "ML Platform Engineer",
+        "Research Engineer"
+      ]
+    },
+    {
+      "name": "eBPF 与系统可观测性",
+      "why_match": "PSketch:首个 in-kernel eBPF 优先级sketch,96% Top-K精度;<1.1%开销@10Gbps;eHashPipe 10-14×更细时间粒度",
+      "search_titles": [
+        "Systems Engineer",
+        "Performance Engineer",
+        "Site Reliability Engineer"
+      ]
+    },
+    {
+      "name": "云原生 ML 平台 (Kubernetes)",
+      "why_match": "自建 K8s 平台 (ArgoCD+GitHub Actions),GPU time-slicing/MIG/HPA 配置;DCGM+Prometheus+Grafana 4层观测",
+      "search_titles": [
+        "ML Platform Engineer",
+        "Cloud Infrastructure Engineer",
+        "Site Reliability Engineer"
+      ]
+    },
+    {
+      "name": "GPU 内核与分布式系统安全",
+      "why_match": "训练阶段旁路攻击重建 DNN 架构,Intel RAPL+网络包侧信道;>97%层类型准确率,20种模型验证",
+      "search_titles": [
+        "Research Engineer",
+        "Software Engineer, Machine Learning",
+        "Systems Engineer"
+      ]
+    }
+  ],
+  "target_locations": [
+    "San Francisco Bay Area",
+    "New York",
+    "Seattle",
+    "United States",
+    "Remote"
+  ],
+  "summary": "AI Infrastructure 方向 PhD,专精分布式训练优化(PPO调度/AllReduce提速)、LLM serving 工程(K8s+vLLM)、eBPF 系统可观测,定位资深 ML/系统工程师或研究工程师"
+}

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 每日 cron 入口: 借鉴 n8n 工作流的 Schedule Trigger
+# 每日 cron 入口
 #
 # 安装方法 (Linux/macOS):
 #   crontab -e
-# 然后加一行 (每天早上 7:30 跑):
+# 然后加一行 (每天早上 7:30):
 #   30 7 * * *  /home/johnny/Documents/Claude/Projects/job-agent/scripts/daily.sh >> /tmp/job-agent.log 2>&1
 
 set -euo pipefail
@@ -11,12 +11,12 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-# 激活虚拟环境
-if [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-fi
+# 激活 conda 环境 (cron 启动时 PATH 不含 conda)
+CONDA_BASE="${CONDA_BASE:-/home/johnny/miniconda3}"
+# shellcheck disable=SC1091
+source "$CONDA_BASE/etc/profile.d/conda.sh"
+conda activate job-agent
 
-# 跑全流程
 echo "=== $(date) Job Agent daily run ==="
-python3 -m src.main run-all
+python -m src.main run-all
 echo "=== Done $(date) ==="
