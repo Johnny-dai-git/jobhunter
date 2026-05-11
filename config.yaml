@@ -147,7 +147,8 @@ collectors:
     max_per_run: 12                        # ~$0.06 一次
 
   glassdoor:
-    enabled: true
+    # 禁用: Apify 上无便宜可用的 jobs scraper (都偏评论/薪资类)
+    enabled: false
     backend: playwright
     cookie_file: data/cookies/glassdoor.json
     max_per_run: 20
@@ -169,11 +170,10 @@ collectors:
     max_per_run: 15
 
   wellfound:
-    enabled: true
+    # 禁用: 主流 actor (clearpath / mscraper / radeance) 都要月租 $7-30
+    enabled: false
     backend: apify
     apify:
-      # mscraper 要求月租, clearpath 之前是 actor 自己额度限制
-      # radeance 是纯 PPR ($0.05/job),无月租
       actor: radeance/wellfound-job-listings-scraper
       input_overrides: {}
     max_per_run: 15
