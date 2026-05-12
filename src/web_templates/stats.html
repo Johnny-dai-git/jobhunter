@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}<span class="zh">求职统计</span><span class="en">Job Stats</span> · JobHunter{% endblock %}
+{% block content %}
+<style>
+  .stats-wrap { max-width: 980px; margin: 0 auto; }
+
+  /* ── 页头 ── */
+  .stats-head { margin-bottom: 28px; }
+  .stats-head h1 { font-size: 24px; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .stats-head p { margin: 0; color: var(--color-text-muted); font-size: 14px; }
+
+  /* ── 顶部大指标 ── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px; }
+  .kpi-card {
+    background: white; border: 1px solid var(--color-border);
+    border-radius: var(--radius); padding: 18px 16px;
+    box-shadow: var(--shadow-sm); text-align: center;
+    position: relative; overflow: hidden;
+  }
+  .kpi-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--kpi-color, var(--color-border));
+  }
+  .kpi-num { font-size: 32px; font-weight: 900; line-height: 1; margin-bottom: 4px; color: var(--kpi-color, var(--color-text)); }
+  .kpi-label { font-size: 12px; font-weight: 600; color: var(--color-text-muted); }
+  .kpi-sub { font-size: 11px; color: var(--color-text-dim); margin-top: 3px; }
+
+  /* ── 漏斗图 ── */
+  .funnel-section { background: white; border: 1px solid var(--color-border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow-sm); }
+  .funnel-title { font-size: 15px; font-weight: 700; margin: 0 0 20px; }
+  .funnel-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .funnel-row { display: flex; align-items: center; gap: 14px; }
+  .funnel-bar-wrap { flex: 1; }
+  .funnel-bar-bg { background: #f1f5f9; border-radius: 6px; height: 36px; position: relative; overflow: hidden; }
+  .funnel-bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding: 0 12px; transition: width 0.6s ease; min-width: 2px; }
+  .funnel-bar-text { font-size: 13px; font-weight: 700; color: white; white-space: nowrap; }
+  .funnel-label { width: 120px; font-size: 13px; font-weight: 600; text-align: right; color: var(--color-text-muted); flex-shrink: 0; }
+  .funnel-count { width: 48px; font-size: 18px; font-weight: 800; text-align: center; flex-shrink: 0; }
+  .funnel-rate { width: 48px; font-size: 11px; color: var(--color-text-dim); text-align: left; flex-shrink: 0; }
+  .funnel-arrow { color: var(--color-border-strong); font-size: 11px; text-align: center; margin: -2px 0; padding-left: 134px; }
+
+  /* ── 双栏 ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .panel { background: white; border: 1px solid var(--color-border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-sm); }
+  .panel-title { font-size: 14px; font-weight: 700; margin: 0 0 16px; }
+
+  /* ── 时间轴 ── */
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+  .tl-item { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--color-border); }
+  .tl-item:last-child { border-bottom: none; }
+  .tl-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .tl-info { flex: 1; min-width: 0; }
+  .tl-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-meta { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
+  .tl-badge { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+
+  /* ── 平台分布 ── */
+  .dist-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .dist-row:last-child { margin-bottom: 0; }
+  .dist-name { width: 90px; font-size: 12px; font-weight: 600; color: var(--color-text-muted); text-align: right; flex-shrink: 0; }
+  .dist-bar-wrap { flex: 1; background: #f1f5f9; border-radius: 4px; height: 20px; overflow: hidden; }
+  .dist-bar { height: 100%; background: var(--color-accent); border-radius: 4px; display: flex; align-items: center; padding-left: 8px; transition: width 0.5s ease; }
+  .dist-bar span { font-size: 11px; font-weight: 700; color: white; }
+  .dist-num { width: 28px; font-size: 12px; font-weight: 700; color: var(--color-text); flex-shrink: 0; }
+
+  /* ── 空态 ── */
+  .empty-panel { text-align: center; padding: 32px 16px; color: var(--color-text-muted); font-size: 13px; }
+  .empty-panel .ei { font-size: 28px; margin-bottom: 8px; }
+
+  @media (max-width: 760px) {
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .funnel-label { width: 80px; }
+  }
+  @media (max-width: 480px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+<div class="stats-wrap">
+
+  <div class="stats-head">
+    <h1>📈 <span class="zh">求职统计看板</span><span class="en">Job Search Dashboard</span></h1>
+    <p>
+      <span class="zh">投递漏斗、面试转化率、Offer 情况一览。</span>
+      <span class="en">Application funnel, interview conversion rates, and offer overview.</span>
+    </p>
+  </div>
+
+  <!-- KPI 卡片 -->
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--kpi-color:#4f46e5;">
+      <div class="kpi-num">{{ s.applied_total }}</div>
+      <div class="kpi-label"><span class="zh">已投递</span><span class="en">Applied</span></div>
+      <div class="kpi-sub"><span class="zh">累计</span><span class="en">total</span></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#0891b2;">
+      <div class="kpi-num">{{ s.in_process }}</div>
+      <div class="kpi-label"><span class="zh">进行中</span><span class="en">In Process</span></div>
+      <div class="kpi-sub"><span class="zh">面试阶段</span><span class="en">interviewing</span></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#16a34a;">
+      <div class="kpi-num">{{ s.offers }}</div>
+      <div class="kpi-label">Offer</div>
+      <div class="kpi-sub">
+        {% if s.applied_total > 0 %}
+          {{ "%.1f"|format(s.offers / s.applied_total * 100) }}%
+        {% else %}—{% endif %}
+      </div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#dc2626;">
+      <div class="kpi-num">{{ s.rejections }}</div>
+      <div class="kpi-label"><span class="zh">被拒</span><span class="en">Rejected</span></div>
+      <div class="kpi-sub">
+        {% if s.applied_total > 0 %}
+          {{ "%.1f"|format(s.rejections / s.applied_total * 100) }}%
+        {% else %}—{% endif %}
+      </div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#ca8a04;">
+      <div class="kpi-num">{{ s.response_rate }}</div>
+      <div class="kpi-label"><span class="zh">回复率</span><span class="en">Response Rate</span></div>
+      <div class="kpi-sub"><span class="zh">收到回复</span><span class="en">got reply</span></div>
+    </div>
+  </div>
+
+  <!-- 漏斗图 -->
+  <div class="funnel-section">
+    <div class="funnel-title">
+      🔽 <span class="zh">投递漏斗</span><span class="en">Application Funnel</span>
+    </div>
+    {% set funnel = s.funnel %}
+    {% set max_n = funnel[0].count if funnel and funnel[0].count > 0 else 1 %}
+    <div class="funnel-wrap">
+      {% for stage in funnel %}
+      <div class="funnel-row">
+        <div class="funnel-label">
+          <span class="zh">{{ stage.label_zh }}</span>
+          <span class="en">{{ stage.label_en }}</span>
+        </div>
+        <div class="funnel-count" style="color:{{ stage.color }};">{{ stage.count }}</div>
+        <div class="funnel-bar-wrap">
+          <div class="funnel-bar-bg">
+            <div class="funnel-bar-fill" style="width:{{ (stage.count / max_n * 100)|int }}%; background:{{ stage.color }};">
+              {% if stage.count > 0 %}
+                <span class="funnel-bar-text">{{ stage.count }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="funnel-rate">
+          {% if not loop.first and funnel[loop.index0-1].count > 0 %}
+            {{ "%.0f"|format(stage.count / funnel[loop.index0-1].count * 100) }}%
+          {% endif %}
+        </div>
+      </div>
+      {% if not loop.last %}
+      <div class="funnel-arrow">↓</div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- 双栏：时间轴 + 平台分布 -->
+  <div class="two-col">
+
+    <!-- 最近动态 -->
+    <div class="panel">
+      <div class="panel-title">
+        🕐 <span class="zh">最近动态</span><span class="en">Recent Activity</span>
+      </div>
+      {% if recent %}
+        <div class="timeline">
+          {% for item in recent %}
+          <div class="tl-item">
+            <div class="tl-dot" style="background:{{ item.color }};"></div>
+            <div class="tl-info">
+              <div class="tl-title">
+                <a href="/job/{{ item.job_id }}" style="color:inherit; text-decoration:none;">{{ item.title }}</a>
+              </div>
+              <div class="tl-meta">{{ item.company }} · {{ item.date }}</div>
+            </div>
+            <span class="tl-badge" style="background:{{ item.bg }}; color:{{ item.color }};">
+              <span class="zh">{{ item.label_zh }}</span>
+              <span class="en">{{ item.label_en }}</span>
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-panel">
+          <div class="ei">📭</div>
+          <span class="zh">还没有投递记录</span>
+          <span class="en">No activity yet</span>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- 右侧：来源分布 + 进行中列表 -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <!-- 平台来源 -->
+      <div class="panel">
+        <div class="panel-title">
+          🌐 <span class="zh">岗位来源</span><span class="en">Job Sources</span>
+        </div>
+        {% if s.by_source %}
+          {% set max_src = s.by_source[0].count %}
+          {% for src in s.by_source %}
+          <div class="dist-row">
+            <div class="dist-name">{{ src.source }}</div>
+            <div class="dist-bar-wrap">
+              <div class="dist-bar" style="width:{{ (src.count / max_src * 100)|int }}%;">
+                <span>{{ src.count }}</span>
+              </div>
+            </div>
+            <div class="dist-num">{{ src.count }}</div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-panel"><span class="zh">暂无数据</span><span class="en">No data yet</span></div>
+        {% endif %}
+      </div>
+
+      <!-- 进行中面试 -->
+      {% if s.in_process_list %}
+      <div class="panel">
+        <div class="panel-title">
+          🎤 <span class="zh">当前面试中</span><span class="en">Currently Interviewing</span>
+        </div>
+        <div class="timeline">
+          {% for item in s.in_process_list %}
+          <div class="tl-item">
+            <div class="tl-dot" style="background:{{ item.color }};"></div>
+            <div class="tl-info">
+              <div class="tl-title">
+                <a href="/job/{{ item.job_id }}" style="color:inherit; text-decoration:none;">{{ item.title }}</a>
+              </div>
+              <div class="tl-meta">{{ item.company }}</div>
+            </div>
+            <span class="tl-badge" style="background:{{ item.bg }}; color:{{ item.color }};">
+              <span class="zh">{{ item.label_zh }}</span>
+              <span class="en">{{ item.label_en }}</span>
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <!-- Offer 详情（有 Offer 时才显示） -->
+  {% if s.offer_list %}
+  <div class="panel" style="margin-bottom:20px; border-left:4px solid #16a34a;">
+    <div class="panel-title" style="color:#15803d;">
+      🎉 <span class="zh">Offer 详情</span><span class="en">Offers Received</span>
+    </div>
+    <div class="timeline">
+      {% for item in s.offer_list %}
+      <div class="tl-item">
+        <div class="tl-dot" style="background:#16a34a;"></div>
+        <div class="tl-info">
+          <div class="tl-title">
+            <a href="/job/{{ item.job_id }}" style="color:inherit; text-decoration:none;">{{ item.title }}</a>
+          </div>
+          <div class="tl-meta">{{ item.company }} · {{ item.date }}</div>
+        </div>
+        <span class="tl-badge" style="background:var(--color-success-light); color:#15803d;">
+          🎉 Offer
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 底部链接 -->
+  <div style="text-align:center; margin-bottom:32px;">
+    <a href="/applied" class="btn btn-secondary">
+      <span class="zh">查看所有投递 →</span><span class="en">View all applications →</span>
+    </a>
+  </div>
+
+</div>
+{% endblock %}

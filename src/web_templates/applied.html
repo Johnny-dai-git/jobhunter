@@ -1,34 +1,73 @@
 {% extends "base.html" %}
-{% block title %}已投递 · JobHunter{% endblock %}
+{% block title %}<span class="zh">投递追踪</span><span class="en">Applications</span> · JobHunter{% endblock %}
 {% block content %}
+<style>
+  .stage-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    border: 1px solid currentColor; cursor: pointer; background: white;
+    transition: opacity 0.15s; opacity: 0.75; line-height: 1.4;
+    white-space: nowrap;
+  }
+  .stage-btn:hover { opacity: 1; }
+  .stage-form { display: inline; }
+  .stages-wrap { display: flex; gap: 4px; flex-wrap: wrap; }
+</style>
 
+<!-- 头部统计 -->
 <div class="card" style="background: linear-gradient(135deg, var(--color-accent-light) 0%, #fff 100%);">
-  <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
     <div>
-      <h2 style="margin:0;">📬 投递追踪</h2>
+      <h2 style="margin:0;">
+        📬 <span class="zh">投递追踪</span><span class="en">Application Tracker</span>
+      </h2>
       <div style="color:var(--color-text-muted); font-size:13px; margin-top:4px;">
-        所有已投递 / 面试中 / 已收到 offer / 被拒的岗位 + 对应简历
+        <span class="zh">所有已投递、面试中、Offer 和被拒的岗位。</span>
+        <span class="en">All applied, interviewing, offered, and rejected positions.</span>
       </div>
     </div>
-    <div style="display:flex; gap:6px;">
-      <a href="?sort=applied_at" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'applied_at' %}800{% else %}600{% endif %};">按投递时间</a>
-      <a href="?sort=score" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'score' %}800{% else %}600{% endif %};">按分数</a>
-      <a href="?sort=status" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'status' %}800{% else %}600{% endif %};">按状态</a>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <a href="/stats" class="btn btn-secondary btn-sm">
+        📈 <span class="zh">统计看板</span><span class="en">Stats</span>
+      </a>
+      <a href="?sort=applied_at" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'applied_at' %}800{% else %}600{% endif %};">
+        <span class="zh">按日期</span><span class="en">By date</span>
+      </a>
+      <a href="?sort=status" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'status' %}800{% else %}600{% endif %};">
+        <span class="zh">按阶段</span><span class="en">By stage</span>
+      </a>
+      <a href="?sort=score" class="btn btn-secondary btn-sm" style="font-weight:{% if sort == 'score' %}800{% else %}600{% endif %};">
+        <span class="zh">按分数</span><span class="en">By score</span>
+      </a>
     </div>
   </div>
-  <div style="margin-top:12px; display:flex; gap:16px; font-size:13px; color:var(--color-text-muted);">
-    {% set counts = namespace(applied=0, interview=0, offer=0, rejected=0) %}
-    {% for j in jobs %}
-      {% if j.status == 'applied' %}{% set counts.applied = counts.applied + 1 %}
-      {% elif j.status == 'interview' %}{% set counts.interview = counts.interview + 1 %}
-      {% elif j.status == 'offer' %}{% set counts.offer = counts.offer + 1 %}
-      {% elif j.status == 'rejected' %}{% set counts.rejected = counts.rejected + 1 %}{% endif %}
-    {% endfor %}
-    <span><strong style="color:var(--color-text);">{{ counts.applied }}</strong> 已投</span>
-    <span><strong style="color:var(--color-text);">{{ counts.interview }}</strong> 面试中</span>
-    <span><strong style="color:#15803d;">{{ counts.offer }}</strong> Offer</span>
-    <span><strong style="color:var(--color-text-muted);">{{ counts.rejected }}</strong> 被拒</span>
-    <span style="margin-left:auto;">共 {{ total }} 个</span>
+
+  <!-- 快速计数行 -->
+  {% set sm = stage_meta %}
+  {% set cnt = namespace(applied=0, phone=0, hr=0, hm=0, final=0, offer=0, rej=0) %}
+  {% for j in jobs %}
+    {% if j.status == 'applied' %}{% set cnt.applied = cnt.applied + 1 %}
+    {% elif j.status == 'phone_screen' %}{% set cnt.phone = cnt.phone + 1 %}
+    {% elif j.status in ('hr_interview','interview') %}{% set cnt.hr = cnt.hr + 1 %}
+    {% elif j.status == 'hm_interview' %}{% set cnt.hm = cnt.hm + 1 %}
+    {% elif j.status == 'final_round' %}{% set cnt.final = cnt.final + 1 %}
+    {% elif j.status == 'offer' %}{% set cnt.offer = cnt.offer + 1 %}
+    {% elif j.status == 'rejected' %}{% set cnt.rej = cnt.rej + 1 %}{% endif %}
+  {% endfor %}
+
+  <div style="margin-top:14px; display:flex; gap:16px; flex-wrap:wrap; font-size:13px;">
+    <span><strong style="color:#4f46e5;">{{ cnt.applied }}</strong> <span class="zh">待回复</span><span class="en">Waiting</span></span>
+    <span style="color:var(--color-border-strong);">|</span>
+    <span><strong style="color:#0891b2;">{{ cnt.phone }}</strong> <span class="zh">电话筛</span><span class="en">Phone</span></span>
+    <span><strong style="color:#7c3aed;">{{ cnt.hr }}</strong> HR</span>
+    <span><strong style="color:#d97706;">{{ cnt.hm }}</strong> HM</span>
+    <span><strong style="color:#ea580c;">{{ cnt.final }}</strong> <span class="zh">终面</span><span class="en">Final</span></span>
+    <span style="color:var(--color-border-strong);">|</span>
+    <span><strong style="color:#16a34a;">{{ cnt.offer }}</strong> Offer 🎉</span>
+    <span><strong style="color:#94a3b8;">{{ cnt.rej }}</strong> <span class="zh">被拒</span><span class="en">Rejected</span></span>
+    <span style="margin-left:auto; color:var(--color-text-muted);">
+      <span class="zh">共 {{ total }} 条</span><span class="en">{{ total }} total</span>
+    </span>
   </div>
 </div>
 
@@ -37,42 +76,51 @@
     <thead>
       <tr>
         <th>Score</th>
-        <th>岗位</th>
-        <th>公司</th>
-        <th>投递日期</th>
-        <th>状态</th>
-        <th>简历 / 求职信</th>
-        <th>切换状态</th>
-        <th></th>
+        <th><span class="zh">岗位</span><span class="en">Job</span></th>
+        <th><span class="zh">公司</span><span class="en">Company</span></th>
+        <th><span class="zh">投递日期</span><span class="en">Applied</span></th>
+        <th><span class="zh">当前阶段</span><span class="en">Stage</span></th>
+        <th><span class="zh">材料</span><span class="en">Materials</span></th>
+        <th><span class="zh">推进阶段</span><span class="en">Move to</span></th>
       </tr>
     </thead>
     <tbody>
       {% for j in jobs %}
+      {% set meta = stage_meta.get(j.status, {'label_zh': j.status, 'label_en': j.status, 'color': '#64748b', 'bg': '#f1f5f9'}) %}
       <tr>
+        <!-- 分数 -->
         <td>
-          {% set s = j.match_score or 0 %}
-          {% if s >= 90 %}<span class="score score-90">{{ "%.0f"|format(s) }}</span>
-          {% elif s >= 75 %}<span class="score score-75">{{ "%.0f"|format(s) }}</span>
-          {% else %}<span class="score score-low">{{ "%.0f"|format(s) }}</span>{% endif %}
+          {% set sc = j.match_score or 0 %}
+          {% if sc >= 90 %}<span class="score score-90">{{ "%.0f"|format(sc) }}</span>
+          {% elif sc >= 75 %}<span class="score score-75">{{ "%.0f"|format(sc) }}</span>
+          {% else %}<span class="score score-low">{{ "%.0f"|format(sc) }}</span>{% endif %}
         </td>
-        <td style="max-width:280px;">
+
+        <!-- 岗位 -->
+        <td style="max-width:260px;">
           <a href="/job/{{ j.id }}" class="job-title">{{ j.title }}</a>
           <div class="job-summary">{{ j.location or '' }}{% if j.work_mode and j.work_mode != 'unspecified' %} · {{ j.work_mode }}{% endif %}</div>
         </td>
+
+        <!-- 公司 -->
         <td><span style="font-weight:500;">{{ j.company }}</span></td>
+
+        <!-- 投递日期 -->
         <td><span style="font-size:13px; color:var(--color-text-muted);">
-          {% if j.applied_at %}{{ j.applied_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}
+          {% if j.applied_at %}{{ j.applied_at.strftime('%m/%d') }}{% else %}—{% endif %}
         </span></td>
+
+        <!-- 当前阶段 badge -->
         <td>
-          {% if j.status == 'applied' %}<span class="badge badge-indigo">📨 已投</span>
-          {% elif j.status == 'interview' %}<span class="badge badge-yellow">🎤 面试中</span>
-          {% elif j.status == 'offer' %}<span class="badge badge-green">🎉 Offer</span>
-          {% elif j.status == 'rejected' %}<span class="badge badge-gray">✗ 被拒</span>
-          {% elif j.status == 'shortlisted' %}<span class="badge badge-yellow">⭐ 入围</span>
-          {% else %}<span class="badge badge-gray">{{ j.status }}</span>{% endif %}
+          <span class="badge" style="background:{{ meta.bg }}; color:{{ meta.color }};">
+            <span class="zh">{{ meta.label_zh }}</span>
+            <span class="en">{{ meta.label_en }}</span>
+          </span>
         </td>
+
+        <!-- 材料 -->
         <td>
-          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <div style="display:flex; gap:5px; flex-wrap:wrap;">
             {% if j.tailored_resume_pdf_path %}
               <a href="/job/{{ j.id }}/pdf" target="_blank" class="badge badge-indigo" style="text-decoration:none;">📄 PDF</a>
             {% endif %}
@@ -87,37 +135,56 @@
             {% endif %}
           </div>
         </td>
+
+        <!-- 推进阶段按钮 -->
         <td>
-          <div style="display:flex; gap:4px; flex-wrap:wrap;">
-            {% if j.status != 'interview' %}
-            <form method="post" action="/job/{{ j.id }}/status" style="margin:0;">
-              <input type="hidden" name="to" value="interview">
-              <button class="btn btn-secondary btn-sm" type="submit" title="标记面试中">→ 面试</button>
-            </form>
+          <div class="stages-wrap">
+            {% set next_stages = [] %}
+            {% if j.status == 'applied' %}
+              {% set next_stages = [('phone_screen','📞 电话筛','Phone Screen','#0891b2'),('hr_interview','HR 面','HR Ivw','#7c3aed'),('rejected','✗ 拒','Rej','#dc2626')] %}
+            {% elif j.status in ('phone_screen',) %}
+              {% set next_stages = [('hr_interview','HR 面','HR Ivw','#7c3aed'),('hm_interview','HM 面','HM Ivw','#d97706'),('rejected','✗ 拒','Rej','#dc2626')] %}
+            {% elif j.status in ('hr_interview','interview') %}
+              {% set next_stages = [('hm_interview','HM 面','HM Ivw','#d97706'),('final_round','终面','Final','#ea580c'),('rejected','✗ 拒','Rej','#dc2626')] %}
+            {% elif j.status == 'hm_interview' %}
+              {% set next_stages = [('final_round','终面','Final','#ea580c'),('offer','🎉 Offer','Offer','#16a34a'),('rejected','✗ 拒','Rej','#dc2626')] %}
+            {% elif j.status == 'final_round' %}
+              {% set next_stages = [('offer','🎉 Offer','Offer','#16a34a'),('rejected','✗ 拒','Rej','#dc2626')] %}
+            {% elif j.status in ('offer','rejected') %}
+              {% set next_stages = [] %}
+            {% else %}
+              {% set next_stages = [('phone_screen','📞 电话筛','Phone','#0891b2'),('hr_interview','HR 面','HR','#7c3aed'),('rejected','✗ 拒','Rej','#dc2626')] %}
             {% endif %}
-            {% if j.status != 'offer' %}
-            <form method="post" action="/job/{{ j.id }}/status" style="margin:0;">
-              <input type="hidden" name="to" value="offer">
-              <button class="btn btn-success btn-sm" type="submit" title="标记 Offer">→ Offer</button>
+
+            {% for (val, lbl_zh, lbl_en, color) in next_stages %}
+            <form class="stage-form" method="post" action="/job/{{ j.id }}/status">
+              <input type="hidden" name="to" value="{{ val }}">
+              <button type="submit" class="stage-btn" style="color:{{ color }};"
+                {% if val == 'rejected' %}onclick="return confirm('标记为被拒？')"{% endif %}>
+                <span class="zh">{{ lbl_zh }}</span>
+                <span class="en">{{ lbl_en }}</span>
+              </button>
             </form>
-            {% endif %}
-            {% if j.status != 'rejected' %}
-            <form method="post" action="/job/{{ j.id }}/status" style="margin:0;">
-              <input type="hidden" name="to" value="rejected">
-              <button class="btn btn-secondary btn-sm" type="submit" title="标记被拒"
-                      onclick="return confirm('标记为被拒?')">→ 拒</button>
-            </form>
-            {% endif %}
+            {% endfor %}
+
+            <a href="/job/{{ j.id }}" class="btn btn-secondary btn-sm" style="margin-left:4px;">
+              <span class="zh">详情</span><span class="en">Detail</span>
+            </a>
           </div>
         </td>
-        <td><a href="/job/{{ j.id }}" class="btn btn-secondary btn-sm">详情</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="8">
+      <tr><td colspan="7">
         <div class="empty">
           <div class="empty-icon">📭</div>
-          <div>还没有任何已投递的岗位</div>
-          <div style="margin-top:6px; font-size:12px;">在 <a href="/jobs">所有岗位</a> 里找到感兴趣的, 点详情 → 标记已投</div>
+          <div>
+            <span class="zh">还没有任何已投递的岗位</span>
+            <span class="en">No applications yet</span>
+          </div>
+          <div style="margin-top:6px; font-size:12px;">
+            <span class="zh">在 <a href="/jobs">所有岗位</a> 里找到感兴趣的，点详情 → 标记已投</span>
+            <span class="en">Find a job in <a href="/jobs">All Jobs</a>, click detail → mark as applied</span>
+          </div>
         </div>
       </td></tr>
       {% endfor %}

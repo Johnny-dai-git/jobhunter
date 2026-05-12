@@ -520,37 +520,132 @@ def create_app(config: Config) -> FastAPI:
             "lifetime": lifetime,
         })
 
+    # ---- 面试阶段元数据 (供多处复用) ----
+    STAGE_META: dict[str, dict] = {
+        "applied":        {"label_zh": "已投递",     "label_en": "Applied",        "color": "#4f46e5", "bg": "#eef2ff"},
+        "phone_screen":   {"label_zh": "电话初筛",   "label_en": "Phone Screen",   "color": "#0891b2", "bg": "#e0f2fe"},
+        "hr_interview":   {"label_zh": "HR 面试",    "label_en": "HR Interview",   "color": "#7c3aed", "bg": "#f3e8ff"},
+        "interview":      {"label_zh": "HR 面试",    "label_en": "HR Interview",   "color": "#7c3aed", "bg": "#f3e8ff"},  # 旧数据兼容
+        "hm_interview":   {"label_zh": "HM 面试",    "label_en": "HM Interview",   "color": "#d97706", "bg": "#fef3c7"},
+        "final_round":    {"label_zh": "终面",        "label_en": "Final Round",    "color": "#ea580c", "bg": "#fff7ed"},
+        "offer":          {"label_zh": "Offer",       "label_en": "Offer",          "color": "#16a34a", "bg": "#dcfce7"},
+        "rejected":       {"label_zh": "被拒",        "label_en": "Rejected",       "color": "#dc2626", "bg": "#fee2e2"},
+        "shortlisted":    {"label_zh": "入围",        "label_en": "Shortlisted",    "color": "#ca8a04", "bg": "#fef9c3"},
+    }
+
+    INTERVIEW_STATUSES = [
+        "applied", "phone_screen", "hr_interview", "interview",
+        "hm_interview", "final_round", "offer", "rejected", "shortlisted",
+    ]
+
     @app.get("/applied")
     def applied_list(sort: str = "applied_at"):
-        """已投递追踪页. 列出所有 status in (applied/interview/offer/rejected) 的岗位."""
-        tracked_statuses = [
-            JobStatus.APPLIED.value,
-            JobStatus.INTERVIEW.value,
-            JobStatus.OFFER.value,
-            JobStatus.REJECTED.value,
-            JobStatus.SHORTLISTED.value,
-        ]
+        """已投递追踪页."""
         with session_scope(db_path) as session:
-            stmt = select(Job).where(Job.status.in_(tracked_statuses))
+            stmt = select(Job).where(Job.status.in_(INTERVIEW_STATUSES))
             jobs = list(session.scalars(stmt).all())
             for j in jobs:
                 session.expunge(j)
 
-        # 默认按 applied_at 降序 (没投的放最后)
         if sort == "applied_at":
             jobs.sort(key=lambda j: -(j.applied_at.timestamp() if j.applied_at else 0))
         elif sort == "score":
             jobs.sort(key=lambda j: -(j.match_score or 0))
         elif sort == "status":
-            order = {"offer": 0, "interview": 1, "applied": 2, "shortlisted": 3, "rejected": 4}
-            jobs.sort(key=lambda j: order.get(j.status, 99))
+            stage_order = {s: i for i, s in enumerate(["offer","final_round","hm_interview","hr_interview","interview","phone_screen","applied","shortlisted","rejected"])}
+            jobs.sort(key=lambda j: stage_order.get(j.status, 99))
 
         return render(
             "applied.html",
             jobs=jobs,
             sort=sort,
             total=len(jobs),
+            stage_meta=STAGE_META,
         )
+
+    @app.get("/stats")
+    def stats_page():
+        """求职统计看板."""
+        from sqlalchemy import func
+
+        with session_scope(db_path) as session:
+            # 所有投过的岗位
+            all_applied = list(session.scalars(
+                select(Job).where(Job.status.in_(INTERVIEW_STATUSES))
+                .order_by(Job.applied_at.desc().nulls_last(), Job.updated_at.desc())
+            ).all())
+            for j in all_applied:
+                session.expunge(j)
+
+            # 来源分布 (只统计已投的)
+            src_rows = session.execute(
+                select(Job.source, func.count(Job.id))
+                .where(Job.status.in_(INTERVIEW_STATUSES))
+                .group_by(Job.source)
+                .order_by(func.count(Job.id).desc())
+            ).all()
+
+        # ---- 基础计数 ----
+        applied_total = len(all_applied)
+        interview_statuses = {"phone_screen","hr_interview","interview","hm_interview","final_round"}
+        in_process = [j for j in all_applied if j.status in interview_statuses]
+        offers = [j for j in all_applied if j.status == "offer"]
+        rejections = [j for j in all_applied if j.status == "rejected"]
+        got_reply = [j for j in all_applied if j.status not in {"applied","shortlisted"}]
+        response_rate = f"{len(got_reply)/applied_total*100:.0f}%" if applied_total else "—"
+
+        # ---- 漏斗各阶段 ----
+        def _cnt(*statuses):
+            return sum(1 for j in all_applied if j.status in statuses)
+
+        funnel = [
+            {"label_zh": "已投递",    "label_en": "Applied",       "color": "#4f46e5", "count": applied_total},
+            {"label_zh": "电话/初筛", "label_en": "Phone Screen",  "color": "#0891b2", "count": _cnt("phone_screen")},
+            {"label_zh": "HR 面试",   "label_en": "HR Interview",  "color": "#7c3aed", "count": _cnt("hr_interview","interview")},
+            {"label_zh": "HM 面试",   "label_en": "HM Interview",  "color": "#d97706", "count": _cnt("hm_interview")},
+            {"label_zh": "终面",       "label_en": "Final Round",   "color": "#ea580c", "count": _cnt("final_round")},
+            {"label_zh": "Offer",     "label_en": "Offer",          "color": "#16a34a", "count": _cnt("offer")},
+        ]
+
+        # ---- 最近动态 (最多20条, 只展示10) ----
+        def _job_to_timeline(j):
+            meta = STAGE_META.get(j.status, {"label_zh": j.status, "label_en": j.status, "color": "#64748b", "bg": "#f1f5f9"})
+            date = (j.applied_at or j.updated_at or j.created_at)
+            return {
+                "job_id": j.id,
+                "title": j.title,
+                "company": j.company,
+                "date": date.strftime("%m/%d") if date else "—",
+                "label_zh": meta["label_zh"],
+                "label_en": meta["label_en"],
+                "color": meta["color"],
+                "bg": meta["bg"],
+            }
+
+        recent = [_job_to_timeline(j) for j in all_applied[:15]]
+
+        # ---- 来源分布 ----
+        by_source = [{"source": row[0] or "unknown", "count": row[1]} for row in src_rows]
+
+        # ---- 进行中列表 ----
+        in_process_list = [_job_to_timeline(j) for j in in_process]
+
+        # ---- Offer 列表 ----
+        offer_list = [_job_to_timeline(j) for j in offers]
+
+        stats = {
+            "applied_total": applied_total,
+            "in_process": len(in_process),
+            "offers": len(offers),
+            "rejections": len(rejections),
+            "response_rate": response_rate,
+            "funnel": funnel,
+            "by_source": by_source,
+            "in_process_list": in_process_list,
+            "offer_list": offer_list,
+        }
+
+        return render("stats.html", s=stats, recent=recent)
 
     @app.post("/job/{job_id}/status")
     def update_status(job_id: int, to: str = Form(...)):

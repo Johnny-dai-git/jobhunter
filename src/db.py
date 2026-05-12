@@ -31,14 +31,19 @@ class Base(DeclarativeBase):
 
 
 class JobStatus(str, Enum):
-    NEW = "new"                  # 新抓取,未评分
-    SCORED = "scored"            # 已评分
-    SHORTLISTED = "shortlisted"  # 入选,准备投
-    APPLIED = "applied"          # 已投
-    INTERVIEW = "interview"      # 面试中
-    OFFER = "offer"
-    REJECTED = "rejected"
-    ARCHIVED = "archived"        # 自动或手动归档
+    NEW = "new"                       # 新抓取,未评分
+    SCORED = "scored"                 # 已评分
+    SHORTLISTED = "shortlisted"       # 入选,准备投
+    APPLIED = "applied"               # 已投递,等待回复
+    PHONE_SCREEN = "phone_screen"     # 电话/初筛面试
+    HR_INTERVIEW = "hr_interview"     # HR 面试
+    HM_INTERVIEW = "hm_interview"     # Hiring Manager 面试
+    FINAL_ROUND = "final_round"       # 终面 / onsite
+    OFFER = "offer"                   # 收到 Offer
+    REJECTED = "rejected"             # 被拒
+    ARCHIVED = "archived"             # 自动或手动归档
+    # 兼容旧数据
+    INTERVIEW = "interview"           # 旧状态,统一归入 hr_interview 展示
 
 
 class Profile(Base):
