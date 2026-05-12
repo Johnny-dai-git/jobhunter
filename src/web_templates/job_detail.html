@@ -87,6 +87,35 @@
   </div>
   {% endif %}
 
+  {% if job.match_strengths or job.match_gaps %}
+  <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--color-border); display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    {% if job.match_strengths %}
+    <div>
+      <h3 style="color:var(--color-success); margin-top:0;">
+        ✅ <span class="zh">命中</span><span class="en">Strengths</span>
+      </h3>
+      <div style="font-size:13px; color:var(--color-text); line-height:1.7;">
+        {% for line in job.match_strengths.split('\n') %}
+          {% if line.strip() %}<div style="margin-bottom:6px;">• {{ line.strip().lstrip('-').strip() }}</div>{% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% if job.match_gaps %}
+    <div>
+      <h3 style="color:var(--color-danger); margin-top:0;">
+        ⚠️ <span class="zh">差距</span><span class="en">Gaps</span>
+      </h3>
+      <div style="font-size:13px; color:var(--color-text); line-height:1.7;">
+        {% for line in job.match_gaps.split('\n') %}
+          {% if line.strip() %}<div style="margin-bottom:6px;">• {{ line.strip().lstrip('-').strip() }}</div>{% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if job.match_connector %}
   <h3 style="margin-top:16px;">
     Connector · <span class="zh">求职信钩子</span><span class="en">Cover Letter Hook</span>
