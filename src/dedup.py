@@ -1,18 +1,18 @@
-"""跨平台岗位去重: 公司名 + 标准化 title + location 的哈希.
+"""Cross-platform job deduplication: hash of company name + normalized title + location.
 
-解决的问题:
-  - 同一岗位在 LinkedIn + Indeed + Dice 各发一次 → 3 条重复
-  - 同公司用不同 title 写法发同一岗位 ("ML Engineer" vs "Machine Learning Engineer")
+Problems solved:
+  - Same job posted on LinkedIn + Indeed + Dice → 3 duplicates
+  - Same company posts same job with different title formats ("ML Engineer" vs "Machine Learning Engineer")
 
-哈希策略:
+Hash strategy:
   content_hash = sha256(normalize(company) + "|" + normalize(title) + "|" + normalize(location))[:16]
 
-只要三个字段标准化后相同, 不同平台/不同 URL 的岗位就会被认为是重复.
+If three fields are identical after normalization, jobs from different platforms/URLs are considered duplicates.
 
-标准化规则:
-  company:  小写、去除法律后缀 (Inc/Corp/LLC...)、去标点
-  title:    小写、去掉资历前缀 (Senior/Lead/Staff...)、统一常见缩写 (ML/SRE/SWE...)、去等级后缀 (L5/E4/I/II)
-  location: 小写、统一城市别名 (SF→san francisco)、只保留城市名
+Normalization rules:
+  company:  lowercase, remove legal suffixes (Inc/Corp/LLC...), remove punctuation
+  title:    lowercase, remove seniority prefixes (Senior/Lead/Staff...), normalize common abbrevs (ML/SRE/SWE...), remove level suffixes (L5/E4/I/II)
+  location: lowercase, normalize city aliases (SF→san francisco), keep only city name
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ import hashlib
 import re
 
 
-# ── 公司名标准化 ─────────────────────────────────────────────────────────────
+# ── Company name normalization ─────────────────────────────────────────────────────────────
 
 _COMPANY_SUFFIXES = re.compile(
     r"\b(inc|corp|ltd|llc|co|company|companies|technologies|technology|"
@@ -43,9 +43,9 @@ def normalize_company(name: str) -> str:
     return s
 
 
-# ── 职位名标准化 ─────────────────────────────────────────────────────────────
+# ── Job title normalization ─────────────────────────────────────────────────────────────
 
-# 资历/级别前缀 (去掉)
+# Seniority/level prefixes (remove)
 _SENIORITY_PREFIX = re.compile(
     r"^(senior|sr\.?|junior|jr\.?|lead|staff|principal|associate|assoc\.?|"
     r"distinguished|fellow|founding|head of|director of|vp of|"
@@ -53,16 +53,16 @@ _SENIORITY_PREFIX = re.compile(
     re.IGNORECASE,
 )
 
-# 等级后缀: (L5), E4, I, II, III, IV, 1, 2, 3
+# Level suffixes: (L5), E4, I, II, III, IV, 1, 2, 3
 _LEVEL_SUFFIX = re.compile(
     r"\s*[\(\[]?(l\d|e\d|m\d|t\d|\biv\b|\biii\b|\bii\b|\bi\b|\b[1-6]\b)[\)\]]?\s*$",
     re.IGNORECASE,
 )
 
-# 括号内容 (通常是补充说明或级别)
+# Parenthetical content (usually clarifications or levels)
 _PARENS = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]")
 
-# 常见缩写统一 → 展开形式
+# Common abbreviations → expanded form
 _ABBREV: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\bml\b",  re.I), "machine learning"),
     (re.compile(r"\bmle\b", re.I), "machine learning engineer"),
@@ -84,30 +84,30 @@ def normalize_title(title: str) -> str:
     if not title:
         return ""
     s = title.strip()
-    # 去括号内容
+    # Remove parenthetical content
     s = _PARENS.sub("", s)
-    # 去等级后缀
+    # Remove level suffixes
     s = _LEVEL_SUFFIX.sub("", s)
-    # 去资历前缀 (多次循环直到没有为止)
+    # Remove seniority prefixes (loop until none remain)
     for _ in range(3):
         new = _SENIORITY_PREFIX.sub("", s).strip()
         if new == s:
             break
         s = new
-    # 小写
+    # Lowercase
     s = s.lower()
-    # 统一缩写
+    # Normalize abbreviations
     for pattern, replacement in _ABBREV:
         s = pattern.sub(replacement, s)
-    # 去多余空白和标点
+    # Remove excess whitespace and punctuation
     s = _PUNCT.sub(" ", s)
     s = _SPACES.sub(" ", s).strip()
     return s
 
 
-# ── 地点标准化 ────────────────────────────────────────────────────────────────
+# ── Location normalization ────────────────────────────────────────────────────────────────
 
-# 城市别名 → 标准名
+# City aliases → standard names
 _CITY_ALIASES: dict[str, str] = {
     "sf":              "san francisco",
     "bay area":        "san francisco",
@@ -126,7 +126,7 @@ _CITY_ALIASES: dict[str, str] = {
     "washington dc":   "washington dc",
 }
 
-# 去掉州名/国家名后缀
+# Remove state/country suffixes
 _LOCATION_CLEANUP = re.compile(
     r",?\s*(ca|ny|wa|tx|ma|il|co|va|ga|fl|or|nc|az|mn|oh|"
     r"california|new york|washington|texas|massachusetts|illinois|"
@@ -139,26 +139,26 @@ def normalize_location(location: str) -> str:
     if not location:
         return "unknown"
     s = location.lower().strip()
-    # remote 直接标准化
+    # Standardize remote directly
     if re.search(r"\bremote\b", s):
         return "remote"
-    # 去州名/国家后缀
+    # Remove state/country suffixes
     s = _LOCATION_CLEANUP.sub("", s).strip(" ,")
-    # 城市别名
+    # City aliases
     for alias, standard in _CITY_ALIASES.items():
         if s == alias or s.startswith(alias + " ") or s.startswith(alias + ","):
             return standard
-    # 只保留第一个逗号前的部分 (城市)
+    # Keep only part before first comma (city)
     s = s.split(",")[0].strip()
     return s or "unknown"
 
 
-# ── 最终哈希 ─────────────────────────────────────────────────────────────────
+# ── Final hash ─────────────────────────────────────────────────────────────────
 
 def content_hash(title: str, company: str, location: str) -> str:
-    """返回 16 字符的十六进制哈希, 用于跨平台去重.
+    """Return 16-character hex hash for cross-platform deduplication.
 
-    相同公司 + 相同岗位 + 相同地点 → 相同 hash, 无论来自哪个平台.
+    Same company + same job + same location → same hash, regardless of platform.
     """
     nc = normalize_company(company)
     nt = normalize_title(title)
@@ -168,7 +168,7 @@ def content_hash(title: str, company: str, location: str) -> str:
 
 
 def dedup_key(title: str, company: str, location: str) -> str:
-    """返回人类可读的去重 key (用于调试/日志)."""
+    """Return human-readable dedup key (for debugging/logs)."""
     return (
         f"{normalize_company(company)}"
         f" | {normalize_title(title)}"

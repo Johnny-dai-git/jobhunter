@@ -1,48 +1,69 @@
 {% extends "base.html" %}
-{% block title %}画像 #{{ profile.id }} · JobHunter{% endblock %}
+{% block title %}<span class="zh">画像</span><span class="en">Profile</span> #{{ profile.id }} · JobHunter{% endblock %}
 {% block content %}
 
-<a href="/onboarding" class="back-link">← 回画像列表</a>
+<a href="/onboarding" class="back-link">
+  ← <span class="zh">回画像列表</span><span class="en">Back to profiles</span>
+</a>
 
 <div class="hero">
   <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
     <div style="flex:1;">
       <h1 class="hero-title">
-        画像 #{{ profile.id }}
-        {% if is_current %}<span class="badge badge-green" style="margin-left:8px; vertical-align:middle;">✓ 当前</span>{% endif %}
+        <span class="zh">画像</span><span class="en">Profile</span> #{{ profile.id }}
+        {% if is_current %}
+          <span class="badge badge-green" style="margin-left:8px; vertical-align:middle;">
+            ✓ <span class="zh">当前</span><span class="en">Active</span>
+          </span>
+        {% endif %}
       </h1>
       <div class="hero-meta">
-        <span>📅 创建于 {{ profile.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        <span>📅 <span class="zh">创建于</span><span class="en">Created</span> {{ profile.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
         {% if profile.resume_filename %}
           <span class="hero-meta-sep">·</span>
-          <span>📎 简历: {{ profile.resume_filename }}</span>
+          <span>📎 <span class="zh">简历:</span><span class="en">Resume:</span> {{ profile.resume_filename }}</span>
         {% endif %}
         <span class="hero-meta-sep">·</span>
-        <span>{{ jobs|length }} 个匹配岗位</span>
+        <span>
+          {{ jobs|length }}
+          <span class="zh">个匹配岗位</span><span class="en">matched jobs</span>
+        </span>
       </div>
     </div>
     <div style="display:flex; gap:8px; flex-shrink:0;">
       {% if jobs %}
-        <a href="/jobs?profile_id={{ profile.id }}" class="btn btn-primary btn-sm">🔍 看本画像岗位</a>
+        <a href="/jobs?profile_id={{ profile.id }}" class="btn btn-primary btn-sm">
+          🔍 <span class="zh">看本画像岗位</span><span class="en">View jobs</span>
+        </a>
       {% endif %}
       {% if not is_current %}
       <form method="post" action="/profiles/{{ profile.id }}/use" style="margin:0;">
         <button type="submit" class="btn btn-primary btn-sm"
-                {% if pipeline_running %}onclick="return confirm('当前有流水线在跑, 切换会先取消它. 继续?')"{% else %}onclick="return confirm('切换到这个画像并跑流水线?')"{% endif %}>
-          🔄 激活
+                {% if pipeline_running %}
+                  onclick="return confirm('A pipeline is running. Switch anyway?')"
+                {% else %}
+                  onclick="return confirm('Activate this profile and run the pipeline?')"
+                {% endif %}>
+          🔄 <span class="zh">激活</span><span class="en">Activate</span>
         </button>
       </form>
       {% else %}
       <form method="post" action="/refresh" style="margin:0;">
         <button type="submit" class="btn btn-secondary btn-sm"
-                {% if pipeline_running %}disabled{% else %}onclick="return confirm('用当前画像跑流水线 (collect + match)?')"{% endif %}>
-          ⟳ 激活
+                {% if pipeline_running %}
+                  disabled
+                {% else %}
+                  onclick="return confirm('Run the pipeline with this profile?')"
+                {% endif %}>
+          ⟳ <span class="zh">重跑</span><span class="en">Re-run</span>
         </button>
       </form>
       {% endif %}
       <form method="post" action="/profiles/{{ profile.id }}/delete" style="margin:0;">
         <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);"
-                onclick="return confirm('{% if is_current %}这是当前画像. 删除后会自动激活次新的画像 (没有就回到 onboarding). {% endif %}删除这个画像? 操作不可恢复.')">删除</button>
+                onclick="return confirm('Delete this profile? This cannot be undone.')">
+          <span class="zh">删除</span><span class="en">Delete</span>
+        </button>
       </form>
     </div>
   </div>
@@ -50,7 +71,9 @@
 
 {# ============ 用户描述 ============ #}
 <div class="card">
-  <h3 style="margin-top:0;">📝 求职需求 (用户原始输入)</h3>
+  <h3 style="margin-top:0;">
+    📝 <span class="zh">求职需求 (用户原始输入)</span><span class="en">Job Goal (original input)</span>
+  </h3>
   <div style="background:#f8fafc; padding:14px 16px; border-radius:var(--radius-sm); border:1px solid var(--color-border); white-space:pre-wrap; font-size:13.5px; line-height:1.7;">{{ profile.user_description }}</div>
 </div>
 
@@ -58,23 +81,30 @@
 {# ============ Summary ============ #}
 {% if analysis.summary %}
 <div class="card">
-  <h3 style="margin-top:0;">🎯 核心定位 (AI 总结)</h3>
+  <h3 style="margin-top:0;">
+    🎯 <span class="zh">核心定位 (AI 总结)</span><span class="en">Core Positioning (AI summary)</span>
+  </h3>
   <div style="font-size:14px;">{{ analysis.summary }}</div>
 </div>
 {% endif %}
 
 {# ============ Top 10 Positions ============ #}
 <div class="card">
-  <h3 style="margin-top:0;">🏆 Top 10 投递方向 (按 composite 降序)</h3>
+  <h3 style="margin-top:0;">
+    🏆 Top 10 <span class="zh">投递方向 (按 composite 降序)</span><span class="en">Target Roles (by composite score)</span>
+  </h3>
   <table style="font-size:13px;">
     <thead>
       <tr>
         <th>#</th>
-        <th>Primary + Aliases (搜索词)</th>
+        <th>
+          Primary + Aliases
+          (<span class="zh">搜索词</span><span class="en">search terms</span>)
+        </th>
         <th>Dir</th>
         <th style="text-align:center;">M/C/A → Comp</th>
-        <th>为什么投</th>
-        <th>市场依据</th>
+        <th><span class="zh">为什么投</span><span class="en">Why apply</span></th>
+        <th><span class="zh">市场依据</span><span class="en">Market evidence</span></th>
       </tr>
     </thead>
     <tbody>
@@ -89,7 +119,8 @@
           </div>
           {% endif %}
           {% if p.broader_terms %}
-          <div style="font-size:11px; color:var(--color-text-dim); margin-top:4px;">隐藏在:
+          <div style="font-size:11px; color:var(--color-text-dim); margin-top:4px;">
+            <span class="zh">隐藏在:</span><span class="en">Also under:</span>
             {% for b in p.broader_terms %}<div style="margin-left:8px;">• {{ b }}</div>{% endfor %}
           </div>
           {% endif %}
@@ -108,25 +139,30 @@
     </tbody>
   </table>
   <div style="margin-top:10px; font-size:11px; color:var(--color-text-muted);">
-    M = market_demand · C = competition (越低越好) · A = user_advantage · Comp = composite
+    M = market_demand · C = competition (<span class="zh">越低越好</span><span class="en">lower is better</span>) · A = user_advantage · Comp = composite
   </div>
 </div>
 
-{# ============ 目标公司 (5 区域) ============ #}
+{# ============ 目标公司 ============ #}
 {% if analysis.recommended_companies %}
 <div class="card">
-  <h3 style="margin-top:0;">🌍 目标公司清单 (按区域)</h3>
+  <h3 style="margin-top:0;">
+    🌍 <span class="zh">目标公司清单 (按区域)</span><span class="en">Target Companies (by region)</span>
+  </h3>
   {% for region_label, companies in analysis.recommended_companies.regions() %}
     {% if companies %}
     <div style="margin-bottom:18px;">
-      <div style="font-weight:700; margin-bottom:8px;">{{ region_label }} <span style="font-weight:400; color:var(--color-text-muted); font-size:12px;">({{ companies|length }})</span></div>
+      <div style="font-weight:700; margin-bottom:8px;">
+        {{ region_label }}
+        <span style="font-weight:400; color:var(--color-text-muted); font-size:12px;">({{ companies|length }})</span>
+      </div>
       <table style="font-size:13px;">
         <thead>
           <tr>
-            <th>公司</th>
-            <th>为什么 fit</th>
-            <th>扩张信号</th>
-            <th>例子 roles</th>
+            <th><span class="zh">公司</span><span class="en">Company</span></th>
+            <th><span class="zh">为什么 fit</span><span class="en">Why it fits</span></th>
+            <th><span class="zh">扩张信号</span><span class="en">Hiring signal</span></th>
+            <th><span class="zh">例子 roles</span><span class="en">Example roles</span></th>
           </tr>
         </thead>
         <tbody>
@@ -151,7 +187,9 @@
 {# ============ Target locations ============ #}
 {% if analysis.target_locations %}
 <div class="card">
-  <h3 style="margin-top:0;">📍 目标地点</h3>
+  <h3 style="margin-top:0;">
+    📍 <span class="zh">目标地点</span><span class="en">Target Locations</span>
+  </h3>
   <div style="display:flex; gap:6px; flex-wrap:wrap;">
     {% for loc in analysis.target_locations %}<span class="badge badge-indigo">{{ loc }}</span>{% endfor %}
   </div>
@@ -160,7 +198,10 @@
 
 {% else %}
 <div class="card">
-  <p style="color:var(--color-text-muted);">⚠️ profile_json 解析失败,可能是格式问题</p>
+  <p style="color:var(--color-text-muted);">
+    ⚠️ <span class="zh">profile_json 解析失败，可能是格式问题</span>
+    <span class="en">profile_json parse failed — possibly a format issue</span>
+  </p>
 </div>
 {% endif %}
 
@@ -168,15 +209,17 @@
 {% if jobs %}
 <div class="card card-flat">
   <div style="padding:16px 20px; border-bottom:1px solid var(--color-border);">
-    <h3 style="margin:0;">📊 本画像匹配的岗位 (Top 20)</h3>
+    <h3 style="margin:0;">
+      📊 <span class="zh">本画像匹配的岗位 (Top 20)</span><span class="en">Jobs matched by this profile (Top 20)</span>
+    </h3>
   </div>
   <table>
     <thead>
       <tr>
         <th>Score</th>
-        <th>岗位</th>
-        <th>公司</th>
-        <th>状态</th>
+        <th><span class="zh">岗位</span><span class="en">Job</span></th>
+        <th><span class="zh">公司</span><span class="en">Company</span></th>
+        <th><span class="zh">状态</span><span class="en">Status</span></th>
       </tr>
     </thead>
     <tbody>
@@ -201,7 +244,10 @@
   </table>
   {% if jobs|length > 20 %}
   <div style="padding:10px 16px; text-align:center; background:#f8fafc; border-top:1px solid var(--color-border);">
-    <a href="/jobs?profile_id={{ profile.id }}" style="font-size:12px; color:var(--color-text-muted);">查看全部 {{ jobs|length }} 个 →</a>
+    <a href="/jobs?profile_id={{ profile.id }}" style="font-size:12px; color:var(--color-text-muted);">
+      <span class="zh">查看全部 {{ jobs|length }} 个 →</span>
+      <span class="en">View all {{ jobs|length }} →</span>
+    </a>
   </div>
   {% endif %}
 </div>

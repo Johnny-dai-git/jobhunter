@@ -1,4 +1,4 @@
-"""采集编排器: 跑所有启用的 collectors,把结果落到 DB,自动去重 + 关键词过滤."""
+"""Collection orchestrator: runs all enabled collectors, stores results in DB, auto-deduplicates and filters by keywords."""
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -14,18 +14,64 @@ from .dedup import content_hash, dedup_key
 from .profile_analyzer import load_profile
 
 
+_EMPLOYMENT_TYPE_MAP = {
+    # LinkedIn / HarvestAPI
+    "full_time":   "full-time",
+    "fulltime":    "full-time",
+    "full-time":   "full-time",
+    "part_time":   "part-time",
+    "parttime":    "part-time",
+    "part-time":   "part-time",
+    "internship":  "internship",
+    "intern":      "internship",
+    "contract":    "contract",
+    "contracts":   "contract",
+    "temporary":   "contract",
+    # Dice
+    "fulltime":    "full-time",
+    "parttime":    "part-time",
+}
+
+
+def _infer_job_type(cj: CollectedJob, job_types_override: list[str] | None) -> str:
+    """Determine job_type from platform API data, title heuristics, or the active search filter."""
+    # 1) Platform API field (most reliable)
+    raw = (cj.extras or {}).get("employment_type") or ""
+    if isinstance(raw, list):
+        raw = raw[0] if raw else ""
+    normalized = _EMPLOYMENT_TYPE_MAP.get(str(raw).lower().replace("-", "").replace("_", "").strip(), "")
+    if normalized:
+        return normalized
+
+    # 2) Title heuristic: "intern" anywhere in title → internship
+    if "intern" in cj.title.lower():
+        return "internship"
+
+    # 3) Fall back to the job_type the collector was told to search for
+    if job_types_override:
+        jt = job_types_override[0].lower()
+        if "intern" in jt:
+            return "internship"
+        if "contract" in jt:
+            return "contract"
+        if "part" in jt:
+            return "part-time"
+
+    return "full-time"
+
+
 def _parse_posted_at(cj: CollectedJob) -> Optional[datetime]:
-    """从 cj.extras 找发布时间字段, 解析 ISO. 找不到返回 None."""
+    """Find published_at field in cj.extras, parse ISO format. Return None if not found."""
     if not cj.extras:
         return None
-    # 各 collector 用不同 key, 都试一遍
+    # Different collectors use different keys, try all
     for key in ("posted_date", "postedDate", "posted_at", "postedAt", "posted", "published_at", "publishedAt"):
         val = cj.extras.get(key)
         if not val or not isinstance(val, str):
             continue
         try:
             s = val.replace("Z", "+00:00")
-            # 砍掉 ".000" 这种毫秒
+            # Strip milliseconds like ".000"
             return datetime.fromisoformat(s)
         except ValueError:
             continue
@@ -39,10 +85,10 @@ PLATFORMS = [
 
 
 def matches_excluded(cj: CollectedJob, excluded: list[str]) -> str | None:
-    """如果岗位包含被排除的关键词,返回命中的关键词;否则 None.
+    """If job contains excluded keywords, return the matching keyword; otherwise None.
 
-    检查范围: title + description (大小写不敏感).
-    借鉴 DailyJobMatch 的"采集时过滤"思路,在评分前就过滤掉明显不符合的,省 LLM 调用费.
+    Check scope: title + description (case-insensitive).
+    Following DailyJobMatch's "filter at collection" approach, filter obviously unsuitable jobs before scoring to save LLM calls.
     """
     if not excluded:
         return None
@@ -62,16 +108,16 @@ def collect_all(
     profile_id: Optional[int] = None,
     on_platform_start=None,
     on_platform_done=None,   # callback(platform_name: str, new_count: int)
-    job_types: Optional[list[str]] = None,  # 覆盖 config.yaml preferences.job_types
+    job_types: Optional[list[str]] = None,  # Override config.yaml preferences.job_types
 ) -> dict:
-    """跑指定平台 (默认所有 enabled) 的采集器,返回统计.
+    """Run collectors for specified platforms (default all enabled), return statistics.
 
-    搜索 keywords 来源优先级:
-    1. data/resume/_profile.json (analyze-profile 生成的 Top-10 + 模糊扩展)
+    Search keywords priority:
+    1. data/resume/_profile.json (Top-10 from analyze-profile + fuzzy expansion)
     2. config.yaml preferences.job_titles (fallback)
 
-    should_continue: callable; 每个平台开始前调用一次, 返回 False 就提前退出
-    profile_id: 当前活跃画像的 ID, 给新入库的 Job 打标
+    should_continue: callable; called once before each platform, exit early if returns False
+    profile_id: current active profile ID, tag new Jobs
     """
     if should_continue is None:
         should_continue = lambda: True
@@ -80,7 +126,7 @@ def collect_all(
 
     profile = load_profile(config)
     if profile and profile.top_10_positions:
-        # 第一段: 10 个 primary; 第二段: aliases + broader_terms 模糊扩展. 上限 40.
+        # First segment: 10 primary; second segment: aliases + broader_terms fuzzy expansion. Max 40.
         keywords = profile.search_titles(
             include_aliases=True, include_broader=True, limit=40
         )
@@ -90,25 +136,25 @@ def collect_all(
             or []
         )
         print(
-            f"[collect] 用 profile 推断的 {len(keywords)} 个搜索词 "
+            f"[collect] Using {len(keywords)} search keywords inferred from profile "
             f"(Top-10 primary + aliases + broader_terms): {keywords}"
         )
     else:
         keywords = config.preferences.get("job_titles") or []
         locations = config.preferences.get("locations") or []
-        print(f"[collect] 用 config.yaml 里的 job_titles: {keywords}")
+        print(f"[collect] Using job_titles from config.yaml: {keywords}")
 
     if not keywords or not locations:
         raise RuntimeError(
-            "找不到搜索关键词 — 先跑 `analyze-profile` 或在 config.yaml 里填 job_titles + locations"
+            "No search keywords found — run `analyze-profile` first or fill job_titles + locations in config.yaml"
         )
 
     excluded = config.preferences.get("exclude_keywords") or []
     db_path = config.path("db_path")
 
-    # job_types 覆盖: 仅在显式传入时设置，让采集器能区分"用户指定"和"读 config 默认"
+    # job_types override: only set when explicitly passed, so collector can distinguish "user-specified" vs "config default"
     if job_types:
-        print(f"[collect] job_types 覆盖: {job_types}")
+        print(f"[collect] job_types override: {job_types}")
     stats = {
         "total_new": 0,
         "total_seen": 0,
@@ -118,12 +164,12 @@ def collect_all(
 
     for platform in platforms:
         if not should_continue():
-            print("[collect] 检测到取消信号, 提前退出")
+            print("[collect] Cancel signal detected, exiting early")
             break
         c = get_collector(platform, config)
         if not c.enabled:
             continue
-        # 仅在显式传入时注入覆盖，否则采集器自己从 config.preferences 读取
+        # Only inject override when explicitly passed, otherwise collector reads from config.preferences
         if job_types:
             c._job_types_override = job_types
         if on_platform_start:
@@ -131,25 +177,25 @@ def collect_all(
                 on_platform_start(platform)
             except Exception:
                 pass
-        print(f"\n→ 采集 {platform}...")
+        print(f"\n→ Collecting from {platform}...")
         new_count = 0
         seen_count = 0
         excluded_count = 0
         try:
             for cj in c.search(keywords, locations):
-                # 1) 排除关键词 (省 LLM 钱)
+                # 1) Exclude keywords (save LLM costs)
                 hit = matches_excluded(cj, excluded)
                 if hit:
                     excluded_count += 1
-                    print(f"  [跳过] '{hit}' in {cj.title} @ {cj.company}")
+                    print(f"  [skip] '{hit}' in {cj.title} @ {cj.company}")
                     continue
 
-                # 2) 去重: 三层检查
+                # 2) Deduplication: three-layer check
                 chash = content_hash(cj.title, cj.company, cj.location or "")
                 with session_scope(db_path) as session:
                     existing = None
 
-                    # 层1: source + external_id 精确匹配
+                    # Layer 1: source + external_id exact match
                     if cj.external_id:
                         existing = session.scalars(
                             select(Job).where(
@@ -158,19 +204,19 @@ def collect_all(
                             )
                         ).first()
 
-                    # 层2: URL 精确匹配 (跨平台同 URL)
+                    # Layer 2: URL exact match (same URL across platforms)
                     if not existing and cj.url:
                         existing = session.scalars(
                             select(Job).where(Job.url == cj.url)
                         ).first()
 
-                    # 层3: content_hash 语义去重 (跨平台同岗位, URL 不同)
+                    # Layer 3: content_hash semantic dedup (same job across platforms, different URLs)
                     if not existing:
                         existing = session.scalars(
                             select(Job).where(Job.content_hash == chash)
                         ).first()
                         if existing:
-                            print(f"  [语义重复] {cj.title} @ {cj.company} "
+                            print(f"  [semantic duplicate] {cj.title} @ {cj.company} "
                                   f"≈ #{existing.id} ({existing.source}) "
                                   f"key={dedup_key(cj.title, cj.company, cj.location or '')}")
 
@@ -178,7 +224,8 @@ def collect_all(
                         seen_count += 1
                         continue
 
-                    # 3) 入库
+                    # 3) Store in database
+                    _jt_override = getattr(c, "_job_types_override", None)
                     job = Job(
                         source=cj.source,
                         external_id=cj.external_id,
@@ -192,15 +239,16 @@ def collect_all(
                         status=JobStatus.NEW.value,
                         profile_id=profile_id,
                         content_hash=chash,
+                        job_type=_infer_job_type(cj, _jt_override),
                     )
                     session.add(job)
                     session.commit()
                     new_count += 1
                     print(f"  + #{job.id} {cj.title} @ {cj.company}")
         except NotImplementedError as e:
-            print(f"  [跳过] {e}")
+            print(f"  [skip] {e}")
         except Exception as e:
-            print(f"  [错误] {platform}: {e}")
+            print(f"  [error] {platform}: {e}")
 
         stats["by_platform"][platform] = {
             "new": new_count,

@@ -1,11 +1,11 @@
-"""手动添加岗位: 粘贴 JD + 个人备注 → LLM 提取结构化字段 → 入库 → 自动评分.
+"""Manually add job: paste JD + personal notes → LLM extracts structured fields → store → auto-score.
 
-用户输入:
-  - jd_text / jd_file : 岗位 JD 原文 (必填)
-  - url               : 岗位链接 (选填, 用于去重)
-  - user_note         : 个人备注, 例如 "朋友推荐的、公司小但技术好" (选填)
+User input:
+  - jd_text / jd_file : Job JD raw text (required)
+  - url               : Job link (optional, for dedup)
+  - user_note         : Personal note, e.g. "friend referred, small company but good tech" (optional)
 
-LLM 根据 JD + 备注提取:
+LLM extracts from JD + notes:
   title, company, location, salary, work_mode, min_education, description_clean
 """
 from __future__ import annotations
@@ -27,25 +27,25 @@ from .dedup import content_hash
 
 PARSE_JD_TOOL: dict[str, Any] = {
     "name": "submit_parsed_job",
-    "description": "从 JD 原文中提取结构化字段，生成可直接入库的岗位记录",
+    "description": "Extract structured fields from raw JD, generate job record ready to store",
     "input_schema": {
         "type": "object",
         "properties": {
             "title": {
                 "type": "string",
-                "description": "英文标准岗位名，例如 'Machine Learning Engineer'",
+                "description": "English standard job title, e.g. 'Machine Learning Engineer'",
             },
             "company": {
                 "type": "string",
-                "description": "公司全称",
+                "description": "Full company name",
             },
             "location": {
                 "type": "string",
-                "description": "工作地点，例如 'San Francisco, CA' 或 'Remote'，不确定填 'Unspecified'",
+                "description": "Work location, e.g. 'San Francisco, CA' or 'Remote', use 'Unspecified' if unsure",
             },
             "salary": {
                 "type": "string",
-                "description": "薪资范围，例如 '$150k–$200k'，JD 未提及则留空",
+                "description": "Salary range, e.g. '$150k–$200k', leave empty if JD doesn't mention",
             },
             "work_mode": {
                 "type": "string",
@@ -57,7 +57,7 @@ PARSE_JD_TOOL: dict[str, Any] = {
             },
             "description_clean": {
                 "type": "string",
-                "description": "清理后的完整 JD 正文：保留职责、技术要求、技术栈全文，去掉公司宣传广告语",
+                "description": "Cleaned complete JD body: keep responsibilities, tech requirements, full tech stack, remove company marketing copy",
             },
         },
         "required": ["title", "company", "location", "work_mode", "min_education", "description_clean"],
@@ -65,13 +65,13 @@ PARSE_JD_TOOL: dict[str, Any] = {
 }
 
 PARSE_PROMPT = """\
-你是一个结构化信息提取助手。从下面的岗位 JD 中提取字段，调用 submit_parsed_job 工具。
+You are a structured information extraction assistant. Extract fields from the job JD below, call submit_parsed_job tool.
 
-提取规则：
-- title: 英文标准岗位名，不要直译中文，用 LinkedIn 上真实存在的 title
-- company: 公司全称
-- description_clean: 保留 JD 完整正文（职责 + 技术要求 + 技术栈），去掉无关宣传语
-- 字段 JD 未明确提及时按 schema 描述填 unspecified 或空字符串
+Extraction rules:
+- title: English standard job title, don't translate directly from Chinese, use title that actually exists on LinkedIn
+- company: Full company name
+- description_clean: Keep complete JD body (responsibilities + tech requirements + tech stack), remove irrelevant marketing copy
+- For fields not explicitly mentioned in JD, fill with unspecified or empty string per schema
 {url_line}
 {note_line}
 ---
@@ -80,13 +80,13 @@ PARSE_PROMPT = """\
 """
 
 
-# ── 数据结构 ─────────────────────────────────────────────────────────────────
+# ── Data structures ─────────────────────────────────────────────────────────────────
 
 @dataclass
 class ManualJobInput:
-    raw_text: str                   # JD 原文 (必填)
-    url: str = ""                   # 岗位链接 (选填)
-    user_note: str = ""             # 个人备注 (选填)
+    raw_text: str                   # Raw JD text (required)
+    url: str = ""                   # Job link (optional)
+    user_note: str = ""             # Personal note (optional)
     source_hint: str = "manual"
 
 
@@ -101,14 +101,15 @@ class ParsedJob:
     description_clean: str
 
 
-# ── 核心逻辑 ─────────────────────────────────────────────────────────────────
+# ── Core logic ─────────────────────────────────────────────────────────────────
 
 def _parse_jd(config: Config, inp: ManualJobInput) -> ParsedJob:
-    """调 LLM 从 JD 原文提取结构化字段。"""
-    client, model_name = make_client(config, "matcher")
+    """Call LLM to extract structured fields from raw JD."""
+    import json
+    client, model_name, provider = make_client(config, "matcher")
 
-    url_line  = f"岗位链接：{inp.url}" if inp.url else ""
-    note_line = f"用户备注：{inp.user_note}" if inp.user_note else ""
+    url_line  = f"Job URL: {inp.url}" if inp.url else ""
+    note_line = f"User note: {inp.user_note}" if inp.user_note else ""
 
     prompt = PARSE_PROMPT.format(
         url_line=url_line,
@@ -116,17 +117,21 @@ def _parse_jd(config: Config, inp: ManualJobInput) -> ParsedJob:
         raw_text=inp.raw_text[:8000],
     )
 
-    resp = client.messages.create(
-        model=model_name,
-        max_tokens=2048,
-        tools=[PARSE_JD_TOOL],
-        tool_choice={"type": "tool", "name": "submit_parsed_job"},
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    for block in resp.content:
-        if getattr(block, "type", None) == "tool_use" and block.name == "submit_parsed_job":
-            d = block.input or {}
+    if provider == "deepseek":
+        # OpenAI format
+        from .agent import _convert_tool_to_openai
+        tools = [_convert_tool_to_openai(PARSE_JD_TOOL)]
+        with client.chat.completions.stream(
+            model=model_name,
+            max_tokens=2048,
+            tools=tools,
+            tool_choice={"type": "function", "function": {"name": "submit_parsed_job"}},
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            resp = stream.get_final_completion()
+        if resp.choices[0].message.tool_calls:
+            tool_call = resp.choices[0].message.tool_calls[0]
+            d = json.loads(tool_call.function.arguments)
             return ParsedJob(
                 title=str(d.get("title", "Unknown Title")).strip(),
                 company=str(d.get("company", "Unknown Company")).strip(),
@@ -136,12 +141,36 @@ def _parse_jd(config: Config, inp: ManualJobInput) -> ParsedJob:
                 min_education=str(d.get("min_education", "unspecified")),
                 description_clean=str(d.get("description_clean", inp.raw_text)).strip(),
             )
+        raise RuntimeError("LLM did not return submit_parsed_job tool call")
+    else:
+        # Anthropic format
+        with client.messages.stream(
+            model=model_name,
+            max_tokens=2048,
+            tools=[PARSE_JD_TOOL],
+            tool_choice={"type": "tool", "name": "submit_parsed_job"},
+            messages=[{"role": "user", "content": prompt}],
+        ) as _s:
+            resp = _s.get_final_message()
 
-    raise RuntimeError("LLM 未返回 submit_parsed_job 工具调用")
+        for block in resp.content:
+            if getattr(block, "type", None) == "tool_use" and block.name == "submit_parsed_job":
+                d = block.input or {}
+                return ParsedJob(
+                    title=str(d.get("title", "Unknown Title")).strip(),
+                    company=str(d.get("company", "Unknown Company")).strip(),
+                    location=str(d.get("location", "Unspecified")).strip(),
+                    salary=str(d.get("salary", "")).strip(),
+                    work_mode=str(d.get("work_mode", "unspecified")),
+                    min_education=str(d.get("min_education", "unspecified")),
+                    description_clean=str(d.get("description_clean", inp.raw_text)).strip(),
+                )
+
+        raise RuntimeError("LLM did not return submit_parsed_job tool call")
 
 
 def _dedup_check(config: Config, url: str, chash: str) -> Optional[Job]:
-    """三层去重: URL → content_hash。"""
+    """Three-layer dedup: URL → content_hash."""
     db_path = config.path("db_path")
     with session_scope(db_path) as session:
         if url:
@@ -163,17 +192,17 @@ def add_job_from_text(
     run_matcher: bool = True,
     profile_id: Optional[int] = None,
 ) -> tuple[Job, bool]:
-    """主入口: 解析 → 去重 → 入库 → 评分。返回 (job, is_new)。"""
-    print("[manual_add] 解析 JD...")
+    """Main entry: parse → dedup → store → score. Return (job, is_new)."""
+    print("[manual_add] Parsing JD...")
     parsed = _parse_jd(config, inp)
-    print(f"[manual_add] 解析完成: {parsed.title} @ {parsed.company}")
+    print(f"[manual_add] Parse complete: {parsed.title} @ {parsed.company}")
 
     url = inp.url.strip()
     chash = content_hash(parsed.title, parsed.company, parsed.location)
 
     duplicate = _dedup_check(config, url, chash)
     if duplicate:
-        print(f"[manual_add] 已存在相同岗位 #{duplicate.id}，跳过")
+        print(f"[manual_add] Same job already exists #{duplicate.id}, skipping")
         return duplicate, False
 
     db_path = config.path("db_path")
@@ -196,20 +225,18 @@ def add_job_from_text(
         session.add(job)
         session.commit()
         job_id = job.id
-        print(f"[manual_add] 已入库 #{job_id}: {parsed.title} @ {parsed.company}")
+        print(f"[manual_add] Stored #{job_id}: {parsed.title} @ {parsed.company}")
 
     if run_matcher:
         try:
             from .matcher import score_job, MatchResult
-            from .agent import make_client
             from .resume_reader import load_cached
 
             resume_text = load_cached(config.path("resume_dir"))
-            client, model_name = make_client(config, "matcher")
 
             with session_scope(db_path) as session:
                 job_obj = session.get(Job, job_id)
-                result: MatchResult = score_job(client, model_name, config, resume_text, job_obj)
+                result: MatchResult = score_job(config, resume_text, job_obj)
 
                 job_obj.match_score        = result.score
                 job_obj.match_summary      = result.summary
@@ -229,11 +256,11 @@ def add_job_from_text(
                 session.add(job_obj)
                 session.commit()
 
-            print(f"[manual_add] 评分完成 #{job_id}: {result.score:.0f}分")
+            print(f"[manual_add] Scoring complete #{job_id}: {result.score:.0f} points")
         except Exception as e:
             import traceback
             traceback.print_exc()
-            print(f"[manual_add] 评分失败 (不影响入库): {e}")
+            print(f"[manual_add] Scoring failed (doesn't affect storage): {e}")
 
     with session_scope(db_path) as session:
         final = session.get(Job, job_id)
@@ -250,7 +277,7 @@ def add_job_from_file(
     run_matcher: bool = True,
     profile_id: Optional[int] = None,
 ) -> tuple[Job, bool]:
-    """从文件 (PDF/DOCX/MD/TXT) 读取 JD 后入库。"""
+    """Read JD from file (PDF/DOCX/MD/TXT) then store."""
     raw_text = read_resume(file_path)
     inp = ManualJobInput(raw_text=raw_text, url=url, user_note=user_note)
     return add_job_from_text(config, inp, run_matcher=run_matcher, profile_id=profile_id)

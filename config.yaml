@@ -17,7 +17,7 @@ model:
   # DeepSeek 实际可用模型: deepseek-chat (通用,支持 tool_use) / deepseek-reasoner (推理)
   matcher:
     provider: deepseek
-    name: deepseek-chat
+    name: deepseek-v4-flash
   tailor:
     provider: claude
     name: claude-opus-4-6
@@ -26,10 +26,10 @@ model:
     name: claude-opus-4-6
   trends:
     provider: deepseek
-    name: deepseek-chat
+    name: deepseek-v4-flash
   profile_analyzer:
     provider: deepseek
-    name: deepseek-chat
+    name: deepseek-v4-flash
   max_tokens: 4096
 
 # ====== 求职偏好 ======
@@ -79,11 +79,7 @@ preferences:
   exclude_keywords:
     - Senior Director
     - VP
-    - intern
-    - internship
-    - student
     - temporary
-    - contractor only
     - postdoc
 
   # 经验年限范围(用于过滤明显不匹配的)

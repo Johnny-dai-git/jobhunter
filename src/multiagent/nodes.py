@@ -89,7 +89,7 @@ def collection_agent(state: JobAgentState) -> JobAgentState:
         pass
 
     try:
-        # 读取 profile 的 job_types
+        # Read profile's job_types
         import json as _json
         profile_job_types = ["Full-time"]
         pid = state.get("profile_id")
@@ -102,10 +102,10 @@ def collection_agent(state: JobAgentState) -> JobAgentState:
             except Exception:
                 pass
 
-        # 多个 job_type 时分别跑一次 collect，合并统计
+        # Run collect separately for each job_type, merge statistics
         merged: dict = {"total_new": 0, "total_seen": 0, "total_excluded": 0, "by_platform": {}}
         for jt in profile_job_types:
-            # platforms_done 每次 job_type 独立，不跨迭代累积
+            # platforms_done is independent per job_type, doesn't accumulate across iterations
             platforms_done: list[str] = []
 
             def on_platform_start(name: str) -> None:
@@ -124,7 +124,7 @@ def collection_agent(state: JobAgentState) -> JobAgentState:
                     platforms_done=list(platforms_done),
                     last_platform_new=new)
 
-            print(f"[collection_agent] 采集 job_type={jt}")
+            print(f"[collection_agent] collecting job_type={jt}")
             _hb(config, "collection_agent", job_type=jt, platforms_done=[])
             s = collect_all(
                 config,
@@ -182,7 +182,7 @@ def matching_agent(state: JobAgentState) -> JobAgentState:
 
     def on_scored(job_id: int, score: float) -> None:
         scored_so_far[0] += 1
-        if scored_so_far[0] % 5 == 0:  # 每 5 个更新一次心跳
+        if scored_so_far[0] % 5 == 0:  # Update heartbeat every 5 items
             _hb(config, "matching_agent", scored=scored_so_far[0])
 
     try:

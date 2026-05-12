@@ -1,7 +1,7 @@
-"""求职信生成器.
+"""Cover letter generator.
 
-借鉴 DailyJobMatch: 复用 matcher 阶段已经生成的 connector / fit_bullets,
-避免 cover_letter 阶段再问一遍 LLM "你和这岗位什么连接".
+Following DailyJobMatch: reuse connector / fit_bullets already generated during matcher phase,
+avoid asking LLM again during cover_letter phase "what's your connection to this job".
 """
 from __future__ import annotations
 
@@ -21,18 +21,18 @@ def write_cover_letter(config: Config, resume_text: str, job_id: int) -> Path:
     with session_scope(db_path) as session:
         job = session.get(Job, job_id)
         if not job:
-            raise ValueError(f"Job id={job_id} 不存在")
+            raise ValueError(f"Job id={job_id} does not exist")
 
-        connector = job.match_connector or "(matcher 阶段未提取 connector, 请你自己从简历和 JD 中找一个具体连接点)"
-        fit_bullets = job.match_fit_bullets or "(matcher 阶段未提取 fit_bullets, 请从简历中挑 3-5 条最相关的经历)"
+        connector = job.match_connector or "(Connector not extracted during matcher phase, please find a concrete connection point from resume and JD)"
+        fit_bullets = job.match_fit_bullets or "(Fit bullets not extracted during matcher phase, please pick 3-5 most relevant experiences from resume)"
 
         prompt = render(
             load_prompt("cover_letter"),
             resume=resume_text,
             title=job.title,
             company=job.company,
-            location=job.location or "(未指定)",
-            description=job.description or "(无 JD)",
+            location=job.location or "(unspecified)",
+            description=job.description or "(no JD)",
             connector=connector,
             fit_bullets=fit_bullets,
         )

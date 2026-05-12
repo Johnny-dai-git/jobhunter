@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}处理中 · JobHunter{% endblock %}
+{% block title %}<span class="zh">处理中</span><span class="en">Processing</span> · JobHunter{% endblock %}
 {% block content %}
 
 {# 没结束时自动刷新; 完成或失败就不再刷 #}
@@ -108,29 +108,53 @@
 
 <div class="pipeline-wrap">
   <div class="pipeline-header">
-    <h1>🤖 智能匹配中</h1>
-    <p>AI 正在分析简历 → 从 5 个平台抓岗位 → 6 维度评分</p>
-    {% if state.started_at %}<div style="margin-top:8px;"><span class="elapsed">⏱ 已用时 {{ elapsed }}</span></div>{% endif %}
+    <h1>🤖 <span class="zh">智能匹配中</span><span class="en">Smart Matching</span></h1>
+    <p>
+      <span class="zh">AI 正在分析简历 → 从 5 个平台抓岗位 → 6 维度评分</span>
+      <span class="en">AI analyzing resume → collecting from 5 platforms → scoring on 6 dimensions</span>
+    </p>
+    {% if state.started_at %}
+    <div style="margin-top:8px;">
+      <span class="elapsed">
+        ⏱ <span class="zh">已用时</span><span class="en">Elapsed</span> {{ elapsed }}
+      </span>
+    </div>
+    {% endif %}
   </div>
 
   {# 4 个阶段 #}
-  {% set collect_hint %}
+  {% set collect_hint_zh %}
     {% if state.phase == 'collecting' and state.current_platform %}
       当前: <strong>{{ state.current_platform }}</strong>{% if platform_elapsed %} ({{ platform_elapsed }}){% endif %}
     {% else %}5 平台逐个跑: LinkedIn / Indeed / YC / Dice / HN
     {% endif %}
   {% endset %}
+  {% set collect_hint_en %}
+    {% if state.phase == 'collecting' and state.current_platform %}
+      Current: <strong>{{ state.current_platform }}</strong>{% if platform_elapsed %} ({{ platform_elapsed }}){% endif %}
+    {% else %}Runs sequentially: LinkedIn / Indeed / YC / Dice / HN
+    {% endif %}
+  {% endset %}
+
   {% set phases = [
-    ('analyzing', '分析简历 + 用户描述', 'DeepSeek 生成 Top-10 搜索 title (再模糊扩展)'),
-    ('collecting', '采集岗位', collect_hint | trim | safe),
-    ('matching', '匹配评分', '6 维度评估每个新岗位'),
-    ('done', '完成', '准备进入岗位列表'),
+    ('analyzing',
+      '分析简历 + 用户描述', 'Analyze Resume & Goal',
+      'DeepSeek 生成 Top-10 搜索 title (再模糊扩展)', 'DeepSeek generates Top-10 search titles (with fuzzy expansion)'),
+    ('collecting',
+      '采集岗位', 'Collect Jobs',
+      collect_hint_zh | trim | safe, collect_hint_en | trim | safe),
+    ('matching',
+      '匹配评分', 'Score & Match',
+      '6 维度评估每个新岗位', 'Scores each new job on 6 dimensions'),
+    ('done',
+      '完成', 'Done',
+      '准备进入岗位列表', 'Ready to view job list'),
   ] %}
   {% set order = ['analyzing', 'collecting', 'matching', 'done'] %}
   {% set current_idx = order.index(state.phase) if state.phase in order else (4 if state.phase == 'error' else 0) %}
 
   <ul class="phase-list">
-    {% for key, label, hint in phases %}
+    {% for key, label_zh, label_en, hint_zh, hint_en in phases %}
       {% set idx = loop.index0 %}
       {% if state.phase == 'error' %}
         {% set cls = 'phase-error' if idx == current_idx else ('phase-done' if idx < current_idx else 'phase-pending') %}
@@ -145,15 +169,22 @@
       <li class="phase {{ cls }}">
         <span class="phase-icon">{{ icon }}</span>
         <div style="flex:1;">
-          <div class="phase-label">{{ label }}</div>
-          <div class="phase-detail">{{ hint }}</div>
+          <div class="phase-label">
+            <span class="zh">{{ label_zh }}</span><span class="en">{{ label_en }}</span>
+          </div>
+          <div class="phase-detail">
+            <span class="zh">{{ hint_zh }}</span><span class="en">{{ hint_en }}</span>
+          </div>
         </div>
-        {# 阶段完成数据 #}
         {% if key == 'collecting' and state.stats.collect %}
-          <span class="badge badge-green">+ {{ state.stats.collect.total_new }} 新</span>
+          <span class="badge badge-green">
+            + {{ state.stats.collect.total_new }} <span class="zh">新</span><span class="en">new</span>
+          </span>
         {% endif %}
         {% if key == 'matching' and state.stats.match %}
-          <span class="badge badge-green">{{ state.stats.match.scored }} 评分</span>
+          <span class="badge badge-green">
+            {{ state.stats.match.scored }} <span class="zh">评分</span><span class="en">scored</span>
+          </span>
         {% endif %}
       </li>
     {% endfor %}
@@ -161,55 +192,79 @@
 
   {% if state.phase == 'done' %}
     <div class="done-banner">
-      <h2>🎉 匹配完成!</h2>
-      <div>共用时 {{ elapsed }}</div>
+      <h2>🎉 <span class="zh">匹配完成!</span><span class="en">Match Complete!</span></h2>
+      <div>
+        <span class="zh">共用时</span><span class="en">Total time:</span> {{ elapsed }}
+      </div>
       <div class="done-stats">
         {% if state.stats.collect %}
         <div class="done-stat-box">
           <div class="done-stat-val">{{ state.stats.collect.total_new }}</div>
-          <div class="done-stat-label">新增岗位</div>
+          <div class="done-stat-label">
+            <span class="zh">新增岗位</span><span class="en">New Jobs</span>
+          </div>
         </div>
         {% endif %}
         {% if state.stats.match %}
         <div class="done-stat-box">
           <div class="done-stat-val">{{ state.stats.match.scored }}</div>
-          <div class="done-stat-label">完成评分</div>
+          <div class="done-stat-label">
+            <span class="zh">完成评分</span><span class="en">Scored</span>
+          </div>
         </div>
         {% endif %}
       </div>
       <div style="margin-top:16px;">
         {% if state.profile_id %}
-          <a href="/jobs?profile_id={{ state.profile_id }}" class="btn btn-primary">🔍 查看本次匹配的岗位 →</a>
-          <a href="/jobs" class="btn btn-secondary" style="margin-left:8px;">查看全部岗位</a>
+          <a href="/jobs?profile_id={{ state.profile_id }}" class="btn btn-primary">
+            🔍 <span class="zh">查看本次匹配的岗位 →</span><span class="en">View matched jobs →</span>
+          </a>
+          <a href="/jobs" class="btn btn-secondary" style="margin-left:8px;">
+            <span class="zh">查看全部岗位</span><span class="en">All jobs</span>
+          </a>
         {% else %}
-          <a href="/jobs" class="btn btn-primary">🔍 查看岗位列表 →</a>
+          <a href="/jobs" class="btn btn-primary">
+            🔍 <span class="zh">查看岗位列表 →</span><span class="en">View job list →</span>
+          </a>
         {% endif %}
       </div>
     </div>
   {% elif state.phase == 'error' %}
     <div class="error-banner">
-      <h2>❌ 流水线出错</h2>
+      <h2>❌ <span class="zh">流水线出错</span><span class="en">Pipeline Error</span></h2>
       <div style="font-family:monospace; font-size:12px; background:rgba(255,255,255,0.5); padding:8px; border-radius:4px; margin-top:8px;">{{ state.error }}</div>
-      <div style="margin-top:12px;"><a href="/onboarding" class="btn btn-secondary">回去重试</a></div>
+      <div style="margin-top:12px;">
+        <a href="/onboarding" class="btn btn-secondary">
+          <span class="zh">回去重试</span><span class="en">Go back & retry</span>
+        </a>
+      </div>
     </div>
   {% elif state.phase == 'cancelled' %}
     <div class="card" style="background:#f1f5f9; text-align:center;">
-      <h2 style="margin:0 0 8px;">⏸ 已取消</h2>
-      <div style="color:var(--color-text-muted);">耗时 {{ elapsed }}, 中途取消</div>
+      <h2 style="margin:0 0 8px;">⏸ <span class="zh">已取消</span><span class="en">Cancelled</span></h2>
+      <div style="color:var(--color-text-muted);">
+        <span class="zh">耗时 {{ elapsed }}, 中途取消</span>
+        <span class="en">{{ elapsed }} elapsed, cancelled midway</span>
+      </div>
       <div style="margin-top:14px;">
-        <a href="/onboarding" class="btn btn-secondary">回 onboarding</a>
-        <a href="/jobs" class="btn btn-primary" style="margin-left:6px;">看现有岗位</a>
+        <a href="/onboarding" class="btn btn-secondary">
+          <span class="zh">回 onboarding</span><span class="en">Back to Dashboard</span>
+        </a>
+        <a href="/jobs" class="btn btn-primary" style="margin-left:6px;">
+          <span class="zh">看现有岗位</span><span class="en">View jobs</span>
+        </a>
       </div>
     </div>
   {% else %}
     <div style="text-align:center; margin-top:24px; color:var(--color-text-muted); font-size:13px;">
-      ⏳ 整个过程约需 3-8 分钟. 这个页面每 3 秒自动刷新, 别关.
+      <span class="zh">⏳ 整个过程约需 3-8 分钟. 这个页面每 3 秒自动刷新, 别关.</span>
+      <span class="en">⏳ The process takes about 3–8 minutes. This page auto-refreshes every 3s — don't close it.</span>
     </div>
     <div style="text-align:center; margin-top:12px;">
       <form method="post" action="/pipeline/cancel" style="margin:0;">
         <button type="submit" class="btn btn-secondary btn-sm"
-                onclick="return confirm('确定要取消正在跑的流水线?')">
-          ✕ 取消流水线
+                onclick="return confirm('确定要取消正在跑的流水线? / Cancel the running pipeline?')">
+          ✕ <span class="zh">取消流水线</span><span class="en">Cancel pipeline</span>
         </button>
       </form>
     </div>

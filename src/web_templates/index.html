@@ -5,11 +5,11 @@
 {# 排序链接 (列头可点击,与下拉同效) #}
 {% macro sort_link(field, label) %}
   {% set active = (sort == field) %}
-  <a href="?min_score={{ min_score }}&status={{ status }}&sort={{ field }}{% if profile_id %}&profile_id={{ profile_id }}{% endif %}"
+  <a href="?min_score={{ min_score }}&status={{ status }}&sort={{ field }}&job_type={{ job_type }}{% if profile_id %}&profile_id={{ profile_id }}{% endif %}"
      style="color:{% if active %}var(--color-accent){% else %}inherit{% endif %};
             text-decoration:none;
             font-weight:{% if active %}800{% else %}inherit{% endif %};">
-    {{ label }}{% if active %} ↓{% endif %}
+    {{ label | safe }}{% if active %} ↓{% endif %}
   </a>
 {% endmacro %}
 
@@ -17,44 +17,72 @@
 <div class="card" style="background:var(--color-accent-light); border-color:var(--color-accent);">
   <div style="display:flex; align-items:center; justify-content:space-between;">
     <div>
-      <span style="font-size:12px; color:var(--color-accent); font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">已过滤 · 画像</span>
+      <span style="font-size:12px; color:var(--color-accent); font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">
+        <span class="zh">已过滤 · 画像</span><span class="en">Filtered · Profile</span>
+      </span>
       <div style="font-weight:600; margin-top:2px;">{{ profile_label }}</div>
     </div>
-    <a href="/jobs?min_score={{ min_score }}&status={{ status }}&sort={{ sort }}" class="btn btn-secondary btn-sm">✕ 看全部</a>
+    <a href="/jobs?min_score={{ min_score }}&status={{ status }}&sort={{ sort }}" class="btn btn-secondary btn-sm">
+      ✕ <span class="zh">看全部</span><span class="en">Clear filter</span>
+    </a>
   </div>
 </div>
 {% endif %}
 
 <form class="filters" method="get">
-  <label for="min_score">最低分</label>
+  <label for="min_score">
+    <span class="zh">最低分</span><span class="en">Min score</span>
+  </label>
   <input type="number" name="min_score" id="min_score" value="{{ min_score }}" step="5" min="0" max="100">
 
-  <label for="status">状态</label>
+  <label for="status">
+    <span class="zh">状态</span><span class="en">Status</span>
+  </label>
   <select name="status" id="status">
-    <option value="active" {% if status == 'active' %}selected{% endif %}>active</option>
-    <option value="all" {% if status == 'all' %}selected{% endif %}>全部</option>
-    <option value="scored" {% if status == 'scored' %}selected{% endif %}>scored</option>
-    <option value="applied" {% if status == 'applied' %}selected{% endif %}>applied</option>
+    <option value="active"   {% if status == 'active'   %}selected{% endif %}>active</option>
+    <option value="all"      {% if status == 'all'      %}selected{% endif %}><span class="zh">全部</span><span class="en">all</span></option>
+    <option value="scored"   {% if status == 'scored'   %}selected{% endif %}>scored</option>
+    <option value="applied"  {% if status == 'applied'  %}selected{% endif %}>applied</option>
     <option value="archived" {% if status == 'archived' %}selected{% endif %}>archived</option>
   </select>
 
-  <label for="sort">排序</label>
-  <select name="sort" id="sort">
-    <option value="score"     {% if sort == 'score' %}selected{% endif %}>分数 (大 → 小)</option>
-    <option value="salary"    {% if sort == 'salary' %}selected{% endif %}>薪资 (大 → 小)</option>
-    <option value="education" {% if sort == 'education' %}selected{% endif %}>学历 (PhD → Bachelor)</option>
-    <option value="mode"      {% if sort == 'mode' %}selected{% endif %}>模式 (Remote → Onsite)</option>
-    <option value="posted"    {% if sort == 'posted' %}selected{% endif %}>发布 (新 → 旧)</option>
-    <option value="company"   {% if sort == 'company' %}selected{% endif %}>公司 (A → Z)</option>
+  <label for="job_type">
+    <span class="zh">类型</span><span class="en">Type</span>
+  </label>
+  <select name="job_type" id="job_type">
+    <option value="all"       {% if job_type == 'all'       %}selected{% endif %}><span class="zh">全部</span><span class="en">All</span></option>
+    <option value="full-time" {% if job_type == 'full-time' %}selected{% endif %}><span class="zh">全职</span><span class="en">Full-time</span></option>
+    <option value="internship"{% if job_type == 'internship'%}selected{% endif %}><span class="zh">实习</span><span class="en">Internship</span></option>
+    <option value="contract"  {% if job_type == 'contract'  %}selected{% endif %}><span class="zh">合同工</span><span class="en">Contract</span></option>
   </select>
 
-  <button class="btn btn-secondary btn-sm" type="submit">应用</button>
-  <span class="filters-count">共 {{ total }} 个</span>
+  <label for="sort">
+    <span class="zh">排序</span><span class="en">Sort</span>
+  </label>
+  <select name="sort" id="sort">
+    <option value="score"     {% if sort == 'score'     %}selected{% endif %}>Score ↓</option>
+    <option value="salary"    {% if sort == 'salary'    %}selected{% endif %}>Salary ↓</option>
+    <option value="education" {% if sort == 'education' %}selected{% endif %}>Education (PhD → BS)</option>
+    <option value="mode"      {% if sort == 'mode'      %}selected{% endif %}>Mode (Remote → Onsite)</option>
+    <option value="posted"    {% if sort == 'posted'    %}selected{% endif %}>Posted (newest)</option>
+    <option value="company"   {% if sort == 'company'   %}selected{% endif %}>Company (A → Z)</option>
+  </select>
+
+  <button class="btn btn-secondary btn-sm" type="submit">
+    <span class="zh">应用</span><span class="en">Apply</span>
+  </button>
+  <span class="filters-count">
+    <span class="zh">共 {{ total }} 个</span><span class="en">{{ total }} jobs</span>
+  </span>
 </form>
 
 <form method="post" action="/refresh" style="margin-bottom:16px;">
-  <button type="submit" class="btn btn-primary btn-sm">🔄 抓取新岗位 + 重新评分</button>
-  <span style="color:var(--color-text-muted); font-size:12px; margin-left:8px;">~3-5 分钟</span>
+  <button type="submit" class="btn btn-primary btn-sm">
+    🔄 <span class="zh">抓取新岗位 + 重新评分</span><span class="en">Fetch new jobs + re-score</span>
+  </button>
+  <span style="color:var(--color-text-muted); font-size:12px; margin-left:8px;">
+    <span class="zh">~3-5 分钟</span><span class="en">~3–5 min</span>
+  </span>
 </form>
 
 <div class="card card-flat">
@@ -62,15 +90,15 @@
     <thead>
       <tr>
         <th>{{ sort_link('score', 'Score') }}</th>
-        <th>岗位</th>
-        <th>{{ sort_link('company', '公司') }}</th>
-        <th>地点</th>
-        <th>{{ sort_link('mode', '模式') }}</th>
-        <th>{{ sort_link('education', '学历') }}</th>
-        <th>{{ sort_link('salary', '薪资') }}</th>
-        <th>{{ sort_link('posted', '发布') }}</th>
-        <th>来源</th>
-        <th>状态</th>
+        <th><span class="zh">岗位</span><span class="en">Job</span></th>
+        <th>{{ sort_link('company', '<span class="zh">公司</span><span class="en">Company</span>') }}</th>
+        <th><span class="zh">地点</span><span class="en">Location</span></th>
+        <th>{{ sort_link('mode', '<span class="zh">模式</span><span class="en">Mode</span>') }}</th>
+        <th>{{ sort_link('education', '<span class="zh">学历</span><span class="en">Edu</span>') }}</th>
+        <th>{{ sort_link('salary', '<span class="zh">薪资</span><span class="en">Salary</span>') }}</th>
+        <th>{{ sort_link('posted', '<span class="zh">发布</span><span class="en">Posted</span>') }}</th>
+        <th><span class="zh">来源</span><span class="en">Source</span></th>
+        <th><span class="zh">状态</span><span class="en">Status</span></th>
         <th></th>
       </tr>
     </thead>
@@ -110,17 +138,22 @@
           {% elif j.status == 'scored' %}<span class="badge badge-yellow">scored</span>
           {% elif j.status == 'archived' %}<span class="badge badge-gray">archived</span>
           {% else %}<span class="badge badge-gray">{{ j.status }}</span>{% endif %}
-          {% if j.tailored_resume_pdf_path %}<span class="badge badge-indigo" style="margin-left:4px;" title="已生成定制简历">📄</span>{% endif %}
+          {% if j.tailored_resume_pdf_path %}
+            <span class="badge badge-indigo" style="margin-left:4px;"
+                  title="{% raw %}{% endraw %}Resume tailored">📄</span>
+          {% endif %}
         </td>
         <td style="text-align:right;">
           <form method="post" action="/job/{{ j.id }}/delete"
-                onsubmit="return confirm('删除 {{ j.title }} @ {{ j.company }}？')">
+                onsubmit="return confirm('Delete {{ j.title }} @ {{ j.company }}?')">
             <input type="hidden" name="redirect_to" value="/jobs">
-            <button type="submit" title="删除" style="
-              background:none; border:none; cursor:pointer; padding:4px 6px;
-              color:var(--color-text-dim); font-size:15px; border-radius:4px;
-              line-height:1;" onmouseover="this.style.color='var(--color-danger)'"
-              onmouseout="this.style.color='var(--color-text-dim)'">🗑</button>
+            <button type="submit"
+                    title="Delete"
+                    style="background:none; border:none; cursor:pointer; padding:4px 6px;
+                           color:var(--color-text-dim); font-size:15px; border-radius:4px;
+                           line-height:1;"
+                    onmouseover="this.style.color='var(--color-danger)'"
+                    onmouseout="this.style.color='var(--color-text-dim)'">🗑</button>
           </form>
         </td>
       </tr>
@@ -128,8 +161,14 @@
       <tr><td colspan="11">
         <div class="empty">
           <div class="empty-icon">🔍</div>
-          <div>没有匹配当前筛选条件的岗位</div>
-          <div style="margin-top:6px; font-size:12px;">试试把最低分调低,或切换状态</div>
+          <div>
+            <span class="zh">没有匹配当前筛选条件的岗位</span>
+            <span class="en">No jobs match the current filters</span>
+          </div>
+          <div style="margin-top:6px; font-size:12px;">
+            <span class="zh">试试把最低分调低，或切换状态</span>
+            <span class="en">Try lowering the minimum score or changing the status filter</span>
+          </div>
         </div>
       </td></tr>
       {% endfor %}

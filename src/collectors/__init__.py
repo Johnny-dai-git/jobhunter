@@ -1,17 +1,17 @@
-"""岗位采集器: 各平台一个模块,统一接口.
+"""Job collectors: one module per platform, unified interface.
 
-每个平台的 backend 在 config.yaml 里 collectors.{platform}.backend 指定.
+Each platform's backend is specified in config.yaml as collectors.{platform}.backend.
 
-平台 / backend 矩阵 (✓ 已实装):
-                playwright  apify      其他
+Platform / backend matrix (✓ implemented):
+                playwright  apify      other
     linkedin    ✓           ✓
     indeed      ✓           ✓
     glassdoor   ✓           -
-    ziprecruiter ✓ (禁用)    -
+    ziprecruiter ✓ (disabled) -
     yc          -           ✓
     wellfound   -           ✓
     dice        -           ✓
-    hackernews  -           -          ✓ (直连 HN Firebase + Algolia API)
+    hackernews  -           -          ✓ (direct HN Firebase + Algolia API)
 """
 from .base import BaseCollector, CollectedJob
 from .dice_apify import DiceApifyCollector
@@ -64,7 +64,7 @@ _REGISTRY: dict[str, dict[str, type[BaseCollector]]] = {
         "apify": DiceApifyCollector,
     },
     "hackernews": {
-        "api": HackerNewsHiringCollector,    # 直接 HN API,不走 apify/playwright
+        "api": HackerNewsHiringCollector,    # Direct HN API, not through apify/playwright
     },
 }
 
@@ -76,17 +76,17 @@ def get_collector(name: str, config) -> BaseCollector:
     name = aliases.get(name, name)
 
     if name not in _REGISTRY:
-        raise ValueError(f"未知平台: {name}. 支持: {list(_REGISTRY)}")
+        raise ValueError(f"Unknown platform: {name}. Supported: {list(_REGISTRY)}")
 
     settings = config.collectors.get(name, {}) or {}
-    # 默认 backend: apify 优先,否则取该平台第一个可用 backend
+    # Default backend: apify first, otherwise use first available backend for platform
     available = _REGISTRY[name]
     default_backend = "apify" if "apify" in available else next(iter(available))
     backend = (settings.get("backend") or default_backend).lower()
 
     if backend not in available:
         raise ValueError(
-            f"{name} 不支持 backend={backend}. 可用: {list(available)}"
+            f"{name} does not support backend={backend}. Available: {list(available)}"
         )
 
     return available[backend](config)

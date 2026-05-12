@@ -1,7 +1,7 @@
-"""投递状态追踪工具.
+"""Application tracking tool.
 
-job-agent 不自动投递. 你在网站上手动投完之后,用 `mark-applied` 命令
-告诉 agent "这个我投了",方便后续追踪和趋势分析.
+job-agent doesn't auto-apply. After manually applying on websites, use `mark-applied` command
+to tell agent "I applied to this", convenient for follow-up tracking and trend analysis.
 """
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ from .db import Event, Job, JobStatus, session_scope
 
 
 def mark_applied(config: Config, job_id: int, note: str | None = None) -> None:
-    """把某岗位状态改为 applied,并记一条事件."""
+    """Mark a job's status as applied and record an event."""
     db_path = config.path("db_path")
     with session_scope(db_path) as session:
         job = session.get(Job, job_id)
         if not job:
-            raise ValueError(f"Job id={job_id} 不存在")
+            raise ValueError(f"Job id={job_id} does not exist")
         job.status = JobStatus.APPLIED.value
         job.applied_at = datetime.utcnow()
         session.add(Event(job_id=job_id, kind="applied", content=note))

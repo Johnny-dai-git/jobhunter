@@ -1,18 +1,18 @@
-"""LinkedIn 采集器 - 实装版.
+"""LinkedIn collector - implementation version.
 
-⚠️ 警告: LinkedIn 用户协议明令禁止自动化抓取. 大量请求可能导致账号被限或封禁.
-本采集器特意做了以下限制:
-1. 必须使用你登录后的 cookies (不会用密码登录)
-2. 默认走"已登录用户视角"的搜索 URL,只看你能看的
-3. 每次请求间随机延迟,limit < 30 个
-4. 每个 keyword/location 组合只翻第一页
+⚠️ WARNING: LinkedIn terms of service explicitly prohibit automated scraping. Large-scale requests
+may result in account restriction or ban. This collector deliberately implements these limits:
+1. Must use logged-in cookies (will not use password login)
+2. Default to "logged-in user perspective" search URLs, only see what you can see
+3. Random delay between requests, limit < 30 items
+4. Only first page per keyword/location combination
 
-如果你只是要找几个高质量岗位让 Claude 评分,这种节制的用法风险可控.
-要做大规模爬取,请用 LinkedIn 官方 API.
+If you only need a few high-quality jobs for Claude scoring, this controlled usage is manageable.
+For large-scale scraping, use LinkedIn's official API.
 
-搜索 URL:
+Search URL:
     https://www.linkedin.com/jobs/search/?keywords={kw}&location={loc}&f_TPR=r{seconds}
-- f_TPR=r86400 表示最近 24 小时 (借鉴 n8n 工作流)
+- f_TPR=r86400 means last 24 hours (inspired by n8n workflow)
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class LinkedInCollector(BaseCollector):
                     try:
                         page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     except Exception as e:
-                        print(f"[linkedin] 打开搜索页失败: {e}")
+                        print(f"[linkedin] failed to open search page: {e}")
                         continue
                     polite_wait(1500, 3000)
                     scroll_to_bottom(page, steps=4, pause_ms=900)
@@ -84,7 +84,7 @@ class LinkedInCollector(BaseCollector):
                                 ".job-search-card__location"
                             )
 
-                            # 详情面板
+                            # Details panel
                             desc = ""
                             try:
                                 c.click(timeout=5000)
@@ -110,7 +110,7 @@ class LinkedInCollector(BaseCollector):
                             )
                             count += 1
                         except Exception as e:
-                            print(f"[linkedin] 解析卡片 {i} 失败: {e}")
+                            print(f"[linkedin] failed to parse card {i}: {e}")
                             continue
 
 

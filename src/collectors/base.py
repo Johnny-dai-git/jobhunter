@@ -1,4 +1,4 @@
-"""采集器基类."""
+"""Collector base class."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -10,7 +10,7 @@ from ..config import Config
 
 @dataclass
 class CollectedJob:
-    """采集到的岗位 (落库前的中间结构)."""
+    """Collected job (intermediate structure before storing in database)."""
 
     source: str
     url: str
@@ -24,7 +24,7 @@ class CollectedJob:
 
 
 class BaseCollector(ABC):
-    """所有采集器都实现这个接口."""
+    """All collectors implement this interface."""
 
     name: str = "base"
 
@@ -46,5 +46,5 @@ class BaseCollector(ABC):
 
     @abstractmethod
     def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:
-        """根据关键词和地点搜索岗位,逐个 yield."""
+        """Search for jobs by keywords and locations, yield them one by one."""
         ...

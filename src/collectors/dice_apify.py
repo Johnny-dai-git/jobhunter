@@ -1,11 +1,11 @@
 """Dice.com Jobs via Apify (worldunboxer/dice-jobs-scraper).
 
-worldunboxer 的 schema 字段(从社区文档):
-    keyword          - 单字符串
-    location         - 单字符串
-    radius           - 半径数值
-    unit             - 半径单位 ("mi" / "km")
-    job_entries      - 上限数量
+worldunboxer schema fields (from community documentation):
+    keyword          - single string
+    location         - single string
+    radius           - radius value
+    unit             - radius unit ("mi" / "km")
+    job_entries      - max count
     posted_date      - "Today" / "1" / "3" / "7" / "30"
     employment_type  - ["FULLTIME", "PARTTIME", "CONTRACTS"]
     employer_type    - ["Direct Hire", "Recruiter"]
@@ -22,7 +22,7 @@ from .base import CollectedJob
 
 
 def _hours_to_posted(hours: int) -> str:
-    """worldunboxer 用枚举字符串: ANY / ONE / THREE / SEVEN"""
+    """worldunboxer uses enum strings: ANY / ONE / THREE / SEVEN"""
     if hours <= 24:
         return "ONE"
     if hours <= 72:
@@ -48,7 +48,7 @@ class DiceApifyCollector(ApifyCollector):
         }
 
     def _parse_item(self, item: dict) -> Optional[CollectedJob]:
-        """worldunboxer 输出字段确认 (real schema):
+        """worldunboxer output fields confirmed (real schema):
         title / company / details_page_url / job_id / summary /
         location / salary / employment_type / posted_date / is_remote / ...
         """

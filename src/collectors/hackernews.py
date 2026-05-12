@@ -1,14 +1,14 @@
-"""HackerNews 'Ask HN: Who is hiring?' 月度帖抓取.
+"""HackerNews 'Ask HN: Who is hiring?' monthly thread scraper.
 
-完全免费,不需要 Apify. 用 HN 自家的 Algolia + Firebase API.
+Completely free, no Apify needed. Uses HN's own Algolia + Firebase APIs.
 
-工作流:
-1. Algolia 搜索最新的 "Ask HN: Who is hiring?" 主题帖,拿到 thread id
-2. Firebase API 拉这个 thread 的所有 top-level 评论
-3. 每条评论按 HN 惯例: 第一行是 'Company | Role | Location | Tech | Contact'
-4. 用简单 heuristic 解析,无法解析就 yield 原文 (matcher 能容忍)
+Workflow:
+1. Algolia search for latest "Ask HN: Who is hiring?" thread, get thread id
+2. Firebase API fetch all top-level comments from that thread
+3. By HN convention, each comment's first line is 'Company | Role | Location | Tech | Contact'
+4. Parse with simple heuristics, yield raw text if unparseable (matcher can handle it)
 
-API 文档:
+API documentation:
 - https://hn.algolia.com/api  (search)
 - https://github.com/HackerNews/API  (Firebase)
 """
@@ -28,7 +28,7 @@ HN_FIREBASE_ITEM = "https://hacker-news.firebaseio.com/v0/item/{id}.json"
 
 
 def _strip_html(html: str) -> str:
-    """简单去 HTML 标签 + 解 entity."""
+    """Simple HTML tag removal + entity decoding."""
     import html as html_mod
     text = re.sub(r"<[^>]+>", " ", html or "")
     text = html_mod.unescape(text)
@@ -36,9 +36,9 @@ def _strip_html(html: str) -> str:
 
 
 def _parse_header_line(line: str) -> dict:
-    """HN 惯例: 第一行像 'Anthropic | ML Infra Engineer | Remote/SF | Python, PyTorch'
+    """HN convention: first line looks like 'Anthropic | ML Infra Engineer | Remote/SF | Python, PyTorch'
 
-    返回 {company, title, location} (任何字段都可能缺).
+    Returns {company, title, location} (any field may be missing).
     """
     parts = [p.strip() for p in re.split(r"[|·•·]", line) if p.strip()]
     if not parts:
@@ -47,7 +47,7 @@ def _parse_header_line(line: str) -> dict:
     if len(parts) > 1:
         out["title"] = parts[1]
     if len(parts) > 2:
-        # 在剩下的里找像 location 的
+        # Look for location-like string in remaining parts
         for p in parts[2:]:
             if re.search(r"remote|hybrid|\b(SF|NYC|US|EU|UK|CA|NY)\b|[A-Z][a-z]+ ?,? ?[A-Z]+", p):
                 out["location"] = p
@@ -56,7 +56,7 @@ def _parse_header_line(line: str) -> dict:
 
 
 def _find_latest_thread(keyword_filter: list[str] | None = None) -> Optional[dict]:
-    """从 Algolia 找最近的 'Ask HN: Who is hiring?' story."""
+    """Find latest 'Ask HN: Who is hiring?' story from Algolia."""
     params = {
         "query": "Ask HN: Who is hiring?",
         "tags": "story,author_whoishiring",
@@ -65,7 +65,7 @@ def _find_latest_thread(keyword_filter: list[str] | None = None) -> Optional[dic
     resp = httpx.get(HN_ALGOLIA_SEARCH, params=params, timeout=30)
     resp.raise_for_status()
     hits = resp.json().get("hits") or []
-    # 取最新一条 (Algolia 默认按时间)
+    # Get latest one (Algolia defaults to time-sorted)
     for hit in hits:
         title = hit.get("title") or ""
         if "Ask HN" in title and "hiring" in title.lower() and "wants" not in title.lower():
@@ -80,7 +80,7 @@ def _fetch_item(item_id: int) -> dict:
 
 
 class HackerNewsHiringCollector(BaseCollector):
-    """从 HN 月度 'Who is hiring?' 帖抓取岗位."""
+    """Collect jobs from HN monthly 'Who is hiring?' thread."""
 
     name = "hackernews"
 
@@ -89,17 +89,17 @@ class HackerNewsHiringCollector(BaseCollector):
 
         thread = _find_latest_thread()
         if not thread:
-            print("  [hn] 没找到 Who is hiring 主题帖")
+            print("  [hn] could not find Who is hiring thread")
             return
 
         thread_id = int(thread["objectID"])
         thread_url = f"https://news.ycombinator.com/item?id={thread_id}"
         thread_title = thread.get("title") or "Ask HN: Who is hiring?"
-        print(f"  [hn] 解析 {thread_title} (id={thread_id})")
+        print(f"  [hn] parsing {thread_title} (id={thread_id})")
 
         thread_full = _fetch_item(thread_id)
         kids = thread_full.get("kids") or []
-        print(f"  [hn] thread 有 {len(kids)} 条 top-level 评论")
+        print(f"  [hn] thread has {len(kids)} top-level comments")
 
         count = 0
         for kid_id in kids:
@@ -108,7 +108,7 @@ class HackerNewsHiringCollector(BaseCollector):
             try:
                 item = _fetch_item(kid_id)
             except Exception as e:
-                print(f"  [hn] fetch {kid_id} 失败: {e}")
+                print(f"  [hn] fetch {kid_id} failed: {e}")
                 continue
             if not item or item.get("deleted") or item.get("dead"):
                 continue
@@ -116,7 +116,7 @@ class HackerNewsHiringCollector(BaseCollector):
             if not text or len(text) < 40:
                 continue
 
-            # 关键词过滤 (任何 keyword 命中就放过)
+            # Keyword filter (pass through if any keyword matches)
             text_lower = text.lower()
             if keywords_lower and not any(k in text_lower for k in keywords_lower):
                 continue

@@ -1,7 +1,7 @@
-"""ZipRecruiter 采集器 - 实装版.
+"""ZipRecruiter collector - implementation version.
 
-搜索 URL: https://www.ziprecruiter.com/jobs-search?search={kw}&location={loc}&days=1
-- days=1 表示只看最近 24 小时的岗位 (借鉴 n8n 工作流的"24h 过滤"思路)
+Search URL: https://www.ziprecruiter.com/jobs-search?search={kw}&location={loc}&days=1
+- days=1 means only jobs from last 24 hours (inspired by n8n workflow's "24h filter" idea)
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ class ZipRecruiterCollector(BaseCollector):
 
     def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:
         max_age_hours = int(self.config.freshness.get("max_age_hours", 0) or 0)
-        # ZipRecruiter 的 days 参数: 1=24h, 5=过去 5 天
+        # ZipRecruiter's days parameter: 1=24h, 5=past 5 days
         days = max(1, max_age_hours // 24) if max_age_hours else 0
 
         seen: set[str] = set()
@@ -37,7 +37,7 @@ class ZipRecruiterCollector(BaseCollector):
                     try:
                         page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     except Exception as e:
-                        print(f"[ziprecruiter] 打开搜索页失败: {e}")
+                        print(f"[ziprecruiter] failed to open search page: {e}")
                         continue
                     polite_wait()
                     scroll_to_bottom(page, steps=5)
@@ -65,7 +65,7 @@ class ZipRecruiterCollector(BaseCollector):
                             location = _safe_text(c, "[class*='location'], a.t_location_link")
                             snippet = _safe_text(c, ".job_snippet, [class*='snippet']")
 
-                            # 详情页拿完整 JD
+                            # Get complete job description from detail page
                             desc = snippet
                             try:
                                 detail = page.context.new_page()
@@ -91,7 +91,7 @@ class ZipRecruiterCollector(BaseCollector):
                             )
                             count += 1
                         except Exception as e:
-                            print(f"[ziprecruiter] 解析卡片 {i} 失败: {e}")
+                            print(f"[ziprecruiter] failed to parse card {i}: {e}")
                             continue
 
 

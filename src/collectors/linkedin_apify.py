@@ -1,35 +1,35 @@
-"""LinkedIn 通过 Apify (默认用 harvestapi/linkedin-job-search).
+"""LinkedIn via Apify (default: harvestapi/linkedin-job-search).
 
-为什么选 harvestapi:
-- $1 / 1000 jobs (Apify 上最便宜)
-- 无月费 / 无需登录 cookies
-- API 稳定,无 Cloudflare 问题
+Why harvestapi:
+- $1 / 1000 jobs (cheapest on Apify)
+- No monthly fee / no need for login cookies
+- Stable API, no Cloudflare issues
 
-搜索策略 (per-title 模式):
-  profile_analyzer 生成 Top-10 positions, 每个 position 带 aliases + broader_terms,
-  共约 40 个搜索词. 我们对**每个 title 单独发一次 Apify 请求**, 每次返回
-  results_per_title 条 (默认 15). 跨 title 按 URL 去重, 最终最多入库
-  max_per_run 条.
+Search strategy (per-title mode):
+  profile_analyzer generates Top-10 positions, each with aliases + broader_terms,
+  totaling ~40 search terms. We make **one Apify request per title**, each returning
+  results_per_title items (default 15). Cross-title deduplication by URL, final max
+  max_per_run items.
 
-  好处:
-  - 每个 title 都有独立的搜索配额, 不会 40 个 title 抢 24 条结果
-  - "ML Engineer" / "Machine Learning Engineer" / "AI/ML Engineer" 各自返回
-    最新的 15 条, 覆盖面大大提升
-  - 跨 title 去重后, 相同岗位只算一次
+  Benefits:
+  - Each title has independent search quota, no 40 titles competing for 24 results
+  - "ML Engineer" / "Machine Learning Engineer" / "AI/ML Engineer" each return
+    latest 15 items, greatly expanding coverage
+  - After cross-title dedup, each job counted once
 
-费用估算 (harvestapi $1/1000 jobs):
-  40 titles × 15 条 = 600 条原始结果 ≈ $0.60/次
-  config 里可以调 results_per_title 和 max_titles 来控制成本
+Cost estimate (harvestapi $1/1000 jobs):
+  40 titles × 15 items = 600 raw results ≈ $0.60/run
+  Can adjust results_per_title and max_titles in config to control cost
 
 Actor input schema (https://apify.com/harvestapi/linkedin-job-search):
-    jobTitles:       List[str]    岗位关键词 (必填)
-    locations:       List[str]    地点列表
+    jobTitles:       List[str]    job keywords (required)
+    locations:       List[str]    location list
     sortBy:          "relevance" | "date"
     workplaceType:   List["Remote"|"Hybrid"|"On-site"]
     employmentType:  List["full-time"|"part-time"|"contract"|"internship"|"temporary"]
     experienceLevel: List["Entry Level"|"Mid Level"|"Senior Level"]
     postedLimit:     "1h"|"24h"|"week"|"month"
-    maxItems:        int     这次搜索最多返回多少条
+    maxItems:        int     max items to return from this search
 """
 from __future__ import annotations
 
@@ -47,8 +47,8 @@ def _hours_to_posted_limit(hours: int) -> str:
 
 
 def _normalize_location(locations: list[str]) -> list[str]:
-    """如果包含 'United States', 只用它即可覆盖全美, 不需要额外加城市.
-    这样可以避免同一岗位因城市不同被重复搜到.
+    """If 'United States' is included, only use it to cover whole US, no need for additional cities.
+    This avoids the same job being found multiple times due to different cities.
     """
     for loc in locations:
         if "united states" in loc.lower() or loc.strip().upper() == "US":
@@ -61,24 +61,24 @@ class LinkedInApifyCollector(ApifyCollector):
 
     @property
     def results_per_title(self) -> int:
-        """每个 title 单独搜索时返回的条数. 可在 config.yaml 里覆盖."""
+        """Items returned per title when searching separately. Can be overridden in config.yaml."""
         return int(self._settings.get("results_per_title", 15))
 
     @property
     def max_titles(self) -> int:
-        """最多搜索多少个 title (防止 40 个 title 花太多时间/费用).
-        默认 40, 可在 config.yaml 里限制."""
+        """Max titles to search (prevent 40 titles from taking too much time/cost).
+        Default 40, can be limited in config.yaml."""
         return int(self._settings.get("max_titles", 40))
 
     @property
     def employment_types(self) -> list[str]:
-        """job_types → harvestapi employmentType 格式.
-        优先读 collect_all 注入的实例覆盖值，否则读 config.yaml（不修改共享对象）。
+        """job_types → harvestapi employmentType format.
+        Priority: instance override from collect_all, then config.yaml (don't modify shared object).
         """
         raw = getattr(self, "_job_types_override", None) \
               or self.config.preferences.get("job_types") \
               or ["Full-time"]
-        # 标准化映射 — harvestapi 要求全小写
+        # Normalization mapping — harvestapi requires lowercase
         mapping = {
             "full-time": "full-time",
             "full_time": "full-time",
@@ -102,7 +102,7 @@ class LinkedInApifyCollector(ApifyCollector):
         return result
 
     def _build_single_input(self, title: str, locations: list[str]) -> dict:
-        """为单个 title 构建 Apify 请求 input."""
+        """Build Apify request input for a single title."""
         max_age_hours = int(self.config.freshness.get("max_age_hours", 0) or 24)
         inp = {
             "jobTitles": [title],
@@ -117,7 +117,7 @@ class LinkedInApifyCollector(ApifyCollector):
         return inp
 
 
-    # _build_input 保留兼容性 (基类 search() 不再用, 但其他代码可能调用)
+    # _build_input kept for compatibility (base class search() no longer uses it, but other code may)
     def _build_input(self, keywords: list[str], locations: list[str]) -> dict:
         max_age_hours = int(self.config.freshness.get("max_age_hours", 0) or 24)
         return {
@@ -129,35 +129,35 @@ class LinkedInApifyCollector(ApifyCollector):
         }
 
     def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:
-        """Per-title 搜索: 每个 title 单独一次 Apify 调用, 跨 title 按 URL 去重."""
+        """Per-title search: one Apify call per title, cross-title dedup by URL."""
         if not self._token:
             raise ApifyError(
-                "APIFY_API_TOKEN 未设置. 去 https://console.apify.com/account/integrations 拿一个,填到 .env"
+                "APIFY_API_TOKEN not set. Get one at https://console.apify.com/account/integrations and add to .env"
             )
 
         norm_locations = _normalize_location(locations)
         titles = keywords[: self.max_titles]
-        total_cap = self.max_per_run          # 全局上限, 跨所有 title
-        seen_urls: set[str] = set()           # 跨 title 去重
+        total_cap = self.max_per_run          # Global cap across all titles
+        seen_urls: set[str] = set()           # Cross-title dedup
         yielded = 0
 
-        print(f"  [linkedin] per-title 模式: {len(titles)} 个 title × "
-              f"{self.results_per_title} 条/title, 地点={norm_locations}, "
-              f"总上限={total_cap}")
+        print(f"  [linkedin] per-title mode: {len(titles)} titles × "
+              f"{self.results_per_title} items/title, locations={norm_locations}, "
+              f"total_cap={total_cap}")
 
         for i, title in enumerate(titles, 1):
             if yielded >= total_cap:
-                print(f"  [linkedin] 已达总上限 {total_cap}, 停止")
+                print(f"  [linkedin] reached total cap {total_cap}, stopping")
                 break
 
             input_data = self._build_single_input(title, norm_locations)
             input_data.update(self.input_overrides)
 
-            print(f"  [linkedin] ({i}/{len(titles)}) 搜索: {title!r} ...")
+            print(f"  [linkedin] ({i}/{len(titles)}) search: {title!r} ...")
             try:
                 items = self._run_actor(input_data)
             except ApifyError as e:
-                print(f"  [linkedin] [{title}] Apify 错误, 跳过: {e}")
+                print(f"  [linkedin] [{title}] Apify error, skipping: {e}")
                 continue
 
             new_this_title = 0
@@ -167,11 +167,11 @@ class LinkedInApifyCollector(ApifyCollector):
                 try:
                     cj = self._parse_item(item)
                 except Exception as e:
-                    print(f"  [linkedin] 解析失败,跳过: {e}")
+                    print(f"  [linkedin] parse failed, skipping: {e}")
                     continue
                 if cj is None:
                     continue
-                # 跨 title 去重
+                # Cross-title dedup
                 key = cj.url or cj.external_id or ""
                 if key and key in seen_urls:
                     continue
@@ -181,7 +181,7 @@ class LinkedInApifyCollector(ApifyCollector):
                 yielded += 1
                 new_this_title += 1
 
-            print(f"  [linkedin] [{title}] +{new_this_title} 条 (累计 {yielded}/{total_cap})")
+            print(f"  [linkedin] [{title}] +{new_this_title} items (total {yielded}/{total_cap})")
 
     def _parse_item(self, item: dict) -> Optional[CollectedJob]:
         title = item.get("title")

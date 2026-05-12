@@ -1,5 +1,11 @@
 {% extends "base.html" %}
-{% block title %}{% if has_profile %}更新画像{% else %}开始使用{% endif %} · JobHunter{% endblock %}
+{% block title %}
+  {% if has_profile %}
+    <span class="zh">更新画像</span><span class="en">Update Profile</span>
+  {% else %}
+    <span class="zh">开始使用</span><span class="en">Get Started</span>
+  {% endif %} · JobHunter
+{% endblock %}
 {% block content %}
 
 <style>
@@ -37,57 +43,99 @@
 <div class="setup-shell">
   <div class="page-head">
     <div>
-      <h1>{% if has_profile %}更新求职画像{% else %}创建求职画像{% endif %}</h1>
-      <p>用这一页描述目标岗位并选择简历。运行状态、简历库、历史画像和自动运行设置已经拆到独立页面。</p>
+      <h1>
+        {% if has_profile %}
+          <span class="zh">更新求职画像</span><span class="en">Update Job Profile</span>
+        {% else %}
+          <span class="zh">创建求职画像</span><span class="en">Create Job Profile</span>
+        {% endif %}
+      </h1>
+      <p>
+        <span class="zh">用这一页描述目标岗位并选择简历。运行状态、简历库、历史画像和自动运行设置已经拆到独立页面。</span>
+        <span class="en">Describe your target role and pick a resume on this page. Run status, resume library, profile history, and automation settings each have their own page.</span>
+      </p>
     </div>
     {% if cur_run %}
-      <a href="/onboarding/processing" class="btn btn-secondary btn-sm">查看进度</a>
+      <a href="/onboarding/processing" class="btn btn-secondary btn-sm">
+        <span class="zh">查看进度</span><span class="en">View progress</span>
+      </a>
     {% endif %}
   </div>
 
   <div class="quick-grid">
-    <a class="quick-link" href="/onboarding/status"><strong>运行状态</strong><span>当前任务、健康检查、累计统计。</span></a>
-    <a class="quick-link" href="/onboarding/resumes"><strong>简历库</strong><span>上传、激活、暂停或删除简历。</span></a>
-    <a class="quick-link" href="/onboarding/profiles"><strong>历史画像</strong><span>切换求职策略并查看结果。</span></a>
-    <a class="quick-link" href="/onboarding/automation"><strong>自动运行</strong><span>定时任务和抓取时间窗。</span></a>
+    <a class="quick-link" href="/onboarding/status">
+      <strong><span class="zh">运行状态</span><span class="en">Run Status</span></strong>
+      <span><span class="zh">当前任务、健康检查、累计统计。</span><span class="en">Current task, health checks, lifetime stats.</span></span>
+    </a>
+    <a class="quick-link" href="/onboarding/resumes">
+      <strong><span class="zh">简历库</span><span class="en">Resume Library</span></strong>
+      <span><span class="zh">上传、激活、暂停或删除简历。</span><span class="en">Upload, activate, pause, or delete resumes.</span></span>
+    </a>
+    <a class="quick-link" href="/onboarding/profiles">
+      <strong><span class="zh">历史画像</span><span class="en">Profile History</span></strong>
+      <span><span class="zh">切换求职策略并查看结果。</span><span class="en">Switch job strategies and view results.</span></span>
+    </a>
+    <a class="quick-link" href="/onboarding/automation">
+      <strong><span class="zh">自动运行</span><span class="en">Automation</span></strong>
+      <span><span class="zh">定时任务和抓取时间窗。</span><span class="en">Scheduled jobs and freshness window.</span></span>
+    </a>
   </div>
 
   {% if pipeline_running %}
   <div class="notice" style="margin-bottom:16px;">
-    当前有流水线在跑。提交新画像会先中断当前任务，然后按新画像重新运行。
-    <a href="/onboarding/processing" style="color:var(--color-accent); margin-left:8px;">查看进度</a>
+    <span class="zh">当前有流水线在跑。提交新画像会先中断当前任务，然后按新画像重新运行。</span>
+    <span class="en">A pipeline is currently running. Submitting a new profile will cancel it and restart with the new settings.</span>
+    <a href="/onboarding/processing" style="color:var(--color-accent); margin-left:8px;">
+      <span class="zh">查看进度</span><span class="en">View progress</span>
+    </a>
   </div>
   {% endif %}
 
   <form action="/onboarding/submit" method="post" enctype="multipart/form-data" class="card">
     <div class="field">
-      <label>求职目标</label>
-      <div class="hint">写清方向、地点、工作模式、公司类型、薪资期望、必须条件和不想看的方向。这里不需要格式化成简历。</div>
-      <textarea name="description" required placeholder="例如:
+      <label><span class="zh">求职目标</span><span class="en">Job Goal</span></label>
+      <div class="hint">
+        <span class="zh">写清方向、地点、工作模式、公司类型、薪资期望、必须条件和不想看的方向。这里不需要格式化成简历。</span>
+        <span class="en">Describe your target role, location, work mode, company type, salary expectations, must-haves, and what to exclude. No formatting needed.</span>
+      </div>
+      <textarea name="description" required placeholder="e.g.
 
-我是 AI 基础设施方向的 PhD 候选人，研究经历包括分布式训练、模型服务、系统观测和性能优化。
-
-希望找美国湾区或西雅图的 ML Engineer / ML Infrastructure Engineer / Backend Infrastructure 岗位。优先 AI 公司、高成长 startup 或基础设施团队。Remote 或 Hybrid 优先，排除 management / PM / postdoc 方向。">{{ existing_desc }}</textarea>
+I'm a PhD candidate in AI infrastructure (distributed training, model serving, eBPF). Looking for ML Engineer / ML Infra / Backend Infra roles in the US (Bay Area or Seattle). Prefer AI startups or infra teams. Remote or Hybrid. Exclude management / PM / postdoc.">{{ existing_desc }}</textarea>
     </div>
 
     <div class="field">
-      <label>简历</label>
+      <label><span class="zh">简历</span><span class="en">Resume</span></label>
       <div class="hint">
         {% if resume_files %}
-          可不上传新文件，系统会使用当前激活简历：{{ resume_files[0].filename }}。需要管理简历请去 <a href="/onboarding/resumes">简历库</a>。
+          <span class="zh">可不上传新文件，系统会使用当前激活简历：{{ resume_files[0].filename }}。需要管理简历请去 <a href="/onboarding/resumes">简历库</a>。</span>
+          <span class="en">Leave blank to use the current active resume: {{ resume_files[0].filename }}. Manage resumes in the <a href="/onboarding/resumes">Resume Library</a>.</span>
         {% else %}
-          首次使用必须上传一份简历。支持格式：{{ supported_exts }}。
+          <span class="zh">首次使用必须上传一份简历。支持格式：{{ supported_exts }}。</span>
+          <span class="en">You must upload a resume for the first run. Supported formats: {{ supported_exts }}.</span>
         {% endif %}
       </div>
       <input type="file" name="resume" accept=".pdf,.docx,.md,.txt"
              {% if not resume_files %}required{% endif %} class="file-input">
     </div>
 
-    <div class="notice">提交后会分析你的简历和目标描述，然后自动进入采集与评分流程。通常需要十几秒开始显示进度。</div>
+    <div class="notice">
+      <span class="zh">提交后会分析你的简历和目标描述，然后自动进入采集与评分流程。通常需要十几秒开始显示进度。</span>
+      <span class="en">After submitting, your resume and goal will be analyzed, then the collect & score pipeline starts automatically. Progress should appear within ~15 seconds.</span>
+    </div>
 
     <div class="submit-row">
-      <button type="submit" class="btn btn-primary">{% if has_profile %}重新分析画像{% else %}创建画像并开始{% endif %}</button>
-      {% if has_profile %}<a href="/jobs" class="btn btn-secondary">查看岗位</a>{% endif %}
+      <button type="submit" class="btn btn-primary">
+        {% if has_profile %}
+          <span class="zh">重新分析画像</span><span class="en">Re-analyze profile</span>
+        {% else %}
+          <span class="zh">创建画像并开始</span><span class="en">Create profile & start</span>
+        {% endif %}
+      </button>
+      {% if has_profile %}
+        <a href="/jobs" class="btn btn-secondary">
+          <span class="zh">查看岗位</span><span class="en">View jobs</span>
+        </a>
+      {% endif %}
     </div>
   </form>
 </div>

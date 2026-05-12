@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}精修简历 #{{ job.id }} · JobHunter{% endblock %}
+{% block title %}<span class="zh">精修简历</span><span class="en">Refine Resume</span> #{{ job.id }} · JobHunter{% endblock %}
 
 {% block content %}
 <style>
@@ -180,10 +180,13 @@
     <!-- 对话框 -->
     <div class="chat-panel">
       <div class="chat-header">
-        <div style="font-weight:700; font-size:13px;">✏️ 对话精修</div>
+        <div style="font-weight:700; font-size:13px;">
+          ✏️ <span class="zh">对话精修</span><span class="en">Chat Refinement</span>
+        </div>
         <div style="font-size:12px; color:var(--color-text-muted); margin-top:1px;">{{ job.title }} @ {{ job.company }}</div>
         <div style="font-size:11px; color:var(--color-text-dim); margin-top:5px; line-height:1.4;">
-          每条消息自动注入 HR + HM 视角 · 每次修改自动保存为新版本
+          <span class="zh">每条消息自动注入 HR + HM 视角 · 每次修改自动保存为新版本</span>
+          <span class="en">Each message injects HR + HM perspective · every change saves as a new version</span>
         </div>
       </div>
 
@@ -191,30 +194,49 @@
         {% if not messages %}
         <div style="text-align:center; color:var(--color-text-dim); font-size:12px; margin-top:32px;">
           <div style="font-size:26px; margin-bottom:8px;">💬</div>
-          告诉 Claude 想怎么改<br>
-          <span style="font-size:11px;">例如：Summary 更突出 eBPF 背景、Skills 里加 RDMA、项目描述太长删一半…</span>
+          <span class="zh">
+            告诉 Claude 想怎么改<br>
+            <span style="font-size:11px;">例如：Summary 更突出 eBPF 背景、Skills 里加 RDMA、项目描述太长删一半…</span>
+          </span>
+          <span class="en">
+            Tell Claude how to improve the resume<br>
+            <span style="font-size:11px;">e.g. "Highlight eBPF in summary", "Add RDMA to skills", "Shorten project descriptions"…</span>
+          </span>
         </div>
         {% endif %}
         {% for msg in messages %}
         <div class="msg msg-{{ msg.role }}">
-          <div class="msg-label">{{ '你' if msg.role == 'user' else 'Claude' }}</div>
+          <div class="msg-label">
+            {% if msg.role == 'user' %}
+              <span class="zh">你</span><span class="en">You</span>
+            {% else %}Claude{% endif %}
+          </div>
           <div class="bubble">{{ msg.content }}</div>
         </div>
         {% endfor %}
         <div id="typingIndicator" style="display:none;" class="msg msg-assistant">
           <div class="msg-label">Claude</div>
-          <div class="bubble"><span class="loading-dots">修改中</span></div>
+          <div class="bubble">
+            <span class="loading-dots zh">修改中</span>
+            <span class="loading-dots en">Revising</span>
+          </div>
         </div>
       </div>
 
       <div class="chat-input-area">
         <textarea id="msgInput" rows="3"
-                  placeholder="告诉 Claude 怎么改…&#10;Ctrl+Enter 发送"
+                  placeholder="告诉 Claude 怎么改… / Tell Claude what to change…&#10;Ctrl+Enter 发送 / Ctrl+Enter to send"
                   onkeydown="handleKey(event)"></textarea>
         <div style="display:flex; gap:7px; align-items:center;">
-          <button class="btn btn-primary btn-sm" onclick="sendMessage()" id="sendBtn">发送</button>
-          <button class="btn btn-secondary btn-sm" onclick="clearChat()" style="color:var(--color-text-muted);">清空对话</button>
-          <a href="/job/{{ job.id }}" class="btn btn-secondary btn-sm" style="margin-left:auto;">← 返回</a>
+          <button class="btn btn-primary btn-sm" onclick="sendMessage()" id="sendBtn">
+            <span class="zh">发送</span><span class="en">Send</span>
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="clearChat()" style="color:var(--color-text-muted);">
+            <span class="zh">清空对话</span><span class="en">Clear chat</span>
+          </button>
+          <a href="/job/{{ job.id }}" class="btn btn-secondary btn-sm" style="margin-left:auto;">
+            ← <span class="zh">返回</span><span class="en">Back</span>
+          </a>
         </div>
       </div>
     </div>
@@ -222,17 +244,23 @@
     <!-- 版本历史 -->
     <div class="version-panel">
       <div class="version-panel-header">
-        <span>📋 版本历史</span>
-        <span style="font-size:11px; color:var(--color-text-muted); font-weight:400;">点击切换预览</span>
+        <span>📋 <span class="zh">版本历史</span><span class="en">Version History</span></span>
+        <span style="font-size:11px; color:var(--color-text-muted); font-weight:400;">
+          <span class="zh">点击切换预览</span><span class="en">Click to preview</span>
+        </span>
       </div>
       <div class="version-list-inner" id="versionListInner">
         <!-- 原始 tailor 版本 -->
         <div class="version-row {% if not revisions %}active{% endif %}"
              onclick="loadOriginal(this)" id="rowOriginal">
-          <span class="version-num">原始</span>
+          <span class="version-num"><span class="zh">原始</span><span class="en">Base</span></span>
           <div class="version-info">
-            <div class="version-note">Tailor 生成版本</div>
-            <div class="version-time">初始定制简历</div>
+            <div class="version-note">
+              <span class="zh">Tailor 生成版本</span><span class="en">Tailor-generated</span>
+            </div>
+            <div class="version-time">
+              <span class="zh">初始定制简历</span><span class="en">Initial tailored resume</span>
+            </div>
           </div>
           <div class="version-actions">
             <a href="/job/{{ job.id }}/pdf" target="_blank"
@@ -256,7 +284,8 @@
         {% endfor %}
         {% if not revisions %}
         <div style="padding:12px 14px; font-size:12px; color:var(--color-text-dim);">
-          对话后每次修改都会保存为新版本
+          <span class="zh">对话后每次修改都会保存为新版本</span>
+          <span class="en">Each chat revision saves as a new version</span>
         </div>
         {% endif %}
       </div>
@@ -268,10 +297,16 @@
   <div class="preview-panel">
     <div class="preview-header">
       <span style="font-weight:600; font-size:13px;" id="previewLabel">
-        {% if revisions %}v{{ revisions[-1].version_num }} · 最新版本{% else %}原始版本{% endif %}
+        {% if revisions %}
+          v{{ revisions[-1].version_num }} · <span class="zh">最新版本</span><span class="en">Latest version</span>
+        {% else %}
+          <span class="zh">原始版本</span><span class="en">Base version</span>
+        {% endif %}
       </span>
       <a id="pdfBtn" href="/job/{{ job.id }}/pdf" target="_blank"
-         class="btn btn-secondary btn-sm" style="margin-left:auto;">📄 下载 PDF</a>
+         class="btn btn-secondary btn-sm" style="margin-left:auto;">
+        📄 <span class="zh">下载 PDF</span><span class="en">Download PDF</span>
+      </a>
     </div>
     <div class="preview-body">
       <div class="resume-md" id="resumePreview">
@@ -279,7 +314,8 @@
           {{ current_md | render_md | safe }}
         {% else %}
           <p style="color:var(--color-text-muted); text-align:center; margin-top:40px;">
-            还没有定制简历，请先在岗位详情页生成。
+            <span class="zh">还没有定制简历，请先在岗位详情页生成。</span>
+            <span class="en">No tailored resume yet. Generate one from the job detail page first.</span>
           </p>
         {% endif %}
       </div>
@@ -294,59 +330,50 @@ function renderMd(md) {
   if (!md) return '';
   let h = md
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  // bold
   h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // links
   h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-  // headings
   h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   h = h.replace(/^## (.+)$/gm,  '<h2>$1</h2>');
   h = h.replace(/^# (.+)$/gm,   '<h1>$1</h1>');
-  // hr
   h = h.replace(/^---$/gm, '<hr>');
-  // bullets
   h = h.replace(/^- (.+)$/gm, '<li>$1</li>');
   h = h.replace(/(<li>[\s\S]+?<\/li>\n?)+/g, m => '<ul>' + m + '</ul>');
-  // linebreaks
   h = h.replace(/\n{2,}/g, '<br><br>');
   return h;
 }
 
-// ── 行高亮版本行 ────────────────────────────────────────────
 function setActiveRow(el) {
   document.querySelectorAll('.version-row').forEach(r => r.classList.remove('active'));
   el.classList.add('active');
 }
 
-// ── 加载原始版本 ────────────────────────────────────────────
 function loadOriginal(rowEl) {
   setActiveRow(rowEl);
-  document.getElementById('previewLabel').textContent = '原始版本';
+  const isEn = document.body.classList.contains('lang-en');
+  document.getElementById('previewLabel').textContent = isEn ? 'Base version' : '原始版本';
   document.getElementById('pdfBtn').href = '/job/{{ job.id }}/pdf';
-  // 重新 fetch 原始 md
   fetch('/job/{{ job.id }}/refine/version/0')
     .then(r => r.ok ? r.json() : null)
     .then(data => {
       if (data && data.md_content) {
         document.getElementById('resumePreview').innerHTML = renderMd(data.md_content);
       } else {
-        // fallback: 当前页面已渲染的内容就是原始版
         location.reload();
       }
     });
 }
 
-// ── 加载指定版本 ────────────────────────────────────────────
 async function loadVersion(num, rowEl) {
   setActiveRow(rowEl);
-  document.getElementById('previewLabel').textContent = `v${num} · ${rowEl.querySelector('.version-time').textContent}`;
+  const isEn = document.body.classList.contains('lang-en');
+  const timeText = rowEl.querySelector('.version-time').textContent;
+  document.getElementById('previewLabel').textContent = `v${num} · ${timeText}`;
   document.getElementById('pdfBtn').href = `/job/{{ job.id }}/refine/version/${num}/pdf`;
   const resp = await fetch(`/job/{{ job.id }}/refine/version/${num}`);
   const data = await resp.json();
   document.getElementById('resumePreview').innerHTML = renderMd(data.md_content);
 }
 
-// ── 发送消息 ────────────────────────────────────────────────
 async function sendMessage() {
   const input = document.getElementById('msgInput');
   const msg = input.value.trim();
@@ -368,12 +395,13 @@ async function sendMessage() {
 
     if (data.error) { appendMsg('assistant', '❌ ' + data.error); return; }
 
-    appendMsg('assistant', data.note || '简历已更新');
+    const isEn = document.body.classList.contains('lang-en');
+    appendMsg('assistant', data.note || (isEn ? 'Resume updated' : '简历已更新'));
     document.getElementById('resumePreview').innerHTML = renderMd(data.md_content);
 
     if (data.version_num) {
-      addVersionRow(data.version_num, data.note || '对话修改');
-      document.getElementById('previewLabel').textContent = `v${data.version_num} · 刚刚`;
+      addVersionRow(data.version_num, data.note || (isEn ? 'Chat revision' : '对话修改'));
+      document.getElementById('previewLabel').textContent = `v${data.version_num} · ${isEn ? 'just now' : '刚刚'}`;
       document.getElementById('pdfBtn').href = `/job/{{ job.id }}/refine/version/${data.version_num}/pdf`;
     }
   } catch(e) {
@@ -389,10 +417,12 @@ function handleKey(e) {
 }
 
 function appendMsg(role, content) {
+  const isEn = document.body.classList.contains('lang-en');
   const h = document.getElementById('chatHistory');
   const d = document.createElement('div');
   d.className = `msg msg-${role}`;
-  d.innerHTML = `<div class="msg-label">${role==='user'?'你':'Claude'}</div><div class="bubble">${content.replace(/\n/g,'<br>')}</div>`;
+  const label = role === 'user' ? (isEn ? 'You' : '你') : 'Claude';
+  d.innerHTML = `<div class="msg-label">${label}</div><div class="bubble">${content.replace(/\n/g,'<br>')}</div>`;
   h.insertBefore(d, document.getElementById('typingIndicator'));
   scrollChat();
 }
@@ -402,10 +432,9 @@ function scrollChat() {
   h.scrollTop = h.scrollHeight;
 }
 
-// ── 动态添加版本行 ───────────────────────────────────────────
 function addVersionRow(num, note) {
+  const isEn = document.body.classList.contains('lang-en');
   const list = document.getElementById('versionListInner');
-  // 移除 active 状态
   list.querySelectorAll('.version-row').forEach(r => r.classList.remove('active'));
   const row = document.createElement('div');
   row.className = 'version-row active';
@@ -415,7 +444,7 @@ function addVersionRow(num, note) {
     <span class="version-num">v${num}</span>
     <div class="version-info">
       <div class="version-note" title="${note}">${shortNote}</div>
-      <div class="version-time">刚刚</div>
+      <div class="version-time">${isEn ? 'just now' : '刚刚'}</div>
     </div>
     <div class="version-actions">
       <a href="/job/{{ job.id }}/refine/version/${num}/pdf" target="_blank"
@@ -426,9 +455,12 @@ function addVersionRow(num, note) {
   list.scrollTop = list.scrollHeight;
 }
 
-// ── 清空对话 ────────────────────────────────────────────────
 function clearChat() {
-  if (!confirm('清空对话历史？（不影响已保存的版本）')) return;
+  const isEn = document.body.classList.contains('lang-en');
+  const msg = isEn
+    ? 'Clear chat history? (saved versions are not affected)'
+    : '清空对话历史？（不影响已保存的版本）';
+  if (!confirm(msg)) return;
   fetch('/job/{{ job.id }}/refine/clear', {method:'POST'}).then(() => location.reload());
 }
 

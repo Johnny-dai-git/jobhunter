@@ -1,4 +1,4 @@
-"""简历读取: 把 PDF/DOCX/MD/TXT 解析成纯文本."""
+"""Resume reading: parse PDF/DOCX/MD/TXT into plain text."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,19 +10,19 @@ PAUSED_SUBDIR = "_paused"
 
 
 def find_resume(resume_dir: Path) -> Path:
-    """在 resume_dir 中找到最新的简历文件."""
+    """Find the latest resume file in resume_dir."""
     files = list_resumes(resume_dir)
     if not files:
         raise FileNotFoundError(
-            f"在 {resume_dir} 中没有找到简历文件 (支持: {sorted(SUPPORTED_EXTS)})"
+            f"No resume files found in {resume_dir} (supported: {sorted(SUPPORTED_EXTS)})"
         )
     return files[0]
 
 
 def list_resumes(resume_dir: Path) -> list[Path]:
-    """列出 resume_dir 下所有"活跃"简历文件 (不含暂停的),按 mtime 降序.
+    """List all "active" resume files in resume_dir (excluding paused), sorted by mtime descending.
 
-    忽略以下划线开头的内部缓存文件 + 子目录 (_paused/).
+    Ignore internal cache files starting with underscore + subdirectory (_paused/).
     """
     if not resume_dir.exists():
         return []
@@ -38,7 +38,7 @@ def list_resumes(resume_dir: Path) -> list[Path]:
 
 
 def list_paused_resumes(resume_dir: Path) -> list[Path]:
-    """列出 resume_dir/_paused/ 里的简历, mtime 降序."""
+    """List resumes in resume_dir/_paused/, sorted by mtime descending."""
     paused_dir = resume_dir / PAUSED_SUBDIR
     if not paused_dir.exists():
         return []
@@ -51,36 +51,36 @@ def list_paused_resumes(resume_dir: Path) -> list[Path]:
 
 
 def pause_resume_file(resume_dir: Path, filename: str) -> Path:
-    """把一份简历移到 _paused/ 子目录. 返回新路径."""
+    """Move a resume to _paused/ subdirectory. Return new path."""
     src = resume_dir / filename
     if not src.exists() or not src.is_file():
-        raise FileNotFoundError(f"找不到 {filename}")
+        raise FileNotFoundError(f"Cannot find {filename}")
     if src.suffix.lower() not in SUPPORTED_EXTS:
-        raise ValueError(f"不支持的格式 {src.suffix}")
+        raise ValueError(f"Unsupported format {src.suffix}")
     paused_dir = resume_dir / PAUSED_SUBDIR
     paused_dir.mkdir(exist_ok=True)
     dst = paused_dir / filename
     if dst.exists():
-        dst.unlink()  # 覆盖
+        dst.unlink()  # Overwrite
     src.rename(dst)
     return dst
 
 
 def unpause_resume_file(resume_dir: Path, filename: str) -> Path:
-    """从 _paused/ 还原一份简历回主目录."""
+    """Restore a resume from _paused/ back to main directory."""
     paused_dir = resume_dir / PAUSED_SUBDIR
     src = paused_dir / filename
     if not src.exists():
-        raise FileNotFoundError(f"找不到暂停的 {filename}")
+        raise FileNotFoundError(f"Cannot find paused {filename}")
     dst = resume_dir / filename
     if dst.exists():
-        raise FileExistsError(f"已有同名简历 {filename}, 先删除或重命名再恢复")
+        raise FileExistsError(f"Resume with same name {filename} already exists, delete or rename it first")
     src.rename(dst)
     return dst
 
 
 def delete_paused_resume(resume_dir: Path, filename: str) -> None:
-    """删除一个暂停状态的简历."""
+    """Delete a paused resume."""
     paused_dir = resume_dir / PAUSED_SUBDIR
     target = paused_dir / filename
     if target.exists():
@@ -105,12 +105,12 @@ def read_docx(path: Path) -> str:
     doc = Document(str(path))
     parts: list[str] = []
 
-    # 段落
+    # Paragraphs
     for p in doc.paragraphs:
         if p.text.strip():
             parts.append(p.text.strip())
 
-    # 表格(简历常用表格排版)
+    # Tables (common for resume formatting)
     for table in doc.tables:
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
@@ -132,11 +132,11 @@ def read_resume(path: Path) -> str:
         return read_docx(path)
     if ext in {".md", ".txt"}:
         return read_text(path)
-    raise ValueError(f"不支持的简历格式: {ext}")
+    raise ValueError(f"Unsupported resume format: {ext}")
 
 
 def parse_and_cache(resume_dir: Path) -> tuple[Path, str]:
-    """读取最新简历,把文本缓存为 .cache.txt,返回 (源文件路径, 文本)."""
+    """Read latest resume, cache text as .cache.txt, return (source file path, text)."""
     src = find_resume(resume_dir)
     text = read_resume(src)
     cache_path = resume_dir / "_parsed.txt"
@@ -145,7 +145,7 @@ def parse_and_cache(resume_dir: Path) -> tuple[Path, str]:
 
 
 def load_cached(resume_dir: Path) -> str:
-    """加载已缓存的简历文本;若不存在则现场解析."""
+    """Load cached resume text; if not exists, parse on the spot."""
     cache_path = resume_dir / "_parsed.txt"
     if cache_path.exists():
         return cache_path.read_text(encoding="utf-8")
@@ -154,10 +154,10 @@ def load_cached(resume_dir: Path) -> str:
 
 
 def read_materials(materials_dir: Path) -> str:
-    """读取资料库目录下所有支持格式的文件,拼成一段文本返回.
+    """Read all supported format files in materials directory, concatenate into text.
 
-    每份文件用文件名标注,方便模型区分来源。
-    目录不存在或为空时返回空字符串。
+    Each file is marked with filename for easy source distinction by model.
+    Return empty string if directory doesn't exist or is empty.
     """
     if not materials_dir.exists():
         return ""
@@ -182,6 +182,6 @@ def read_materials(materials_dir: Path) -> str:
             if text:
                 parts.append(f"### [{f.name}]\n{text}")
         except Exception as e:
-            parts.append(f"### [{f.name}]\n(读取失败: {e})")
+            parts.append(f"### [{f.name}]\n(Read failed: {e})")
 
     return "\n\n".join(parts)

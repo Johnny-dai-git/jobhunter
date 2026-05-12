@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}运行状态 · JobHunter{% endblock %}
+{% block title %}<span class="zh">运行状态</span><span class="en">Run Status</span> · JobHunter{% endblock %}
 {% block content %}
 <style>
   .settings-shell { max-width: 980px; margin: 0 auto; }
@@ -18,34 +18,45 @@
 <div class="settings-shell">
   <div class="page-head">
     <div>
-      <h1>运行状态</h1>
-      <p>查看当前任务、上次运行、健康检查和累计统计。</p>
+      <h1><span class="zh">运行状态</span><span class="en">Run Status</span></h1>
+      <p>
+        <span class="zh">查看当前任务、上次运行、健康检查和累计统计。</span>
+        <span class="en">View the current task, last run, health checks, and lifetime stats.</span>
+      </p>
     </div>
-    <a href="/onboarding" class="btn btn-secondary btn-sm">回到画像</a>
+    <a href="/onboarding" class="btn btn-secondary btn-sm">
+      <span class="zh">回到画像</span><span class="en">Back to Dashboard</span>
+    </a>
   </div>
 
   <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
       <div>
-        <h3 style="margin:0 0 8px;">Agent 状态</h3>
+        <h3 style="margin:0 0 8px;"><span class="zh">Agent 状态</span><span class="en">Agent Status</span></h3>
         {% if agent_state == 'running' %}
-          <span class="badge badge-green">运行中</span>
+          <span class="badge badge-green"><span class="zh">运行中</span><span class="en">Running</span></span>
         {% elif agent_state == 'scheduled' %}
-          <span class="badge badge-indigo">已安排</span>
+          <span class="badge badge-indigo"><span class="zh">已安排</span><span class="en">Scheduled</span></span>
         {% elif agent_state == 'idle' %}
-          <span class="badge badge-gray">空闲</span>
+          <span class="badge badge-gray"><span class="zh">空闲</span><span class="en">Idle</span></span>
         {% else %}
-          <span class="badge badge-red">未初始化</span>
+          <span class="badge badge-red"><span class="zh">未初始化</span><span class="en">Not initialized</span></span>
         {% endif %}
       </div>
       <div style="display:flex; gap:8px;">
         {% if agent_state in ['running', 'scheduled'] %}
         <form method="post" action="/agent/pause" style="margin:0;">
-          <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('暂停 Agent? 会取消正在跑的流水线并关闭定时任务。')">暂停</button>
+          <button type="submit" class="btn btn-secondary btn-sm"
+                  onclick="return confirm('暂停 Agent? / Pause Agent?')">
+            <span class="zh">暂停</span><span class="en">Pause</span>
+          </button>
         </form>
         {% endif %}
         <form method="post" action="/agent/delete" style="margin:0;">
-          <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);" onclick="return confirm('删除 Agent? 会关闭定时任务并清空当前画像，历史岗位数据保留。')">删除 Agent</button>
+          <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);"
+                  onclick="return confirm('删除 Agent? / Delete Agent?')">
+            <span class="zh">删除 Agent</span><span class="en">Delete Agent</span>
+          </button>
         </form>
       </div>
     </div>
@@ -53,39 +64,62 @@
 
   {% if cur_run %}
   <div class="card">
-    <h3 style="margin-top:0;">当前运行</h3>
+    <h3 style="margin-top:0;"><span class="zh">当前运行</span><span class="en">Current Run</span></h3>
     <div class="kv">
-      <div>已运行</div><div>{{ cur_elapsed }}</div>
-      <div>当前阶段</div><div>{{ cur_run.phase }}{% if cur_run.current_platform %} · {{ cur_run.current_platform }}{% endif %}</div>
-      <div>画像</div><div>{% if cur_run.profile_id %}#{{ cur_run.profile_id }} {{ cur_run.profile_label or '' }}{% else %}—{% endif %}</div>
-      <div>触发源</div><div>{{ cur_run.trigger }} · PID {{ cur_run.pid }}</div>
+      <div><span class="zh">已运行</span><span class="en">Elapsed</span></div><div>{{ cur_elapsed }}</div>
+      <div><span class="zh">当前阶段</span><span class="en">Phase</span></div>
+      <div>{{ cur_run.phase }}{% if cur_run.current_platform %} · {{ cur_run.current_platform }}{% endif %}</div>
+      <div><span class="zh">画像</span><span class="en">Profile</span></div>
+      <div>{% if cur_run.profile_id %}#{{ cur_run.profile_id }} {{ cur_run.profile_label or '' }}{% else %}—{% endif %}</div>
+      <div><span class="zh">触发源</span><span class="en">Trigger</span></div>
+      <div>{{ cur_run.trigger }} · PID {{ cur_run.pid }}</div>
     </div>
-    <div style="margin-top:12px;"><a href="/onboarding/processing" class="btn btn-primary btn-sm">查看详细进度</a></div>
+    <div style="margin-top:12px;">
+      <a href="/onboarding/processing" class="btn btn-primary btn-sm">
+        <span class="zh">查看详细进度</span><span class="en">View progress</span>
+      </a>
+    </div>
   </div>
   {% endif %}
 
   {% if last_run and not cur_run %}
   <div class="card">
-    <h3 style="margin-top:0;">上次运行</h3>
+    <h3 style="margin-top:0;"><span class="zh">上次运行</span><span class="en">Last Run</span></h3>
     <div class="kv">
-      <div>状态</div><div>{{ last_run.phase }}</div>
-      <div>结束时间</div><div>{{ last_run.ended_at[:19].replace('T',' ') if last_run.ended_at else '—' }}</div>
-      <div>用时</div><div>{% if last_run.duration_sec %}{{ last_run.duration_sec // 60 }}m {{ last_run.duration_sec % 60 }}s{% else %}—{% endif %}</div>
-      <div>画像</div><div>{% if last_run.profile_id %}#{{ last_run.profile_id }} {{ last_run.profile_label or '' }}{% else %}—{% endif %}</div>
-      {% if last_run.error %}<div>错误</div><div style="color:var(--color-danger); font-family:monospace;">{{ last_run.error[:240] }}</div>{% endif %}
+      <div><span class="zh">状态</span><span class="en">Status</span></div><div>{{ last_run.phase }}</div>
+      <div><span class="zh">结束时间</span><span class="en">Ended</span></div>
+      <div>{{ last_run.ended_at[:19].replace('T',' ') if last_run.ended_at else '—' }}</div>
+      <div><span class="zh">用时</span><span class="en">Duration</span></div>
+      <div>{% if last_run.duration_sec %}{{ last_run.duration_sec // 60 }}m {{ last_run.duration_sec % 60 }}s{% else %}—{% endif %}</div>
+      <div><span class="zh">画像</span><span class="en">Profile</span></div>
+      <div>{% if last_run.profile_id %}#{{ last_run.profile_id }} {{ last_run.profile_label or '' }}{% else %}—{% endif %}</div>
+      {% if last_run.error %}
+      <div><span class="zh">错误</span><span class="en">Error</span></div>
+      <div style="color:var(--color-danger); font-family:monospace;">{{ last_run.error[:240] }}</div>
+      {% endif %}
     </div>
   </div>
   {% endif %}
 
   <div class="card">
-    <h3 style="margin-top:0;">健康检查</h3>
+    <h3 style="margin-top:0;"><span class="zh">健康检查</span><span class="en">Health Checks</span></h3>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
       <div class="metric">
-        <strong>{% if health.liveness in ['running', 'healthy'] %}正常{% else %}{{ health.liveness }}{% endif %}</strong>
+        <strong>
+          {% if health.liveness in ['running', 'healthy'] %}
+            <span class="zh">正常</span><span class="en">Healthy</span>
+          {% else %}{{ health.liveness }}{% endif %}
+        </strong>
         <span>Liveness</span>
       </div>
       <div class="metric">
-        <strong>{% if health.readiness == 'ready' %}就绪{% else %}未就绪{% endif %}</strong>
+        <strong>
+          {% if health.readiness == 'ready' %}
+            <span class="zh">就绪</span><span class="en">Ready</span>
+          {% else %}
+            <span class="zh">未就绪</span><span class="en">Not ready</span>
+          {% endif %}
+        </strong>
         <span>Readiness</span>
       </div>
     </div>
@@ -98,12 +132,24 @@
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0;">任务计数</h3>
+    <h3 style="margin-top:0;"><span class="zh">任务计数</span><span class="en">Job Counts</span></h3>
     <div class="metric-grid">
-      <div class="metric"><strong>{{ lifetime.total_runs or 0 }}</strong><span>累计跑次</span></div>
-      <div class="metric"><strong>{{ counts.total_jobs }}</strong><span>岗位总数</span></div>
-      <div class="metric"><strong>{{ counts.high_match_jobs }}</strong><span>高分岗位</span></div>
-      <div class="metric"><strong>{{ counts.applied_jobs }}</strong><span>已投递</span></div>
+      <div class="metric">
+        <strong>{{ lifetime.total_runs or 0 }}</strong>
+        <span><span class="zh">累计跑次</span><span class="en">Total runs</span></span>
+      </div>
+      <div class="metric">
+        <strong>{{ counts.total_jobs }}</strong>
+        <span><span class="zh">岗位总数</span><span class="en">Total jobs</span></span>
+      </div>
+      <div class="metric">
+        <strong>{{ counts.high_match_jobs }}</strong>
+        <span><span class="zh">高分岗位</span><span class="en">High-match jobs</span></span>
+      </div>
+      <div class="metric">
+        <strong>{{ counts.applied_jobs }}</strong>
+        <span><span class="zh">已投递</span><span class="en">Applied</span></span>
+      </div>
     </div>
   </div>
 </div>

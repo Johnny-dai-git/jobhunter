@@ -1,17 +1,17 @@
-"""简历对话式精修模块.
+"""Resume conversational refinement module.
 
-流程:
-  1. 用户发送修改请求 (自然语言)
-  2. 系统自动注入 HR/HM 专业 prompt + 当前简历 + 对话历史
-  3. Claude Opus 返回更新后的完整简历 + 改动说明
-  4. 新版本存入 ResumeRevision 表
-  5. 对话历史持久化到 JSON 文件，下次继续
+Workflow:
+  1. User sends modification request (natural language)
+  2. System automatically injects professional HR/HM prompt + current resume + conversation history
+  3. Claude Opus returns updated complete resume + change notes
+  4. New version stored in ResumeRevision table
+  5. Conversation history persisted to JSON file for next session
 
-每条用户消息都会自动 append 以下系统上下文:
-  - HR 视角规则
-  - HM 视角规则
-  - 格式强制要求
-  - 当前简历全文
+Each user message automatically appends the following system context:
+  - HR perspective rules
+  - HM perspective rules
+  - Format enforcement requirements
+  - Current resume full text
 """
 from __future__ import annotations
 
@@ -29,45 +29,45 @@ from .db import Job, ResumeRevision, session_scope
 from .pdf_generator import md_to_pdf
 
 
-# ── 系统 Prompt (每轮对话都注入) ─────────────────────────────────────────────
+# ── System Prompt (injected in each conversation turn) ─────────────────────────────────────────────
 
 REFINE_SYSTEM_PROMPT = """\
-你是一位顶级简历修改顾问，同时具备两种专业视角：
+You are a top-tier resume refinement consultant with two professional perspectives:
 
-**HR 初筛视角（6 秒扫读）**
-- ATS 关键词覆盖率：目标岗位的核心技术词是否出现在简历里
-- 格式清晰度：标题层级、bullet 长短、空白节奏
-- 第一屏冲击力：Summary + Skills 是否在最显眼位置
-- 量化结果密度：数字和指标的密度够不够
+**HR Screening Perspective (6-second scan)**
+- ATS keyword coverage: do core technical terms for target role appear in resume
+- Format clarity: heading hierarchy, bullet length, whitespace rhythm
+- Above-the-fold impact: are Summary + Skills in the most prominent position
+- Quantification density: are numbers and metrics dense enough
 
-**HM 技术深度视角**
-- 每个项目的技术可信度：描述是否体现真实的系统设计能力
-- 独立交付证明：有没有"我设计/我构建/我独立"的证据
-- 差异化价值：这个候选人有什么是大多数人没有的
-- 成果与难度匹配：数字背后的技术难度是否体现出来
-
----
-
-**每次修改必须严格遵守以下规则：**
-
-1. **不捏造任何内容** — 只能基于已有经历改写、重排序、换表述
-2. **保持原有格式** — 严格保留原简历的章节结构、标题层级、排版风格和 bullet 格式。只改措辞和内容重点，不重新设计版面，不新增原来没有的章节
-3. **保留所有超链接** — GitHub、Portfolio、LinkedIn、论文链接等，原样保留，不得丢失
-4. **关键词加粗** — 每条 bullet 中最核心的技术词或量化成果用 `**词语**` 标注，每条不超过 2 处
-5. **不出现元信息** — 简历中不能出现"Tailored for"、"针对岗位"、"修改版本"等字样
-6. **输出完整简历** — 用 ```markdown 围起来，输出的是可以直接发给 HR 的完整简历，不是片段
-7. **改动说明** — 在 ```markdown 围栏**外**附一段简短说明（≤100字）：改了什么、为什么这样改对 HR/HM 评分有帮助
+**HM Technical Depth Perspective**
+- Technical credibility of each project: do descriptions reflect real system design ability
+- Independent delivery proof: is there evidence of "I designed/I built/I independently"
+- Differentiated value: what does this candidate have that most peers don't
+- Results-difficulty match: does technical difficulty behind numbers show through
 
 ---
 
-当前目标岗位：**{title} @ {company}**
+**Every modification must strictly follow these rules:**
+
+1. **Don't fabricate anything** — only rewrite, reorder, rephrase existing experiences
+2. **Maintain original format** — strictly preserve original resume section structure, heading hierarchy, typography style and bullet format. Only change wording and content emphasis, don't redesign layout, don't add sections that weren't originally there
+3. **Preserve all hyperlinks** — GitHub, Portfolio, LinkedIn, paper links, etc. retain as-is, don't lose any
+4. **Bold key terms** — in each bullet, mark the most core technical terms or quantified outcomes with `**term**`, no more than 2 per bullet
+5. **No metadata** — resume must not show "Tailored for", "for position", "modified version" etc.
+6. **Output complete resume** — wrap in ```markdown, output is a complete resume ready to send to HR, not fragments
+7. **Change notes** — after ```markdown fence attach a short note (≤100 chars): what changed, why this helps HR/HM scoring
+
+---
+
+Current target position: **{title} @ {company}**
 """
 
 REFINE_USER_TEMPLATE = """\
 {user_message}
 
 ---
-当前简历（请在此基础上修改）：
+Current resume (please modify based on this):
 
 ```markdown
 {current_resume}
@@ -75,7 +75,7 @@ REFINE_USER_TEMPLATE = """\
 """
 
 
-# ── 对话历史管理 ──────────────────────────────────────────────────────────────
+# ── Conversation History Management ──────────────────────────────────────
 
 def _chat_path(config: Config, job_id: int) -> Path:
     outputs_dir = config.path("outputs_dir")
@@ -83,12 +83,12 @@ def _chat_path(config: Config, job_id: int) -> Path:
 
 
 def _migrate_message(msg: dict) -> dict:
-    """兼容旧格式: 旧版 user message 里嵌入了完整简历，新版只存用户原始请求。
-    检测方式: user content 里有 '---\n当前简历' 分隔符 → 截取分隔符前的部分。
+    """Backward compatibility: old version embedded complete resume in user message, new version only stores original user request.
+    Detection method: if user content has '---\nCurrent resume' separator → extract part before separator.
     """
     if msg.get("role") == "user":
         content = msg.get("content", "")
-        sep = "---\n当前简历"
+        sep = "---\nCurrent resume"
         if sep in content:
             return {"role": "user", "content": content.split(sep)[0].strip()}
     return msg
@@ -100,9 +100,9 @@ def load_chat_history(config: Config, job_id: int) -> list[dict]:
         return []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        # 兼容旧格式：剥离 user message 中嵌入的简历全文
+        # Backward compatibility: strip resume content embedded in user message
         migrated = [_migrate_message(m) for m in raw]
-        # 如果有变化，原地回写，避免下次再做迁移
+        # If changes made, overwrite in place to avoid re-migration next time
         if migrated != raw:
             path.write_text(json.dumps(migrated, ensure_ascii=False, indent=2), encoding="utf-8")
         return migrated
@@ -121,7 +121,7 @@ def clear_chat_history(config: Config, job_id: int) -> None:
         path.unlink()
 
 
-# ── 版本管理 ─────────────────────────────────────────────────────────────────
+# ── Version Management ─────────────────────────────────────────────────────────────────
 
 def get_revisions(config: Config, job_id: int) -> list[ResumeRevision]:
     db_path = config.path("db_path")
@@ -149,7 +149,7 @@ def get_revision(config: Config, job_id: int, version_num: int) -> Optional[Resu
 
 
 def save_revision(config: Config, job_id: int, md_content: str, note: str = "") -> ResumeRevision:
-    """保存一个新版本，版本号自动递增。"""
+    """Save a new version, version number auto-increments."""
     db_path = config.path("db_path")
     with session_scope(db_path) as session:
         last = session.scalars(
@@ -167,18 +167,18 @@ def save_revision(config: Config, job_id: int, md_content: str, note: str = "") 
         )
         session.add(rev)
         session.commit()
-        session.refresh(rev)   # commit 后 expire，refresh 重新加载 id/version_num 等字段
-        session.expunge(rev)   # 再 detach，外面访问属性才安全
+        session.refresh(rev)   # After commit expires, refresh reloads id/version_num and other fields
+        session.expunge(rev)   # Then detach so accessing attributes is safe
         return rev
 
 
 def get_current_resume_md(config: Config, job_id: int) -> Optional[str]:
-    """获取最新版本的简历 markdown，没有版本则读取原始 tailor 输出。"""
+    """Get latest version resume markdown, if no versions then read original tailor output."""
     revisions = get_revisions(config, job_id)
     if revisions:
-        return revisions[0].md_content  # 按 version_num desc，第一个是最新版
+        return revisions[0].md_content  # Ordered by version_num desc, first is latest
 
-    # fallback: 读取原始 tailor 输出的 md 文件
+    # Fallback: read original tailor output md file
     db_path = config.path("db_path")
     with session_scope(db_path) as session:
         job = session.get(Job, job_id)
@@ -186,20 +186,20 @@ def get_current_resume_md(config: Config, job_id: int) -> Optional[str]:
             path = Path(job.tailored_resume_path)
             if path.exists():
                 raw = path.read_text(encoding="utf-8")
-                # 提取 ```markdown ... ``` 主体
+                # Extract ```markdown ... ``` body
                 m = re.search(r"```(?:markdown|md)?\s*\n(.*?)\n```", raw, re.DOTALL)
                 return m.group(1).strip() if m else raw.strip()
     return None
 
 
-# ── 核心对话函数 ─────────────────────────────────────────────────────────────
+# ── Core Conversation Functions ─────────────────────────────────────────────────────────────
 
 def _extract_md_and_note(text: str) -> tuple[str, str]:
-    """从 Claude 输出中分离出 markdown 主体和改动说明。"""
+    """Extract markdown body and modification notes from Claude output."""
     m = re.search(r"```(?:markdown|md)?\s*\n(.*?)\n```", text, re.DOTALL)
     if m:
         md_body = m.group(1).strip()
-        # 围栏外的文字是改动说明
+        # Text outside the fence is the modification note
         note = text[m.end():].strip()
         if not note:
             note = text[:m.start()].strip()
@@ -213,80 +213,83 @@ def chat_refine(
     user_message: str,
     auto_save: bool = True,
 ) -> dict:
-    """发送一条对话消息，Claude 返回更新后的简历。
+    """Send a conversation message, Claude returns updated resume.
 
-    返回:
+    Returns:
       {
-        "md_content": str,      # 新版简历 markdown
-        "note": str,            # Claude 的改动说明
-        "version_num": int,     # 保存的版本号 (auto_save=True 时)
-        "messages": list[dict], # 完整对话历史 (供前端更新)
+        "md_content": str,      # New resume markdown
+        "note": str,            # Claude's change notes
+        "version_num": int,     # Saved version number (when auto_save=True)
+        "messages": list[dict], # Complete conversation history (for frontend update)
       }
     """
+    from .agent import llm_complete
+
     db_path = config.path("db_path")
 
-    # 获取岗位信息
+    # Get job information
     with session_scope(db_path) as session:
         job = session.get(Job, job_id)
         if not job:
-            raise ValueError(f"Job {job_id} 不存在")
+            raise ValueError(f"Job {job_id} does not exist")
         title, company = job.title, job.company
 
-    # 获取当前简历
+    # Get current resume
     current_resume = get_current_resume_md(config, job_id)
     if not current_resume:
-        raise ValueError("还没有生成定制简历，请先点击「生成定制简历」")
+        raise ValueError("Customized resume not yet generated, please click 'Generate Customized Resume' first")
 
-    # 加载对话历史（只存储用户原始请求 + assistant 改动说明，不存嵌入简历的完整消息）
-    history = load_chat_history(config, job_id)   # [{role, content}] 精简版本
+    # Load conversation history (only stores user original request + assistant change notes, not complete messages with embedded resume)
+    history = load_chat_history(config, job_id)   # [{role, content}] compact version
 
-    # 追加本轮用户请求（仅存原文，不含简历）
+    # Append current round user request (only original text, no resume)
     history.append({"role": "user", "content": user_message})
 
-    # 构造发给 API 的完整 messages：历史消息 + 最后一条注入当前简历
-    # 只有最后一条 user message 需要带完整简历，历史消息只保留对话摘要
+    # Build complete messages for API: history + last message with current resume injected
+    # Only last user message needs complete resume, history only keeps conversation summary
     api_messages: list[dict] = []
     for i, msg in enumerate(history):
         if msg["role"] == "user":
             is_last = (i == len(history) - 1)
             if is_last:
-                # 最后一条注入最新简历
+                # Last message injects latest resume
                 api_messages.append({"role": "user", "content": REFINE_USER_TEMPLATE.format(
                     user_message=msg["content"],
                     current_resume=current_resume,
                 )})
             else:
-                # 历史用户消息只保留原始请求（简短），避免 context 爆炸
+                # Historical user messages only keep original request (short), avoid context explosion
                 api_messages.append({"role": "user", "content": msg["content"]})
         else:
             api_messages.append(msg)
 
-    # 调用 Claude Opus
-    client, model_name = make_client(config, "tailor")
+    # Call Claude Opus
+    client, model_name, provider = make_client(config, "tailor")
     system_prompt = REFINE_SYSTEM_PROMPT.format(title=title, company=company)
 
-    resp = client.messages.create(
-        model=model_name,
+    assistant_text = llm_complete(
+        client,
+        model_name,
+        provider,
+        messages=api_messages,
         max_tokens=4096,
         system=system_prompt,
-        messages=api_messages,
     )
-    assistant_text = resp.content[0].text
 
-    # 解析输出
+    # Parse output (assistant_text is already a string from llm_complete)
     md_content, note = _extract_md_and_note(assistant_text)
 
-    # 只存 assistant 的改动说明（不存完整简历），保持 history 精简
-    history.append({"role": "assistant", "content": note or "(简历已更新)"})
+    # Only store assistant's change notes (not complete resume), keep history compact
+    history.append({"role": "assistant", "content": note or "(Resume updated)"})
     save_chat_history(config, job_id, history)
 
-    # 保存版本
+    # Save version
     version_num = None
     if auto_save and md_content:
         rev = save_revision(config, job_id, md_content, note=note)
         version_num = rev.version_num
 
-        # 同时更新 PDF
+        # Also update PDF
         try:
             outputs_dir = config.path("outputs_dir")
             with session_scope(db_path) as session:
@@ -296,17 +299,17 @@ def chat_refine(
                     safe_title   = re.sub(r"[^\w\-]+", "_", title)[:40]
                     pdf_path = outputs_dir / f"{job_id:03d}_{safe_company}_{safe_title}_v{version_num}.pdf"
                     md_to_pdf(md_content, pdf_path)
-                    # 更新 job 的最新 pdf 路径
+                    # Update job's latest pdf path
                     job.tailored_resume_pdf_path = str(pdf_path)
                     session.add(job)
                     session.commit()
         except Exception as e:
-            print(f"[refine] PDF 生成失败: {e}")
+            print(f"[refine] PDF generation failed: {e}")
 
-    # history 本身已经是精简版（user=原始请求，assistant=改动说明），直接返回
+    # history is already compact version (user=original request, assistant=change notes), return directly
     return {
         "md_content": md_content,
         "note": note,
         "version_num": version_num,
-        "messages": history,  # 已经是干净的精简格式
+        "messages": history,  # Already in clean compact format
     }

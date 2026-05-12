@@ -1,10 +1,11 @@
-"""Apify 采集器基类.
+"""Apify collector base class.
 
-Apify 是第三方"爬虫即服务"平台,反爬由他们专业团队维护.
-我们通过 REST API 调他们的 Actor:
+Apify is a third-party "scraping as a service" platform with anti-bot maintenance by their professional team.
+We invoke their Actor via REST API:
     POST https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token=...
 
-每个 Actor 输入和输出 schema 不一样,所以基类提供框架,平台子类各自实现:
+Each Actor has different input/output schemas, so the base class provides the framework
+and platform subclasses implement:
     - _build_input(keywords, locations) -> dict
     - _parse_item(item: dict) -> CollectedJob
 """
@@ -25,9 +26,9 @@ class ApifyError(RuntimeError):
 
 
 class ApifyCollector(BaseCollector):
-    """所有 Apify-backed 采集器的基类."""
+    """Base class for all Apify-backed collectors."""
 
-    name = "apify-base"  # 子类必须覆盖
+    name = "apify-base"  # Subclasses must override
 
     def __init__(self, config: Config):
         super().__init__(config)
@@ -35,7 +36,7 @@ class ApifyCollector(BaseCollector):
         token_env = apify_cfg.get("api_token_env", "APIFY_API_TOKEN")
         self._token = os.getenv(token_env)
         self._timeout_sec = int(apify_cfg.get("default_timeout_sec", 600))
-        # 平台配的 apify 子段
+        # Platform-specific apify subsection
         self._apify_cfg = (self._settings.get("apify") or {})
 
     @property
@@ -43,8 +44,8 @@ class ApifyCollector(BaseCollector):
         actor = self._apify_cfg.get("actor")
         if not actor:
             raise ApifyError(
-                f"collectors.{self.name}.apify.actor 未配置. "
-                f"去 https://apify.com/store 找到你想用的 Actor,把它 username/actorname 填进来."
+                f"collectors.{self.name}.apify.actor not configured. "
+                f"Find the Actor you want at https://apify.com/store and fill in username/actorname."
             )
         return actor
 
@@ -52,22 +53,22 @@ class ApifyCollector(BaseCollector):
     def input_overrides(self) -> dict:
         return self._apify_cfg.get("input_overrides") or {}
 
-    # ---- 子类实现 ----
+    # ---- Subclass implementation ----
     def _build_input(self, keywords: list[str], locations: list[str]) -> dict:
-        """返回 actor 需要的 input JSON. 子类必须实现."""
+        """Return the input JSON needed by the actor. Subclasses must implement."""
         raise NotImplementedError
 
     def _parse_item(self, item: dict) -> Optional[CollectedJob]:
-        """把 actor 返回的一条数据映射成 CollectedJob. 子类必须实现.
+        """Map an item returned by the actor to CollectedJob. Subclasses must implement.
 
-        返回 None 表示这条数据应该被丢弃 (比如缺关键字段).
+        Return None if the item should be discarded (e.g., missing key fields).
         """
         raise NotImplementedError
 
-    # ---- 公共工具方法 ----
+    # ---- Public utility methods ----
     def _run_actor(self, input_data: dict) -> list[dict]:
-        """发一次 Apify Actor 请求, 返回原始 items 列表.
-        子类可以在自己的 search() 里直接调这个, 实现更灵活的搜索策略.
+        """Make one Apify Actor request, return list of raw items.
+        Subclasses can call this directly in their search() for more flexible search strategies.
         """
         actor_path = self.actor_id.replace("/", "~")
         url = (
@@ -80,9 +81,9 @@ class ApifyCollector(BaseCollector):
             with httpx.Client(timeout=self._timeout_sec) as client:
                 resp = client.post(url, params=params, json=input_data)
         except httpx.TimeoutException:
-            raise ApifyError(f"Apify Actor {self.actor_id} 超时 ({self._timeout_sec}s)")
+            raise ApifyError(f"Apify Actor {self.actor_id} timed out ({self._timeout_sec}s)")
         except httpx.HTTPError as e:
-            raise ApifyError(f"Apify API 请求失败: {e}")
+            raise ApifyError(f"Apify API request failed: {e}")
 
         if resp.status_code >= 400:
             try:
@@ -90,23 +91,23 @@ class ApifyCollector(BaseCollector):
             except Exception:
                 msg = resp.text[:500]
             raise ApifyError(
-                f"Apify Actor {self.actor_id} 返回 {resp.status_code}: {msg}"
+                f"Apify Actor {self.actor_id} returned {resp.status_code}: {msg}"
             )
         try:
             items = resp.json()
         except Exception:
-            raise ApifyError(f"Apify 返回非 JSON: {resp.text[:200]}")
+            raise ApifyError(f"Apify returned non-JSON: {resp.text[:200]}")
         if not isinstance(items, list):
             raise ApifyError(
-                f"Apify Actor 返回了非数组: {type(items).__name__}. 检查 actor 是否正确."
+                f"Apify Actor returned non-array: {type(items).__name__}. Check if actor is correct."
             )
         return items
 
-    # ---- 默认 search 流程 (子类可覆盖) ----
+    # ---- Default search flow (subclasses can override) ----
     def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:
         if not self._token:
             raise ApifyError(
-                "APIFY_API_TOKEN 未设置. 去 https://console.apify.com/account/integrations 拿一个,填到 .env"
+                "APIFY_API_TOKEN not set. Get one at https://console.apify.com/account/integrations and add to .env"
             )
 
         input_data = self._build_input(keywords, locations)
@@ -114,7 +115,7 @@ class ApifyCollector(BaseCollector):
 
         print(f"  [apify] POST {self.actor_id}  input={input_data!r}")
         items = self._run_actor(input_data)
-        print(f"  [apify] 拿回 {len(items)} 条原始数据")
+        print(f"  [apify] received {len(items)} raw items")
 
         count = 0
         for item in items:
@@ -123,7 +124,7 @@ class ApifyCollector(BaseCollector):
             try:
                 cj = self._parse_item(item)
             except Exception as e:
-                print(f"  [apify] 解析失败,跳过: {e}")
+                print(f"  [apify] parse failed, skipping: {e}")
                 continue
             if cj is not None:
                 yield cj

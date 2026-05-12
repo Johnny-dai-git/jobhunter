@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}添加岗位 — JobHunter{% endblock %}
+{% block title %}<span class="zh">添加岗位</span><span class="en">Add Job</span> — JobHunter{% endblock %}
 
 {% block content %}
 <div style="max-width:760px; margin:0 auto; padding:32px 16px;">
@@ -7,9 +7,12 @@
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:28px;">
     <span style="font-size:24px;">➕</span>
     <div>
-      <h2 style="margin:0; font-size:20px; font-weight:700;">手动添加岗位</h2>
+      <h2 style="margin:0; font-size:20px; font-weight:700;">
+        <span class="zh">手动添加岗位</span><span class="en">Add Job Manually</span>
+      </h2>
       <p style="margin:4px 0 0; color:var(--color-text-muted); font-size:13px;">
-        粘贴 JD，LLM 自动提取字段、评分入库
+        <span class="zh">粘贴 JD，LLM 自动提取字段、评分入库</span>
+        <span class="en">Paste the JD — LLM extracts fields, scores, and saves to the database</span>
       </p>
     </div>
   </div>
@@ -23,7 +26,7 @@
   {% if duplicate %}
   <div style="background:var(--color-warn-light); border:1px solid #fcd34d;
               border-radius:var(--radius-sm); padding:12px 16px; margin-bottom:16px; font-size:13px;">
-    ⚠️ 已存在相同岗位：
+    ⚠️ <span class="zh">已存在相同岗位：</span><span class="en">Duplicate job found:</span>
     <a href="/job/{{ duplicate.id }}" style="color:var(--color-accent); font-weight:600;">
       #{{ duplicate.id }} {{ duplicate.title }} @ {{ duplicate.company }}
     </a>
@@ -37,10 +40,11 @@
     <!-- JD 文本 -->
     <div>
       <label style="display:block; font-weight:600; font-size:13px; margin-bottom:6px;">
-        JD 全文 <span style="color:var(--color-danger);">*</span>
+        <span class="zh">JD 全文</span><span class="en">Full JD text</span>
+        <span style="color:var(--color-danger);">*</span>
       </label>
       <textarea name="jd_text" rows="10" required
-                placeholder="把岗位描述全文粘贴在这里……&#10;包括职位名称、公司、工作职责、技术要求、薪资等，LLM 会自动提取所有字段。"
+                placeholder="Paste the full job description here…&#10;Include title, company, responsibilities, requirements, salary, etc. The LLM will extract all fields automatically."
                 style="width:100%; padding:10px 12px; border:1px solid var(--color-border-strong);
                        border-radius:var(--radius-sm); font-size:13px; font-family:inherit;
                        resize:vertical; outline:none; line-height:1.6; box-sizing:border-box;"
@@ -51,10 +55,13 @@
     <!-- 个人备注 -->
     <div>
       <label style="display:block; font-weight:600; font-size:13px; margin-bottom:6px;">
-        个人备注 <span style="color:var(--color-text-muted); font-weight:400;">(选填)</span>
+        <span class="zh">个人备注</span><span class="en">Personal note</span>
+        <span style="color:var(--color-text-muted); font-weight:400;">
+          (<span class="zh">选填</span><span class="en">optional</span>)
+        </span>
       </label>
       <textarea name="user_note" rows="3"
-                placeholder="例如：朋友内推、公司规模小但技术栈很匹配、要求签 visa……"
+                placeholder="e.g. Referred by a friend, niche company but great tech stack, requires visa sponsorship…"
                 style="width:100%; padding:10px 12px; border:1px solid var(--color-border-strong);
                        border-radius:var(--radius-sm); font-size:13px; font-family:inherit;
                        resize:vertical; outline:none; line-height:1.6; box-sizing:border-box;"
@@ -62,10 +69,10 @@
                 onblur="this.style.borderColor='var(--color-border-strong)'"></textarea>
     </div>
 
-    <!-- URL (折叠显示) -->
+    <!-- URL -->
     <details style="font-size:13px;">
       <summary style="cursor:pointer; color:var(--color-text-muted); user-select:none;">
-        + 岗位链接（用于去重，选填）
+        + <span class="zh">岗位链接（用于去重，选填）</span><span class="en">Job URL (for dedup, optional)</span>
       </summary>
       <input type="url" name="url" value="{{ form_url or '' }}"
              placeholder="https://www.linkedin.com/jobs/view/..."
@@ -76,10 +83,11 @@
              onblur="this.style.borderColor='var(--color-border-strong)'">
     </details>
 
-    <!-- 或上传文件 -->
+    <!-- 上传文件 -->
     <details style="font-size:13px;">
       <summary style="cursor:pointer; color:var(--color-text-muted); user-select:none;">
-        + 或上传 JD 文件（PDF / DOCX / MD / TXT）
+        + <span class="zh">或上传 JD 文件（PDF / DOCX / MD / TXT）</span>
+          <span class="en">or upload a JD file (PDF / DOCX / MD / TXT)</span>
       </summary>
       <input type="file" name="jd_file" accept=".pdf,.docx,.md,.txt"
              style="margin-top:8px; font-size:13px;">
@@ -93,20 +101,23 @@
                      font-size:14px; font-weight:600; cursor:pointer;"
               onmouseover="this.style.background='var(--color-accent-hover)'"
               onmouseout="this.style.background='var(--color-accent)'">
-        🤖 解析并入库
+        🤖 <span class="zh">解析并入库</span><span class="en">Parse & save</span>
       </button>
       <span id="loadingMsg" style="display:none; color:var(--color-text-muted); font-size:13px;">
-        ⏳ LLM 解析中…
+        ⏳ <span class="zh">LLM 解析中…</span><span class="en">LLM parsing…</span>
       </span>
-      <a href="/jobs" style="color:var(--color-text-muted); font-size:13px; text-decoration:none;">取消</a>
+      <a href="/jobs" style="color:var(--color-text-muted); font-size:13px; text-decoration:none;">
+        <span class="zh">取消</span><span class="en">Cancel</span>
+      </a>
     </div>
   </form>
 </div>
 
 <script>
   document.querySelector('form').addEventListener('submit', function() {
+    const isEn = document.body.classList.contains('lang-en');
     document.getElementById('submitBtn').disabled = true;
-    document.getElementById('submitBtn').textContent = '处理中…';
+    document.getElementById('submitBtn').textContent = isEn ? 'Processing…' : '处理中…';
     document.getElementById('loadingMsg').style.display = 'inline';
   });
 </script>

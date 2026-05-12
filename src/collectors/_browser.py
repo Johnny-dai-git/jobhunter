@@ -1,4 +1,4 @@
-"""Playwright 共用工具: 启动浏览器、加载 cookies、温柔地滚屏、节流."""
+"""Playwright shared utilities: launch browser, load cookies, gentle scrolling, rate limiting."""
 from __future__ import annotations
 
 import random
@@ -23,9 +23,9 @@ def browser_context(
     *,
     headless: bool = True,
 ) -> Iterator:
-    """启动 Chromium,可选加载某平台的 cookies. 用 with 语法保证关闭.
+    """Launch Chromium, optionally load cookies for a platform. Use with syntax to ensure cleanup.
 
-    yield (page, browser, ctx) 三元组.
+    Yields (page, browser, ctx) tuple.
     """
     from playwright.sync_api import sync_playwright
 
@@ -38,7 +38,7 @@ def browser_context(
                 cookies = load_cookies(config, platform)
                 ctx.add_cookies(cookies)
             except FileNotFoundError as e:
-                print(f"[警告] {e}")
+                print(f"[warning] {e}")
 
         page = ctx.new_page()
         try:
@@ -48,12 +48,12 @@ def browser_context(
 
 
 def polite_wait(min_ms: int = 800, max_ms: int = 2200) -> None:
-    """随机延迟,降低被检测概率."""
+    """Random delay to reduce detection probability."""
     time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
 
 
 def scroll_to_bottom(page, *, steps: int = 6, pause_ms: int = 600) -> None:
-    """逐步往下滚,触发懒加载."""
+    """Scroll gradually to trigger lazy loading."""
     for _ in range(steps):
         page.mouse.wheel(0, 1500)
         page.wait_for_timeout(pause_ms)

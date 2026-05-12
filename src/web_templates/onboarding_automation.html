@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}自动运行 · JobHunter{% endblock %}
+{% block title %}<span class="zh">自动运行</span><span class="en">Automation</span> · JobHunter{% endblock %}
 {% block content %}
 <style>
   .automation-shell { max-width: 980px; margin: 0 auto; }
@@ -22,16 +22,24 @@
 <div class="automation-shell">
   <div class="page-head">
     <div>
-      <h1>自动运行</h1>
-      <p>设置定时抓取、评分和邮件摘要，并控制岗位发布时间窗。</p>
+      <h1><span class="zh">自动运行</span><span class="en">Automation</span></h1>
+      <p>
+        <span class="zh">设置定时抓取、评分和邮件摘要，并控制岗位发布时间窗。</span>
+        <span class="en">Configure scheduled collection, scoring, email digests, and job freshness window.</span>
+      </p>
     </div>
-    <a href="/onboarding" class="btn btn-secondary btn-sm">回到画像</a>
+    <a href="/onboarding" class="btn btn-secondary btn-sm">
+      <span class="zh">回到画像</span><span class="en">Back to Dashboard</span>
+    </a>
   </div>
 
   <div class="card">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px;">
-      <h3 style="margin:0;">定时任务</h3>
-      <span style="font-size:12px; color:var(--color-text-muted);">系统 cron 可在 web server 关闭后继续运行</span>
+      <h3 style="margin:0;"><span class="zh">定时任务</span><span class="en">Scheduled Jobs</span></h3>
+      <span style="font-size:12px; color:var(--color-text-muted);">
+        <span class="zh">系统 cron 可在 web server 关闭后继续运行</span>
+        <span class="en">System cron continues running even when the web server is off</span>
+      </span>
     </div>
 
     {% set active_hours = schedule.cron_hours or schedule.inproc_hours %}
@@ -39,14 +47,17 @@
 
     <div class="setting-row">
       <div>
-        <div class="eyebrow">当前</div>
+        <div class="eyebrow"><span class="zh">当前</span><span class="en">Current</span></div>
         <div style="font-weight:700; margin-top:3px;">
           {% if schedule.cron_installed %}
-            每 {{ schedule.cron_hours }} 小时 (系统 cron)
+            <span class="zh">每 {{ schedule.cron_hours }} 小时 (系统 cron)</span>
+            <span class="en">Every {{ schedule.cron_hours }}h (system cron)</span>
           {% elif schedule.inproc_hours > 0 %}
-            每 {{ schedule.inproc_hours }} 小时 (进程内)
+            <span class="zh">每 {{ schedule.inproc_hours }} 小时 (进程内)</span>
+            <span class="en">Every {{ schedule.inproc_hours }}h (in-process)</span>
           {% else %}
-            <span style="color:var(--color-text-muted);">关闭</span>
+            <span class="zh" style="color:var(--color-text-muted);">关闭</span>
+            <span class="en" style="color:var(--color-text-muted);">Off</span>
           {% endif %}
         </div>
         {% if schedule.cron_line %}
@@ -56,66 +67,96 @@
 
       {% if schedule.last %}
       <div>
-        <div class="eyebrow">上次 web 运行</div>
+        <div class="eyebrow"><span class="zh">上次 web 运行</span><span class="en">Last web run</span></div>
         <div style="font-weight:600; margin-top:3px;">{{ schedule.last.strftime('%Y-%m-%d %H:%M') }}</div>
       </div>
       {% endif %}
 
       <form method="post" action="/schedule/set">
-        <label style="font-size:12px; color:var(--color-text-muted);">模式</label>
+        <label style="font-size:12px; color:var(--color-text-muted);">
+          <span class="zh">模式</span><span class="en">Mode</span>
+        </label>
         <select name="backend">
-          <option value="cron" {% if backend == 'cron' %}selected{% endif %}>系统 cron</option>
-          <option value="inproc" {% if backend == 'inproc' %}selected{% endif %}>进程内</option>
+          <option value="cron" {% if backend == 'cron' %}selected{% endif %}>
+            <span class="zh">系统 cron</span><span class="en">System cron</span>
+          </option>
+          <option value="inproc" {% if backend == 'inproc' %}selected{% endif %}>
+            <span class="zh">进程内</span><span class="en">In-process</span>
+          </option>
         </select>
-        <label style="font-size:12px; color:var(--color-text-muted);">间隔</label>
+        <label style="font-size:12px; color:var(--color-text-muted);">
+          <span class="zh">间隔</span><span class="en">Interval</span>
+        </label>
         <select name="hours">
-          <option value="0" {% if active_hours == 0 %}selected{% endif %}>关闭</option>
-          <option value="1" {% if active_hours == 1 %}selected{% endif %}>每 1 小时</option>
-          <option value="3" {% if active_hours == 3 %}selected{% endif %}>每 3 小时</option>
-          <option value="6" {% if active_hours == 6 %}selected{% endif %}>每 6 小时</option>
-          <option value="12" {% if active_hours == 12 %}selected{% endif %}>每 12 小时</option>
-          <option value="24" {% if active_hours == 24 %}selected{% endif %}>每天</option>
-          <option value="168" {% if active_hours == 168 %}selected{% endif %}>每周</option>
+          <option value="0"   {% if active_hours == 0   %}selected{% endif %}><span class="zh">关闭</span><span class="en">Off</span></option>
+          <option value="1"   {% if active_hours == 1   %}selected{% endif %}><span class="zh">每 1 小时</span><span class="en">Every 1h</span></option>
+          <option value="3"   {% if active_hours == 3   %}selected{% endif %}><span class="zh">每 3 小时</span><span class="en">Every 3h</span></option>
+          <option value="6"   {% if active_hours == 6   %}selected{% endif %}><span class="zh">每 6 小时</span><span class="en">Every 6h</span></option>
+          <option value="12"  {% if active_hours == 12  %}selected{% endif %}><span class="zh">每 12 小时</span><span class="en">Every 12h</span></option>
+          <option value="24"  {% if active_hours == 24  %}selected{% endif %}><span class="zh">每天</span><span class="en">Daily</span></option>
+          <option value="168" {% if active_hours == 168 %}selected{% endif %}><span class="zh">每周</span><span class="en">Weekly</span></option>
         </select>
-        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+        <button type="submit" class="btn btn-primary btn-sm">
+          <span class="zh">保存</span><span class="en">Save</span>
+        </button>
       </form>
     </div>
 
     <div style="font-size:12px; color:var(--color-text-dim); margin-top:12px;">
-      cron 模式使用 <code>scripts/daily.sh</code>，日志写到 <code>/tmp/jobhunter.log</code>，邮件发送到 <code>{{ digest_to or '未设置' }}</code>。
-      {% if not schedule.cron_available %}<br>当前系统检测不到 crontab 命令，只能使用进程内模式。{% endif %}
+      <span class="zh">
+        cron 模式使用 <code>scripts/daily.sh</code>，日志写到 <code>/tmp/jobhunter.log</code>，邮件发送到 <code>{{ digest_to or '未设置' }}</code>。
+        {% if not schedule.cron_available %}<br>当前系统检测不到 crontab 命令，只能使用进程内模式。{% endif %}
+      </span>
+      <span class="en">
+        Cron mode uses <code>scripts/daily.sh</code>, logs to <code>/tmp/jobhunter.log</code>, digest email to <code>{{ digest_to or 'not set' }}</code>.
+        {% if not schedule.cron_available %}<br>crontab not detected on this system — only in-process mode is available.{% endif %}
+      </span>
     </div>
   </div>
 
   <div class="card">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px;">
-      <h3 style="margin:0;">抓取时间窗</h3>
-      <span style="font-size:12px; color:var(--color-text-muted);">影响下一次 collect 的发布时间过滤</span>
+      <h3 style="margin:0;"><span class="zh">抓取时间窗</span><span class="en">Freshness Window</span></h3>
+      <span style="font-size:12px; color:var(--color-text-muted);">
+        <span class="zh">影响下一次 collect 的发布时间过滤</span>
+        <span class="en">Filters jobs by posting date on the next collect run</span>
+      </span>
     </div>
 
     <div class="setting-row">
       <div>
-        <div class="eyebrow">当前</div>
+        <div class="eyebrow"><span class="zh">当前</span><span class="en">Current</span></div>
         <div style="font-weight:700; margin-top:3px;">
-          {% if freshness.hours <= 24 %}24 小时内
-          {% elif freshness.hours <= 72 %}3 天内
-          {% elif freshness.hours <= 168 %}一周内
-          {% elif freshness.hours <= 336 %}两周内
-          {% elif freshness.hours <= 720 %}一个月内
-          {% else %}{{ freshness.hours }} 小时{% endif %}
+          {% if freshness.hours <= 24 %}
+            <span class="zh">24 小时内</span><span class="en">Last 24h</span>
+          {% elif freshness.hours <= 72 %}
+            <span class="zh">3 天内</span><span class="en">Last 3 days</span>
+          {% elif freshness.hours <= 168 %}
+            <span class="zh">一周内</span><span class="en">Last week</span>
+          {% elif freshness.hours <= 336 %}
+            <span class="zh">两周内</span><span class="en">Last 2 weeks</span>
+          {% elif freshness.hours <= 720 %}
+            <span class="zh">一个月内</span><span class="en">Last month</span>
+          {% else %}
+            <span class="zh">{{ freshness.hours }} 小时</span><span class="en">{{ freshness.hours }}h</span>
+          {% endif %}
         </div>
       </div>
 
       <form method="post" action="/freshness/set">
-        <label style="font-size:12px; color:var(--color-text-muted);">时间窗</label>
+        <label style="font-size:12px; color:var(--color-text-muted);">
+          <span class="zh">时间窗</span><span class="en">Window</span>
+        </label>
         <select name="hours">
-          <option value="24" {% if freshness.hours == 24 %}selected{% endif %}>24 小时内</option>
-          <option value="72" {% if freshness.hours == 72 %}selected{% endif %}>3 天内</option>
-          <option value="168" {% if freshness.hours == 168 %}selected{% endif %}>一周内</option>
-          <option value="336" {% if freshness.hours == 336 %}selected{% endif %}>两周内</option>
-          <option value="720" {% if freshness.hours == 720 %}selected{% endif %}>一个月内</option>
+          <option value="24"  {% if freshness.hours == 24  %}selected{% endif %}><span class="zh">24 小时内</span><span class="en">Last 24h</span></option>
+          <option value="72"  {% if freshness.hours == 72  %}selected{% endif %}><span class="zh">3 天内</span><span class="en">Last 3 days</span></option>
+          <option value="168" {% if freshness.hours == 168 %}selected{% endif %}><span class="zh">一周内</span><span class="en">Last week</span></option>
+          <option value="336" {% if freshness.hours == 336 %}selected{% endif %}><span class="zh">两周内</span><span class="en">Last 2 weeks</span></option>
+          <option value="720" {% if freshness.hours == 720 %}selected{% endif %}><span class="zh">一个月内</span><span class="en">Last month</span></option>
         </select>
-        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+        <button type="submit" class="btn btn-primary btn-sm">
+          <span class="zh">保存</span><span class="en">Save</span>
+        </button>
       </form>
     </div>
   </div>

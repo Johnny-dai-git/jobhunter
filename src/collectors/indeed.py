@@ -1,11 +1,11 @@
-"""Indeed 采集器 - 实装版.
+"""Indeed collector - implementation version.
 
-Indeed 不强制登录就能搜索,所以 cookies 可有可无.但加载 cookies 能拿到更多个性化结果.
+Indeed allows searching without login, so cookies are optional. Loading cookies provides more personalized results.
 
-页面结构 (2025-Q2):
-- 搜索结果在 div.job_seen_beacon 或 [data-testid="job-card"]
-- 每张卡片: a.jcs-JobTitle, [data-testid="company-name"], [data-testid="text-location"]
-- 详情面板在右侧 #jobDescriptionText
+Page structure (2025-Q2):
+- Search results in div.job_seen_beacon or [data-testid="job-card"]
+- Each card: a.jcs-JobTitle, [data-testid="company-name"], [data-testid="text-location"]
+- Details panel on the right #jobDescriptionText
 """
 from __future__ import annotations
 
@@ -35,11 +35,11 @@ class IndeedCollector(BaseCollector):
                     try:
                         page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     except Exception as e:
-                        print(f"[indeed] 打开搜索页失败: {e}")
+                        print(f"[indeed] failed to open search page: {e}")
                         continue
                     polite_wait()
 
-                    # 关闭可能的弹窗
+                    # Close possible popups
                     for sel in ["button[aria-label='Close']", "#popover-x button"]:
                         try:
                             page.locator(sel).first.click(timeout=1000)
@@ -76,7 +76,7 @@ class IndeedCollector(BaseCollector):
                                 .first.inner_text()
                             ).strip()
 
-                            # 点开拿完整 JD
+                            # Click to get complete job description
                             try:
                                 c.click(timeout=5000)
                                 polite_wait(600, 1400)
@@ -96,5 +96,5 @@ class IndeedCollector(BaseCollector):
                             )
                             count += 1
                         except Exception as e:
-                            print(f"[indeed] 解析卡片 {i} 失败: {e}")
+                            print(f"[indeed] failed to parse card {i}: {e}")
                             continue

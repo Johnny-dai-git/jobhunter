@@ -1,4 +1,4 @@
-"""配置加载: 读取 config.yaml 和 .env"""
+"""Config loading: read config.yaml and .env"""
 from __future__ import annotations
 
 import os
@@ -23,19 +23,19 @@ class Config:
         load_dotenv(PROJECT_ROOT / ".env")
         path = Path(config_path) if config_path else PROJECT_ROOT / "config.yaml"
         if not path.exists():
-            raise FileNotFoundError(f"配置文件不存在: {path}. 请基于模板创建.")
+            raise FileNotFoundError(f"Config file not found: {path}. Please create from template.")
         with path.open("r", encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
         return cls(raw=raw)
 
-    # --- 便捷访问 ---
+    # --- Convenience accessors ---
     @property
     def anthropic_api_key(self) -> str:
-        """向后兼容: 旧代码可能直接读这个."""
+        """Backward compatible: old code may read this directly."""
         key = os.getenv("ANTHROPIC_API_KEY")
         if not key:
             raise RuntimeError(
-                "未找到 ANTHROPIC_API_KEY,请在 .env 文件或环境变量中设置"
+                "ANTHROPIC_API_KEY not found, please set in .env file or environment variable"
             )
         return key
 
@@ -43,11 +43,11 @@ class Config:
         return self.raw.get("providers", {}) or {}
 
     def role_config(self, role: str) -> dict[str, Any]:
-        """返回某 role 的 {provider, name} 配置.
+        """Return {provider, name} config for a role.
 
-        兼容两种写法:
-        - 字符串: "claude-sonnet-4-6"  -> 默认 provider=claude
-        - dict:   {provider: deepseek, name: deepseek-v4-flash}
+        Supports two formats:
+        - String: "claude-sonnet-4-6"  -> default provider=claude
+        - Dict:   {provider: deepseek, name: deepseek-v4-flash}
         """
         models = self.raw.get("model", {}) or {}
         cfg = models.get(role)
@@ -59,7 +59,7 @@ class Config:
         return {"provider": "claude", "name": "claude-sonnet-4-6"}
 
     def model(self, role: str) -> str:
-        """向后兼容: 只返回模型名字符串."""
+        """Backward compatible: return only model name string."""
         return self.role_config(role)["name"]
 
     def provider_for(self, role: str) -> str:
@@ -69,7 +69,7 @@ class Config:
         provs = self.providers()
         if provider not in provs:
             raise KeyError(
-                f"providers.{provider} 未定义.可用: {list(provs.keys())}"
+                f"providers.{provider} not defined. Available: {list(provs.keys())}"
             )
         return provs[provider]
 
@@ -79,7 +79,7 @@ class Config:
         key = os.getenv(env_name)
         if not key:
             raise RuntimeError(
-                f"未找到 {env_name} (provider {provider} 需要),请在 .env 中设置"
+                f"{env_name} not found (required by provider {provider}), please set in .env"
             )
         return key
 
@@ -102,7 +102,7 @@ class Config:
     @property
     def freshness(self) -> dict[str, Any]:
         base = dict(self.raw.get("freshness", {}))
-        # web UI 通过 data/settings.json 覆盖
+        # Web UI can override via data/settings.json
         try:
             import json as _json
             settings_path = self.project_root / "data" / "settings.json"
@@ -127,13 +127,13 @@ class Config:
         return os.getenv(key, default)
 
     def path(self, key: str) -> Path:
-        """从 paths.* 中取一个相对路径,返回绝对路径."""
+        """Get a relative path from paths.*, return absolute path."""
         rel = self.raw.get("paths", {}).get(key)
         if not rel:
-            raise KeyError(f"config.paths.{key} 未配置")
+            raise KeyError(f"config.paths.{key} not configured")
         p = (self.project_root / rel).resolve()
-        # 自动建好父目录,避免后续报错
-        if p.suffix:  # 是文件
+        # Automatically create parent directories to avoid later errors
+        if p.suffix:  # It's a file
             p.parent.mkdir(parents=True, exist_ok=True)
         else:
             p.mkdir(parents=True, exist_ok=True)

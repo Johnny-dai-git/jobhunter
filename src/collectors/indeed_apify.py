@@ -1,25 +1,25 @@
-"""Indeed 通过 Apify (misceres/indeed-scraper).
+"""Indeed via Apify (misceres/indeed-scraper).
 
 Actor schema (https://apify.com/misceres/indeed-scraper/input-schema):
-    position           - single string (单关键词)
+    position           - single string (single keyword)
     location           - single string
-    country            - enum,默认 'US'
-    maxItemsPerSearch  - 每个搜索的上限
-    parseCompanyDetails - 是否抓公司详情
-    saveOnlyUniqueItems - 自动去重
-    startUrls          - array of URLs,支持多个搜索 URL
+    country            - enum, default 'US'
+    maxItemsPerSearch  - max per search
+    parseCompanyDetails - whether to scrape company details
+    saveOnlyUniqueItems - auto-deduplicate
+    startUrls          - array of URLs, supports multiple search URLs
 
-我们用 startUrls 方式: 生成 N 个搜索 URL (keyword × location 组合),
-一次 actor call 完成所有搜索. 价格 ~$0.005/job.
+We use startUrls approach: generate N search URLs (keyword × location combinations),
+complete all searches in one actor call. Cost ~$0.005/job.
 
-输出每条 (常见字段, 用 fallback 兼容):
+Output each item (common fields with fallback compatibility):
     {
-        "positionName": "...",     或 "position", "title"
+        "positionName": "...",     or "position", "title"
         "company": "...",
         "location": "...",
         "description": "...",
         "salary": "...",
-        "url": "...",              详情页 URL
+        "url": "...",              detail page URL
         "jobKey": "..."
     }
 """
@@ -33,7 +33,7 @@ from .base import CollectedJob
 
 
 def _hours_to_fromage(hours: int) -> str:
-    """Indeed 用 fromage=1/3/7/14 表示过去 1/3/7/14 天."""
+    """Indeed uses fromage=1/3/7/14 to represent past 1/3/7/14 days."""
     if hours <= 24:
         return "1"
     if hours <= 24 * 3:
@@ -50,7 +50,7 @@ class IndeedApifyCollector(ApifyCollector):
         max_age_hours = int(self.config.freshness.get("max_age_hours", 0) or 24)
         fromage = _hours_to_fromage(max_age_hours)
 
-        # 生成 N 个搜索 URL,每个一对 (keyword, location)
+        # Generate N search URLs, one per (keyword, location) pair
         start_urls = []
         for kw in keywords:
             for loc in locations:
@@ -59,8 +59,8 @@ class IndeedApifyCollector(ApifyCollector):
                     "url": f"https://www.indeed.com/jobs?{urlencode(params)}"
                 })
 
-        # 每个 URL 固定返回 results_per_url 条（默认 15，对标 LinkedIn）
-        # max_per_run 是本地总量上限（apify_base.search() 里 cap），与每 URL 数量无关
+        # Each URL returns results_per_url items (default 15, to match LinkedIn)
+        # max_per_run is the local total cap (applied in apify_base.search()), independent of per-URL count
         results_per_url = int(self._settings.get("results_per_url", 15))
 
         return {
@@ -72,7 +72,7 @@ class IndeedApifyCollector(ApifyCollector):
         }
 
     def _parse_item(self, item: dict) -> Optional[CollectedJob]:
-        # misceres 输出字段不固定,做 fallback
+        # misceres output fields are not fixed, use fallback
         title = (
             item.get("positionName")
             or item.get("position")
@@ -93,14 +93,14 @@ class IndeedApifyCollector(ApifyCollector):
         if not (title and company and url):
             return None
 
-        # location 可能是 string 或 dict
+        # location may be string or dict
         loc_raw = item.get("location") or item.get("formattedLocation")
         if isinstance(loc_raw, dict):
             location = loc_raw.get("formattedLocation") or loc_raw.get("city") or ""
         else:
             location = str(loc_raw or "")
 
-        # salary 同上
+        # salary same as above
         salary_raw = item.get("salary") or item.get("salaryInfo")
         if isinstance(salary_raw, dict):
             salary = salary_raw.get("text") or salary_raw.get("formattedSalary")

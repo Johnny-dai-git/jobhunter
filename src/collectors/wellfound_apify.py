@@ -1,15 +1,15 @@
 """Wellfound (AngelList) Jobs via Apify (clearpath/wellfound-api-ppe).
 
-Wellfound 是创业公司岗位库的标杆,AI startup 招聘集中地.
+Wellfound is the go-to startup job board, hub for AI startup hiring.
 
-可能的 input schema (按常见模式):
-    keyword        - 搜索关键词,常被表达为 slug (例: 'software-engineer')
-    location       - 地点 slug (例: 'san-francisco', 'remote')
-    maxItems       - 最大数量
-    lastDays       - 最近 N 天发布
-    startUrls      - 自定义搜索 URL 列表
+Possible input schema (by common patterns):
+    keyword        - search keyword, often expressed as slug (e.g., 'software-engineer')
+    location       - location slug (e.g., 'san-francisco', 'remote')
+    maxItems       - max count
+    lastDays       - published in last N days
+    startUrls      - custom search URL list
 
-由于 keyword 经常需要 slug 格式,自动转换 (Machine Learning Engineer -> machine-learning-engineer).
+Since keyword often needs slug format, auto-convert (Machine Learning Engineer -> machine-learning-engineer).
 """
 from __future__ import annotations
 
@@ -33,14 +33,14 @@ class WellfoundApifyCollector(ApifyCollector):
         max_age_hours = int(self.config.freshness.get("max_age_hours", 0) or 24)
         last_days = max(1, max_age_hours // 24)
 
-        # Wellfound 通常用 slug 形式. 第一个 keyword 当主搜索词.
+        # Wellfound usually uses slug format. First keyword is main search term.
         kw_slug = _slugify(keywords[0]) if keywords else ""
         loc_slug = _slugify(locations[0]) if locations else "remote"
 
         return {
             "keyword": kw_slug,
             "location": loc_slug,
-            # 给 actor 多种字段尝试,actor 会忽略它不认识的
+            # Provide actor with multiple field options, actor ignores unrecognized ones
             "keywords": [_slugify(k) for k in keywords],
             "locations": [_slugify(l) for l in locations],
             "maxItems": self.max_per_run,
@@ -58,7 +58,7 @@ class WellfoundApifyCollector(ApifyCollector):
         if not (title and company and url):
             return None
 
-        # salary/equity 可能是嵌套对象
+        # salary/equity may be nested object
         salary_obj = item.get("salary") or item.get("compensation") or {}
         if isinstance(salary_obj, dict):
             salary = salary_obj.get("text") or salary_obj.get("range")

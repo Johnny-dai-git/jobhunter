@@ -1,8 +1,8 @@
-"""Glassdoor 采集器 - 实装版.
+"""Glassdoor collector - implementation version.
 
-Glassdoor 反爬较强,需要登录 cookies. 搜索 URL:
+Glassdoor has strong anti-bot protection and requires login cookies. Search URL:
     https://www.glassdoor.com/Job/jobs.htm?sc.keyword={kw}&locKeyword={loc}&fromAge={hours}
-- fromAge: 1=24h, 3=3天, 7=一周
+- fromAge: 1=24h, 3=3 days, 7=one week
 """
 from __future__ import annotations
 
@@ -37,11 +37,11 @@ class GlassdoorCollector(BaseCollector):
                     try:
                         page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     except Exception as e:
-                        print(f"[glassdoor] 打开搜索页失败: {e}")
+                        print(f"[glassdoor] failed to open search page: {e}")
                         continue
                     polite_wait()
 
-                    # 关掉常见弹窗
+                    # Close common popups
                     for sel in [
                         "button.modal_closeIcon",
                         "button[aria-label='Close']",
@@ -77,7 +77,7 @@ class GlassdoorCollector(BaseCollector):
                             location = _safe_text(c, "[data-test='emp-location'], .JobCard_location")
                             salary = _safe_text(c, "[data-test='detailSalary'], .JobCard_salaryEstimate")
 
-                            # 点开详情拿 JD
+                            # Click to get job description
                             desc = ""
                             try:
                                 c.click(timeout=5000)
@@ -102,7 +102,7 @@ class GlassdoorCollector(BaseCollector):
                             )
                             count += 1
                         except Exception as e:
-                            print(f"[glassdoor] 解析卡片 {i} 失败: {e}")
+                            print(f"[glassdoor] failed to parse card {i}: {e}")
                             continue
 
 

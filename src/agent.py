@@ -1,4 +1,4 @@
-"""LLM 调用的薄封装 (Anthropic 兼容接口,Claude / DeepSeek 共用)."""
+"""Thin wrapper for LLM calls (Anthropic SDK for Claude, OpenAI SDK for DeepSeek)."""
 from __future__ import annotations
 
 import json
@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from anthropic import Anthropic
+from openai import OpenAI as _OpenAI
 
 from .config import Config
 
@@ -14,34 +15,42 @@ from .config import Config
 _PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 
-def make_client(config: Config, role: str) -> tuple[Anthropic, str]:
-    """根据 role 返回 (client, model_name).
+def make_client(config: Config, role: str) -> tuple[Any, str, str]:
+    """Return (client, model_name, provider) based on role.
 
-    DeepSeek V4 直接兼容 Anthropic SDK,只需换 base_url 和 api_key.
+    Provider=deepseek routes through OpenAI SDK to https://api.deepseek.com.
+    Provider=claude (or others) routes through Anthropic SDK.
     """
     role_cfg = config.role_config(role)
     provider = role_cfg["provider"]
     model_name = role_cfg["name"]
     api_key = config.api_key_for(provider)
     settings = config.provider_settings(provider)
-    base_url = settings.get("base_url") or None  # 空字符串视为 None
-    if base_url:
-        client = Anthropic(api_key=api_key, base_url=base_url)
+
+    if provider == "deepseek":
+        # Use OpenAI SDK for DeepSeek API (OpenAI-compatible endpoint)
+        client = _OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
     else:
-        client = Anthropic(api_key=api_key)
-    return client, model_name
+        # Use Anthropic SDK for Claude and compatible providers
+        base_url = settings.get("base_url") or None  # Treat empty string as None
+        if base_url:
+            client = Anthropic(api_key=api_key, base_url=base_url)
+        else:
+            client = Anthropic(api_key=api_key)
+
+    return client, model_name, provider
 
 
 def load_prompt(name: str) -> str:
-    """从 prompts/<name>.md 加载模板."""
+    """Load template from prompts/<name>.md."""
     path = _PROMPT_DIR / f"{name}.md"
     if not path.exists():
-        raise FileNotFoundError(f"Prompt 模板不存在: {path}")
+        raise FileNotFoundError(f"Prompt template not found: {path}")
     return path.read_text(encoding="utf-8")
 
 
 def render(template: str, **kwargs: Any) -> str:
-    """轻量级模板替换: {{ name }} -> kwargs['name']. 故意不引入 jinja2 增加心智负担."""
+    """Lightweight template replacement: {{ name }} -> kwargs['name']. Intentionally avoid jinja2 to reduce cognitive load."""
     out = template
     for k, v in kwargs.items():
         out = out.replace(f"{{{{ {k} }}}}", str(v))
@@ -49,9 +58,73 @@ def render(template: str, **kwargs: Any) -> str:
     return out
 
 
+def _convert_tool_to_openai(anthropic_tool: dict) -> dict:
+    """Convert Anthropic tool schema to OpenAI format.
+
+    Anthropic: {name, description, input_schema}
+    OpenAI: {type: "function", function: {name, description, parameters: input_schema}}
+    """
+    return {
+        "type": "function",
+        "function": {
+            "name": anthropic_tool["name"],
+            "description": anthropic_tool["description"],
+            "parameters": anthropic_tool["input_schema"],
+        },
+    }
+
+
+def llm_complete(
+    client: Any,
+    model: str,
+    provider: str,
+    messages: list[dict],
+    max_tokens: int,
+    system: str | None = None,
+) -> str:
+    """Unified LLM completion handler for both Anthropic and OpenAI SDKs.
+
+    Args:
+        client: Anthropic or OpenAI client instance
+        model: model name string
+        provider: "claude", "deepseek", etc.
+        messages: list of message dicts
+        max_tokens: max tokens to generate
+        system: system prompt (only for Anthropic format)
+
+    Returns:
+        Final text response
+    """
+    if provider == "deepseek":
+        # OpenAI SDK: system goes in messages array
+        if system:
+            messages = [{"role": "system", "content": system}] + messages
+        with client.chat.completions.stream(
+            model=model,
+            max_tokens=max_tokens,
+            messages=messages,
+            extra_body={"thinking": {"type": "disabled"}},
+        ) as stream:
+            resp = stream.get_final_completion()
+        return resp.choices[0].message.content or ""
+    else:
+        # Anthropic SDK: system is top-level parameter
+        kwargs: dict[str, Any] = dict(
+            model=model,
+            max_tokens=max_tokens,
+            messages=messages,
+        )
+        if system:
+            kwargs["system"] = system
+        with client.messages.stream(**kwargs) as _s:
+            resp = _s.get_final_message()
+        parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
+        return "".join(parts).strip()
+
+
 class ClaudeClient:
-    """单次文本补全的便捷封装 — 名字保留为 ClaudeClient 是为了向后兼容,
-    实际上根据 role 决定走 Claude 还是 DeepSeek."""
+    """Convenient wrapper for single text completion. Name kept as ClaudeClient for backward compatibility,
+    but actually routes to Claude or DeepSeek based on role."""
 
     def __init__(self, config: Config):
         self.config = config
@@ -63,17 +136,15 @@ class ClaudeClient:
         system: str | None = None,
         max_tokens: int | None = None,
     ) -> str:
-        client, model = make_client(self.config, role)
-        kwargs: dict[str, Any] = dict(
-            model=model,
-            max_tokens=max_tokens or self.config.max_tokens,
+        client, model, provider = make_client(self.config, role)
+        return llm_complete(
+            client,
+            model,
+            provider,
             messages=[{"role": "user", "content": user_message}],
+            max_tokens=max_tokens or self.config.max_tokens,
+            system=system,
         )
-        if system:
-            kwargs["system"] = system
-        resp = client.messages.create(**kwargs)
-        parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
-        return "".join(parts).strip()
 
     def complete_json(
         self,
@@ -87,22 +158,22 @@ class ClaudeClient:
 
 
 def _extract_json(text: str) -> dict:
-    """从模型输出中提取 JSON 对象."""
-    # 1) 直接尝试
+    """Extract JSON object from model output."""
+    # 1) Try directly
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # 2) 剥离 ```json ... ``` 围栏
+    # 2) Strip ```json ... ``` fence
     fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if fence:
         return json.loads(fence.group(1))
 
-    # 3) 找第一个 { 到最后一个 }
+    # 3) Find first { to last }
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
         return json.loads(text[start : end + 1])
 
-    raise ValueError(f"模型输出里没有有效 JSON:\n{text[:500]}")
+    raise ValueError(f"No valid JSON found in model output:\n{text[:500]}")

@@ -1,7 +1,7 @@
 """Markdown -> styled HTML -> PDF.
 
-用 markdown 库渲染 MD, weasyprint 转 PDF.
-专为 resume 设计的简洁 CSS (Times-like serif + 1in margin + 紧凑布局).
+Use markdown library to render MD, weasyprint to convert to PDF.
+Clean CSS designed for resume (Times-like serif + 1in margin + compact layout).
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import markdown as md_lib
 from weasyprint import CSS, HTML
 
 
-# 简洁专业的简历样式
+# Clean professional resume style
 RESUME_CSS = """
 @page {
     size: letter;
@@ -73,13 +73,13 @@ a {
 
 
 def md_to_pdf(md_text: str, out_pdf: Path, css: str = RESUME_CSS) -> Path:
-    """渲染 markdown 文本到 PDF 文件. out_pdf 是绝对路径."""
+    """Render markdown text to PDF file. out_pdf is absolute path."""
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
     html_body = md_lib.markdown(
         md_text,
         extensions=["tables", "fenced_code", "sane_lists"],
     )
-    # 给一个最小 HTML 外壳
+    # Wrap in minimal HTML shell
     full_html = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>{html_body}</body></html>"
     HTML(string=full_html).write_pdf(
         target=str(out_pdf),

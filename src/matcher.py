@@ -1,9 +1,9 @@
-"""岗位匹配评分器 (6 维度版).
+"""Job matching scorer (6-dimension version).
 
-借鉴 DailyJobMatch 的设计:
-- 6 个子维度评分(背景/技能/经验/资历/工作授权/公司类型)
-- 顺手提取 keywords / fit_bullets / connector,供 cover_letter 复用
-- 用 Anthropic tool_use 强制 schema,准确率 ~99.9%
+Inspired by DailyJobMatch design:
+- 6 sub-dimension scores (background/skills/experience/seniority/work authorization/company type)
+- Extract keywords / fit_bullets / connector for cover_letter reuse
+- Use Anthropic tool_use to enforce schema, ~99.9% accuracy
 """
 from __future__ import annotations
 
@@ -13,20 +13,20 @@ from typing import Any
 
 from sqlalchemy import select
 
-from .agent import load_prompt, make_client, render
+from .agent import load_prompt, make_client, render, _convert_tool_to_openai
 from .config import Config
 from .db import Job, JobStatus, session_scope
 
 
 SCORING_TOOL = {
     "name": "submit_match_score",
-    "description": "提交对该岗位与候选人简历的 6 维度匹配评估结果",
+    "description": "Submit 6-dimension match assessment results for this job vs. candidate resume",
     "input_schema": {
         "type": "object",
         "properties": {
             "score": {
                 "type": "object",
-                "description": "6 维度子评分,子分相加等于 overall",
+                "description": "6 sub-dimension scores, sub-scores sum to overall",
                 "properties": {
                     "background_match":     {"type": "integer", "minimum": 0, "maximum": 10},
                     "skills_overlap":       {"type": "integer", "minimum": 0, "maximum": 30},
@@ -43,35 +43,35 @@ SCORING_TOOL = {
             },
             "summary": {
                 "type": "string",
-                "description": "一句话总结匹配情况,中文,不超过 50 字",
+                "description": "One-sentence match summary, max 50 words",
             },
             "keywords": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "JD 里的关键技术/概念,5-10 个,用于 ATS 优化",
+                "description": "Key tech/concepts from JD, 5-10 items, for ATS optimization",
             },
             "fit_bullets": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "为什么候选人 fit 这岗位的 3-5 条子弹点,英文,会复用到求职信",
+                "description": "3-5 bullet points why candidate fits this job, English, will be reused in cover letter",
             },
             "connector": {
                 "type": "string",
-                "description": "候选人和这家公司的具体连接点,一句话英文,会作为求职信钩子",
+                "description": "Specific connection between candidate and company, one-sentence English, will be cover letter hook",
             },
             "recommend": {
                 "type": "boolean",
-                "description": "是否推荐投递",
+                "description": "Recommend applying",
             },
             "work_mode": {
                 "type": "string",
                 "enum": ["remote", "hybrid", "onsite", "unspecified"],
-                "description": "JD 中描述的工作模式. JD 未明说就 unspecified",
+                "description": "Work mode described in JD. Use unspecified if JD doesn't say",
             },
             "min_education": {
                 "type": "string",
                 "enum": ["high_school", "bachelor", "master", "phd", "any", "unspecified"],
-                "description": "JD 要求的最低学历. JD 未明说就 unspecified",
+                "description": "Minimum education required by JD. Use unspecified if JD doesn't say",
             },
         },
         "required": ["score", "summary", "keywords", "fit_bullets", "connector", "recommend", "work_mode", "min_education"],
@@ -131,12 +131,14 @@ class MatchResult:
 
 
 def score_job(
-    client,
-    model_name: str,
     config: Config,
     resume_text: str,
     job: Job,
 ) -> MatchResult:
+    """Score a job using the matcher role (which uses tools)."""
+    from .agent import make_client
+
+    client, model_name, provider = make_client(config, "matcher")
     template = load_prompt("matcher")
     prompt = render(
         template,
@@ -144,24 +146,45 @@ def score_job(
         resume=resume_text,
         title=job.title,
         company=job.company,
-        location=job.location or "(未指定)",
-        description=job.description or "(无 JD)",
+        location=job.location or "(unspecified)",
+        description=job.description or "(no JD)",
     )
-    resp = client.messages.create(
-        model=model_name,
-        max_tokens=config.max_tokens,
-        tools=[SCORING_TOOL],
-        tool_choice={"type": "tool", "name": "submit_match_score"},
-        messages=[{"role": "user", "content": prompt}],
-    )
-    for block in resp.content:
-        if getattr(block, "type", None) == "tool_use" and block.name == "submit_match_score":
-            return MatchResult.from_tool_input(block.input)
-    raise RuntimeError("模型没返回 submit_match_score 工具调用")
+
+    if provider == "deepseek":
+        # OpenAI format: convert tool schema and use streaming
+        tools = [_convert_tool_to_openai(SCORING_TOOL)]
+        with client.chat.completions.stream(
+            model=model_name,
+            max_tokens=config.max_tokens,
+            tools=tools,
+            tool_choice={"type": "function", "function": {"name": "submit_match_score"}},
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            resp = stream.get_final_completion()
+        if resp.choices[0].message.tool_calls:
+            tool_call = resp.choices[0].message.tool_calls[0]
+            return MatchResult.from_tool_input(json.loads(tool_call.function.arguments))
+        raise RuntimeError("Model did not return submit_match_score tool call")
+    else:
+        # Anthropic format: use native tool_use
+        with client.messages.stream(
+            model=model_name,
+            max_tokens=config.max_tokens,
+            tools=[SCORING_TOOL],
+            tool_choice={"type": "tool", "name": "submit_match_score"},
+            messages=[{"role": "user", "content": prompt}],
+        ) as _s:
+            resp = _s.get_final_message()
+        for block in resp.content:
+            if getattr(block, "type", None) == "tool_use" and block.name == "submit_match_score":
+                return MatchResult.from_tool_input(block.input)
+        raise RuntimeError("Model did not return submit_match_score tool call")
+
+
 
 
 def _legacy_strengths_text(fit_bullets: list[str]) -> str:
-    """老字段 match_strengths 用 fit_bullets 填充,向后兼容."""
+    """Legacy field match_strengths filled with fit_bullets, backward compatible."""
     return "\n".join(f"- {b}" for b in fit_bullets) if fit_bullets else ""
 
 
@@ -175,7 +198,6 @@ def score_pending(
 ) -> list[tuple[int, MatchResult]]:
     if should_continue is None:
         should_continue = lambda: True
-    client, model_name = make_client(config, "matcher")
     db_path = config.path("db_path")
     auto_archive_below = float(config.scoring.get("auto_archive_below", 40))
     results: list[tuple[int, MatchResult]] = []
@@ -188,19 +210,19 @@ def score_pending(
 
         for job in jobs:
             if not should_continue():
-                print("[match] 检测到取消信号, 提前退出")
+                print("[match] Cancel signal detected, exiting early")
                 break
             try:
-                result = score_job(client, model_name, config, resume_text, job)
+                result = score_job(config, resume_text, job)
             except Exception as e:
-                print(f"[!] 给 #{job.id} {job.title} @ {job.company} 评分失败: {e}")
+                print(f"[!] Scoring failed for #{job.id} {job.title} @ {job.company}: {e}")
                 continue
 
-            # 写入总分 + 子分 + 新字段
+            # Write overall score + sub-scores + new fields
             job.match_score = result.score
             job.match_summary = result.summary
             job.match_strengths = _legacy_strengths_text(result.fit_bullets)
-            # match_gaps 不再由模型直接给,可以从 sub-scores 倒推(可选,先留空)
+            # match_gaps no longer directly given by model, can infer from sub-scores (optional, leave empty for now)
 
             job.score_background = result.sub_scores.background
             job.score_skills = result.sub_scores.skills

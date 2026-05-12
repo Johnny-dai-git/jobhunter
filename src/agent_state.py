@@ -1,13 +1,13 @@
-"""跨进程的 agent 状态持久化.
+"""Cross-process agent state persistence.
 
-问题: web server 用 in-memory pipeline_state 看自己跑的流水线 OK,
-      但 cron 后台跑 (scripts/daily.sh) 时是另外的 Python 进程, web 不知道.
+Problem: web server uses in-memory pipeline_state to monitor its own pipeline,
+         but when cron backend runs (scripts/daily.sh), it's a separate Python process, so web doesn't know.
 
-解法: 把状态写到 data/agent_state.json. 双方都读写这一份, web 打开就能看.
+Solution: Write state to data/agent_state.json. Both read/write the same file, web can see it when it opens.
 
-文件结构:
+File structure:
 {
-    "current_run": {       # 仅在跑的时候存在
+    "current_run": {       # Only exists when running
         "started_at": ISO,
         "phase": "analyzing|collecting|matching|done|error|cancelled",
         "profile_id": int | null,
@@ -18,7 +18,7 @@
         "platform_started_at": ISO | null,
         "stats": {...}
     },
-    "last_run": {          # 最近一次跑完的快照
+    "last_run": {          # Snapshot of most recent completed run
         "started_at": ISO,
         "ended_at": ISO,
         "duration_sec": int,
@@ -28,23 +28,23 @@
         "stats": {...},
         "error": str | null
     },
-    "agents": {            # per-agent 细粒度状态 (每次 run 开始时重置)
+    "agents": {            # Per-agent fine-grained state (reset at start of each run)
         "<agent_name>": {
             "status": "pending|running|done|error|skipped",
             "started_at": ISO | null,
             "ended_at": ISO | null,
-            "heartbeat_at": ISO | null,   # 长操作中周期性更新, 用于 stuck 检测
+            "heartbeat_at": ISO | null,   # Periodically updated during long operations, used for stuck detection
             "duration_sec": int | null,
             "error": str | null,
-            "meta": {}                    # agent 自定义字段 (processed_count 等)
+            "meta": {}                    # Agent-specific fields (processed_count, etc.)
         }
     }
 }
 
-Heartbeat 超时阈值 (秒):
-  collection_agent: 300  (Apify 单个任务最长 600s, 每个平台完成后更新)
-  matching_agent:   120  (每评一批岗位更新)
-  其他 agent:        60
+Heartbeat timeout thresholds (seconds):
+  collection_agent: 300  (Apify single task max 600s, updated after each platform completes)
+  matching_agent:   120  (updated after each batch of jobs scored)
+  Other agents:     60
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def state_path(config) -> Path:
 
 
 def _is_pid_alive(pid: int) -> bool:
-    """简单跨平台检测 pid 是否还活着 (用 signal 0)."""
+    """Simple cross-platform check if pid is still alive (using signal 0)."""
     if not pid or pid <= 0:
         return False
     try:
@@ -89,10 +89,10 @@ def _save(config, state: dict) -> None:
     p.write_text(json.dumps(state, indent=2, default=str, ensure_ascii=False), encoding="utf-8")
 
 
-# ── per-agent heartbeat 超时阈值 (秒) ─────────────────────────────────────
+# ── Per-agent heartbeat timeout thresholds (seconds) ─────────────────────────────────────
 AGENT_HEARTBEAT_TIMEOUT: dict[str, int] = {
     "context_agent":    60,
-    "collection_agent": 300,   # Apify 单任务最长 600s
+    "collection_agent": 900,   # Apify single task can take up to 600s, allow extra buffer
     "matching_agent":   120,
     "digest_agent":     60,
     "trend_agent":      90,
@@ -122,7 +122,7 @@ def start_run(
         "platform_started_at": None,
         "stats": {},
     }
-    # 每次 run 开始时重置所有 agent 状态为 pending
+    # Reset all agent states to pending at start of each run
     state["agents"] = {
         name: {
             "status": "pending",
@@ -171,7 +171,7 @@ def end_run(config, *, success: bool = True, phase: str = "done", error: Optiona
         cur["phase"] = phase or "error"
     if error:
         cur["error"] = str(error)
-    # 计算 duration
+    # Calculate duration
     if cur.get("started_at"):
         try:
             start = datetime.fromisoformat(cur["started_at"])
@@ -180,7 +180,7 @@ def end_run(config, *, success: bool = True, phase: str = "done", error: Optiona
             pass
     state["last_run"] = cur
 
-    # 累计统计
+    # Cumulative statistics
     lifetime = state.setdefault("stats_lifetime", {
         "total_runs": 0, "successful_runs": 0, "failed_runs": 0,
         "first_run_at": None, "last_run_at": None,
@@ -196,13 +196,16 @@ def end_run(config, *, success: bool = True, phase: str = "done", error: Optiona
     lifetime["last_run_at"] = cur.get("ended_at")
     lifetime["total_duration_sec"] += int(cur.get("duration_sec") or 0)
 
+    # Clear per-agent states after run completes — health page shows blank until next run starts
+    state["agents"] = {}
+
     _save(config, state)
 
 
 # ── Per-agent liveness / heartbeat ─────────────────────────────────────────
 
 def agent_start(config, agent_name: str) -> None:
-    """Agent 节点开始执行时调用."""
+    """Called when agent node starts execution."""
     state = _load(config)
     agents = state.setdefault("agents", {})
     agents[agent_name] = {
@@ -218,7 +221,7 @@ def agent_start(config, agent_name: str) -> None:
 
 
 def agent_heartbeat(config, agent_name: str, **meta) -> None:
-    """长操作中周期性调用, 更新心跳时间戳 + 可附加进度元数据."""
+    """Periodically called during long operations, updates heartbeat timestamp and optional progress metadata."""
     state = _load(config)
     agents = state.setdefault("agents", {})
     entry = agents.setdefault(agent_name, {})
@@ -238,7 +241,7 @@ def agent_end(
     error: Optional[str] = None,
     **meta,
 ) -> None:
-    """Agent 节点完成时调用."""
+    """Called when agent node completes."""
     state = _load(config)
     agents = state.setdefault("agents", {})
     entry = agents.get(agent_name) or {}
@@ -261,7 +264,7 @@ def agent_end(
 
 
 def get_agents_state(config) -> dict[str, dict]:
-    """返回当前所有 agent 的状态快照, 带 stuck 检测."""
+    """Return current state snapshot of all agents, including stuck detection."""
     state = _load(config)
     agents: dict[str, dict] = state.get("agents") or {}
     now = datetime.now()
@@ -277,7 +280,7 @@ def get_agents_state(config) -> dict[str, dict]:
             "error": None,
             "meta": {},
         })
-        # stuck 检测: running 状态但心跳超时
+        # Stuck detection: running state but heartbeat timed out
         if entry.get("status") == "running" and entry.get("heartbeat_at"):
             try:
                 last_hb = datetime.fromisoformat(entry["heartbeat_at"])
@@ -294,7 +297,7 @@ def get_agents_state(config) -> dict[str, dict]:
 
 
 def get_agents_liveness(config) -> dict:
-    """返回 agents 整体 liveness 摘要, 供 /health/liveness 使用."""
+    """Return overall agents liveness summary for /health/liveness endpoint."""
     agents = get_agents_state(config)
     stuck = [name for name, a in agents.items() if a.get("stuck")]
     errored = [name for name, a in agents.items() if a.get("status") == "error"]
@@ -317,16 +320,16 @@ def get_lifetime_stats(config) -> dict:
 
 
 def get_state(config) -> dict:
-    """读状态, 顺便检测 orphan: 如果 current_run 的进程已经死了, 标记为 crashed."""
+    """Read state and detect orphans: if current_run process is dead, mark as crashed."""
     state = _load(config)
     if "current_run" in state:
         pid = state["current_run"].get("pid")
         if pid and not _is_pid_alive(pid):
-            # 进程不存在了, 移到 last_run + 标记 crashed
+            # Process no longer exists, move to last_run and mark crashed
             cur = state.pop("current_run")
             cur.setdefault("ended_at", datetime.now().isoformat())
             cur["phase"] = "crashed"
-            cur["error"] = f"进程 PID={pid} 已不存在 (可能 kill 或系统重启)"
+            cur["error"] = f"Process PID={pid} no longer exists (possibly killed or system restarted)"
             if cur.get("started_at"):
                 try:
                     start = datetime.fromisoformat(cur["started_at"])
@@ -339,7 +342,7 @@ def get_state(config) -> dict:
 
 
 def clear(config) -> None:
-    """删除整个状态文件 (用于 agent delete)."""
+    """Delete entire state file (used for agent delete)."""
     p = state_path(config)
     if p.exists():
         p.unlink()

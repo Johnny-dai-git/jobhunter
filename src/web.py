@@ -1,9 +1,9 @@
-"""本地 web UI: 查看岗位 + 点击触发 Claude 简历定制 + PDF.
+"""Local web UI: view jobs + click to trigger Claude resume customization + PDF.
 
-启动: `python -m src.main web` -> http://127.0.0.1:8765
+Launch: `python -m src.main web` -> http://127.0.0.1:8765
 
-为了避开 fastapi/starlette/jinja2 版本冲突坑, 这版**不用 Jinja2Templates**,
-直接用 jinja2 自己渲染字符串后塞回 HTMLResponse.
+To avoid fastapi/starlette/jinja2 version conflicts, this version **does not use Jinja2Templates**,
+instead directly renders Jinja2 strings and returns HTMLResponse.
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ from .tracker import mark_applied
 TEMPLATES_DIR = Path(__file__).resolve().parent / "web_templates"
 
 
-# ========= 排序辅助 =========
+# ========= Sorting helpers =========
 _EDU_RANK = {
     "phd": 5,
     "master": 4,
@@ -82,9 +82,9 @@ def _edu_rank(val: str | None) -> int:
 
 
 def _parse_salary_min(s: str | None) -> int:
-    """从'$120,000 - $150,000' / '80K - 110K USD' 等字符串里抽 minimum 数字 (USD).
+    """Extract minimum salary number (USD) from strings like '$120,000 - $150,000' / '80K - 110K USD'.
 
-    用于排序; 抓不到就返回 0.
+    Used for sorting; returns 0 if unable to extract.
     """
     import re
     if not s:
@@ -96,9 +96,9 @@ def _parse_salary_min(s: str | None) -> int:
             n = int(raw)
         except ValueError:
             continue
-        if m.group(2):  # K/k 后缀
+        if m.group(2):  # K/k suffix
             n *= 1000
-        elif n < 1000:  # 纯数字 < 1000 (例如 "120") 视作 K
+        elif n < 1000:  # Pure number < 1000 (e.g., "120") treated as K
             n *= 1000
         if 10_000 <= n <= 1_500_000:
             nums.append(n)
@@ -123,7 +123,7 @@ SORTERS = {
 
 
 def _render_md_simple(md: str) -> str:
-    """轻量 markdown → HTML，供 Jinja2 filter 使用（简历预览用）。"""
+    """Lightweight markdown → HTML for Jinja2 filter use (resume preview)."""
     import re as _re
     if not md:
         return ""
@@ -151,7 +151,7 @@ def _render_md_simple(md: str) -> str:
 
 
 def _make_env() -> Environment:
-    """直接构造 Jinja2 Environment, 不走 starlette wrapper, 避开 cache_key bug."""
+    """Construct Jinja2 Environment directly, not through starlette wrapper, avoid cache_key bug."""
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=select_autoescape(["html", "xml"]),
@@ -166,10 +166,10 @@ def create_app(config: Config) -> FastAPI:
     app = FastAPI(title="JobHunter")
     env = _make_env()
     db_path = config.path("db_path")
-    # 启动时确保所有表和 migration 都到位
+    # Ensure all tables and migrations are in place at startup
     init_db(db_path)
 
-    # ===== 后台流水线状态 (单实例够用,多用户场景需换 DB) =====
+    # ===== Background pipeline state (single instance sufficient, multi-user needs DB) =====
     pipeline_state: dict[str, Any] = {
         "running": False,
         "phase": "idle",            # idle | analyzing | collecting | matching | done | cancelled | error
@@ -177,9 +177,9 @@ def create_app(config: Config) -> FastAPI:
         "ended_at": None,
         "error": None,
         "stats": {},
-        "profile_id": None,         # 当前流水线绑定的画像 id
+        "profile_id": None,         # Current pipeline's bound profile id
         "cancel_requested": False,
-        "current_platform": None,   # 采集阶段正在跑哪个平台
+        "current_platform": None,   # Which platform is running during collection phase
         "platform_started_at": None,
     }
     pipeline_lock = threading.Lock()
@@ -193,10 +193,10 @@ def create_app(config: Config) -> FastAPI:
         resume_filename: str | None = None,
         job_types: list[str] | None = None,
     ):
-        """后台跑 [analyze_profile] -> collect -> match. 失败也能 graceful exit."""
+        """Run [analyze_profile] -> collect -> match in background. Graceful exit on failure."""
         with pipeline_lock:
             if pipeline_state["running"]:
-                return  # 防止重入
+                return  # Prevent re-entrance
             pipeline_state.update(
                 running=True,
                 phase="analyzing" if do_analyze else "collecting",
@@ -208,7 +208,7 @@ def create_app(config: Config) -> FastAPI:
                 profile_id=None,
             )
 
-        # 同步写持久化状态 (供其他进程/web session 看)
+        # Sync write persistent state (visible to other processes/web sessions)
         try:
             agent_state.start_run(config, trigger="web")
             agent_state.update_phase(config, pipeline_state["phase"])
@@ -223,14 +223,14 @@ def create_app(config: Config) -> FastAPI:
                     job_types=job_types or ["Full-time"],
                 )
                 save_profile(config, profile)
-                # 同时写历史 DB
+                # Also write to history DB
                 pid = save_profile_snapshot(
                     config, profile,
                     user_description=user_description or "",
                     resume_filename=resume_filename,
                 )
                 pipeline_state["profile_id"] = pid
-                # 同步当前画像信息到持久化状态
+                # Sync current profile info to persistent state
                 try:
                     agent_state.update_phase(
                         config, pipeline_state["phase"],
@@ -240,9 +240,9 @@ def create_app(config: Config) -> FastAPI:
                 except Exception:
                     pass
             else:
-                # 沿用现有当前画像 id
+                # Use existing current profile id
                 pipeline_state["profile_id"] = get_current_profile_id(config)
-                # 拿 label
+                # Get label
                 try:
                     if pipeline_state["profile_id"]:
                         from .db import Profile
@@ -271,11 +271,26 @@ def create_app(config: Config) -> FastAPI:
                 try: agent_state.set_platform(config, name)
                 except Exception: pass
 
+            # Resolve job_types: prefer explicit param, then current profile's setting, then config default
+            _collect_job_types = job_types  # from caller (do_analyze=True path)
+            if not _collect_job_types and pipeline_state["profile_id"]:
+                try:
+                    from .db import Profile as _P
+                    with session_scope(db_path) as _s:
+                        _row = _s.get(_P, pipeline_state["profile_id"])
+                        if _row and _row.job_types_json:
+                            _collect_job_types = _json.loads(_row.job_types_json)
+                except Exception:
+                    pass
+            if not _collect_job_types:
+                _collect_job_types = config.preferences.get("job_types") or ["Full-time"]
+
             stats = collect_all(
                 config,
                 should_continue=_should_continue,
                 profile_id=pipeline_state["profile_id"],
                 on_platform_start=_on_platform,
+                job_types=_collect_job_types,
             )
             pipeline_state["stats"]["collect"] = stats
             pipeline_state["current_platform"] = None
@@ -309,7 +324,7 @@ def create_app(config: Config) -> FastAPI:
         finally:
             pipeline_state["running"] = False
             pipeline_state["ended_at"] = datetime.now()
-            # 写最终持久化状态
+            # Write final persistent state
             try:
                 if pipeline_state.get("phase") == "error":
                     agent_state.end_run(config, success=False, phase="error", error=pipeline_state.get("error"))
@@ -322,7 +337,7 @@ def create_app(config: Config) -> FastAPI:
 
 
     def _wait_for_cancel(timeout: float = 30) -> bool:
-        """请求取消,轮询等到流水线真停下来(或超时). 返回是否成功停下."""
+        """Request cancellation, poll until pipeline actually stops (or timeout). Return success."""
         import time as _time
         if not pipeline_state["running"]:
             return True
@@ -334,18 +349,18 @@ def create_app(config: Config) -> FastAPI:
             _time.sleep(0.5)
         return False
 
-    # ===== 自动调度 =====
+    # ===== Automatic scheduling =====
     def _scheduled_run(run_trends: bool = False):
-        """scheduler 触发的回调: collect + match + digest [+ trends(weekly)].
+        """Scheduler callback: collect + match + digest [+ trends(weekly)].
 
-        完整流程:
-          1. collect: 采集所有新岗位入库 (不限条数)
-          2. match:   对所有 NEW 状态岗位评分
-          3. digest:  取最近高分岗位发 Top-15 邮件
-          4. trends:  (每7天) 市场趋势分析邮件
+        Full workflow:
+          1. collect: scrape all new jobs into database (no limit)
+          2. match:   score all jobs with NEW status
+          3. digest:  send top-15 high-scoring jobs email
+          4. trends:  (weekly) market trend analysis email
         """
         if pipeline_state["running"]:
-            print("[scheduler] pipeline 已经在跑, 跳过本次")
+            print("[scheduler] pipeline already running, skip this cycle")
             return
 
         from .multiagent import JobAgentRunOptions, run_job_agent_graph
@@ -382,14 +397,14 @@ def create_app(config: Config) -> FastAPI:
                 run_job_agent_graph(config, options)
                 with pipeline_lock:
                     pipeline_state.update(running=False, phase="done", ended_at=datetime.now())
-                # 无论是调度器触发还是手动直接调用，完成后都记录运行时间
-                # 防止调度器在下次循环（60s内）看到 last_auto_run=None 而重复触发
+                # Mark run time after completion, whether triggered by scheduler or manual
+                # Prevent scheduler from repeating if last_auto_run=None on next cycle (60s)
                 scheduler.mark_ran(include_trends=run_trends)
             except Exception as e:
                 with pipeline_lock:
                     pipeline_state.update(running=False, phase="error", error=str(e), ended_at=datetime.now())
-                scheduler.mark_ran(include_trends=False)  # 失败也标记，避免无限重试
-                print(f"[scheduler] pipeline 失败: {e}")
+                scheduler.mark_ran(include_trends=False)  # Mark even on failure to avoid infinite retry
+                print(f"[scheduler] pipeline failed: {e}")
 
         threading.Thread(target=_bg, daemon=True, name="ScheduledPipeline").start()
 
@@ -405,13 +420,13 @@ def create_app(config: Config) -> FastAPI:
         with session_scope(db_path) as session:
             job = session.get(Job, job_id)
             if not job:
-                raise HTTPException(404, f"Job {job_id} 不存在")
+                raise HTTPException(404, f"Job {job_id} does not exist")
             session.expunge(job)
             return job
 
     # ---- helpers for health/stats ----
     def _agent_readiness(agent_name: str, checks: dict) -> dict:
-        """每个 agent 的 readiness: 它需要的前置条件是否满足."""
+        """Per-agent readiness: whether prerequisite conditions are met."""
         req: dict[str, list[str]] = {
             "context_agent":    ["has_resume"],
             "collection_agent": ["has_profile", "has_apify_token"],
@@ -424,7 +439,7 @@ def create_app(config: Config) -> FastAPI:
         return {"ready": not missing, "missing": missing}
 
     def _compute_health() -> dict:
-        """liveness + readiness + 问题列表."""
+        """liveness + readiness + issue list."""
         persistent = agent_state.get_state(config)
         cur = persistent.get("current_run")
         last = persistent.get("last_run")
@@ -437,7 +452,7 @@ def create_app(config: Config) -> FastAPI:
             liveness = "running"
         elif schedule_hours == 0:
             liveness = "no-schedule"
-            issues_live.append("没设置定时任务 (cron 或进程内)")
+            issues_live.append("No scheduled task configured (cron or in-process)")
         elif last and last.get("ended_at"):
             try:
                 last_end = datetime.fromisoformat(last["ended_at"])
@@ -445,7 +460,7 @@ def create_app(config: Config) -> FastAPI:
                 if gap_h > schedule_hours * 2:
                     liveness = "stale"
                     issues_live.append(
-                        f"上次跑 {gap_h:.1f}h 前, 超出预期 {schedule_hours}h × 2"
+                        f"Last run {gap_h:.1f}h ago, exceeds expected {schedule_hours}h × 2"
                     )
                 else:
                     liveness = "healthy"
@@ -453,7 +468,7 @@ def create_app(config: Config) -> FastAPI:
                 liveness = "unknown"
         else:
             liveness = "untested"
-            issues_live.append("有定时任务但还从未跑过")
+            issues_live.append("Has scheduled task but never run")
 
         # Readiness
         from .profile_analyzer import load_profile as _lp
@@ -462,10 +477,10 @@ def create_app(config: Config) -> FastAPI:
         has_resume = len(list_resumes(config.path("resume_dir"))) > 0
         has_deepseek = bool(os.getenv("DEEPSEEK_API_KEY"))
         has_apify = bool(os.getenv("APIFY_API_TOKEN"))
-        if not has_profile: issues_ready.append("无激活画像 (做 onboarding)")
-        if not has_resume:  issues_ready.append("没有简历 (上传一份)")
-        if not has_deepseek: issues_ready.append("DEEPSEEK_API_KEY 未设置")
-        if not has_apify:   issues_ready.append("APIFY_API_TOKEN 未设置")
+        if not has_profile: issues_ready.append("No active profile (run onboarding)")
+        if not has_resume:  issues_ready.append("No resume (upload one)")
+        if not has_deepseek: issues_ready.append("DEEPSEEK_API_KEY not set")
+        if not has_apify:   issues_ready.append("APIFY_API_TOKEN not set")
         readiness = "ready" if not issues_ready else "not-ready"
 
         return {
@@ -483,7 +498,7 @@ def create_app(config: Config) -> FastAPI:
         }
 
     def _compute_counts() -> dict:
-        """累计任务计数."""
+        """Cumulative task counts."""
         from sqlalchemy import func
         week_ago = datetime.now() - timedelta(days=7)
         day_ago = datetime.now() - timedelta(days=1)
@@ -521,10 +536,10 @@ def create_app(config: Config) -> FastAPI:
     # ---- routes ----
     @app.get("/")
     def root():
-        """根路径总是去 onboarding (历史 + 表单)."""
+        """Root path always goes to onboarding (history + form)."""
         return RedirectResponse(url="/onboarding", status_code=303)
 
-    # ===== k8s 风格 health probes =====
+    # ===== k8s-style health probes =====
     @app.get("/health/liveness")
     def liveness_probe():
         h = _compute_health()
@@ -564,7 +579,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/health/agents")
     def health_agents():
-        """Per-agent 细粒度状态: status, heartbeat, stuck, duration, meta."""
+        """Per-agent granular status: status, heartbeat, stuck, duration, meta."""
         agents = agent_state.get_agents_state(config)
         timeouts = agent_state.AGENT_HEARTBEAT_TIMEOUT
         return JSONResponse({
@@ -603,17 +618,17 @@ def create_app(config: Config) -> FastAPI:
             "errored_agents": agents_live["errored_agents"],
         })
 
-    # ---- 面试阶段元数据 (供多处复用) ----
+    # ---- Interview stage metadata (reused in multiple places) ----
     STAGE_META: dict[str, dict] = {
-        "applied":        {"label_zh": "已投递",     "label_en": "Applied",        "color": "#4f46e5", "bg": "#eef2ff"},
-        "phone_screen":   {"label_zh": "电话初筛",   "label_en": "Phone Screen",   "color": "#0891b2", "bg": "#e0f2fe"},
-        "hr_interview":   {"label_zh": "HR 面试",    "label_en": "HR Interview",   "color": "#7c3aed", "bg": "#f3e8ff"},
-        "interview":      {"label_zh": "HR 面试",    "label_en": "HR Interview",   "color": "#7c3aed", "bg": "#f3e8ff"},  # 旧数据兼容
-        "hm_interview":   {"label_zh": "HM 面试",    "label_en": "HM Interview",   "color": "#d97706", "bg": "#fef3c7"},
-        "final_round":    {"label_zh": "终面",        "label_en": "Final Round",    "color": "#ea580c", "bg": "#fff7ed"},
+        "applied":        {"label_zh": "Applied",     "label_en": "Applied",        "color": "#4f46e5", "bg": "#eef2ff"},
+        "phone_screen":   {"label_zh": "Phone Screen",   "label_en": "Phone Screen",   "color": "#0891b2", "bg": "#e0f2fe"},
+        "hr_interview":   {"label_zh": "HR Interview",    "label_en": "HR Interview",   "color": "#7c3aed", "bg": "#f3e8ff"},
+        "interview":      {"label_zh": "HR Interview",    "label_en": "HR Interview",   "color": "#7c3aed", "bg": "#f3e8ff"},  # Old data compatibility
+        "hm_interview":   {"label_zh": "HM Interview",    "label_en": "HM Interview",   "color": "#d97706", "bg": "#fef3c7"},
+        "final_round":    {"label_zh": "Final Round",        "label_en": "Final Round",    "color": "#ea580c", "bg": "#fff7ed"},
         "offer":          {"label_zh": "Offer",       "label_en": "Offer",          "color": "#16a34a", "bg": "#dcfce7"},
-        "rejected":       {"label_zh": "被拒",        "label_en": "Rejected",       "color": "#dc2626", "bg": "#fee2e2"},
-        "shortlisted":    {"label_zh": "入围",        "label_en": "Shortlisted",    "color": "#ca8a04", "bg": "#fef9c3"},
+        "rejected":       {"label_zh": "Rejected",        "label_en": "Rejected",       "color": "#dc2626", "bg": "#fee2e2"},
+        "shortlisted":    {"label_zh": "Shortlisted",        "label_en": "Shortlisted",    "color": "#ca8a04", "bg": "#fef9c3"},
     }
 
     INTERVIEW_STATUSES = [
@@ -623,7 +638,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/applied")
     def applied_list(sort: str = "applied_at"):
-        """已投递追踪页."""
+        """Applied applications tracking page."""
         with session_scope(db_path) as session:
             stmt = select(Job).where(Job.status.in_(INTERVIEW_STATUSES))
             jobs = list(session.scalars(stmt).all())
@@ -648,11 +663,11 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/stats")
     def stats_page():
-        """求职统计看板."""
+        """Job search statistics dashboard."""
         from sqlalchemy import func
 
         with session_scope(db_path) as session:
-            # 所有投过的岗位
+            # All applied jobs
             all_applied = list(session.scalars(
                 select(Job).where(Job.status.in_(INTERVIEW_STATUSES))
                 .order_by(Job.applied_at.desc().nulls_last(), Job.updated_at.desc())
@@ -660,7 +675,7 @@ def create_app(config: Config) -> FastAPI:
             for j in all_applied:
                 session.expunge(j)
 
-            # 来源分布 (只统计已投的)
+            # Source distribution (only count applied jobs)
             src_rows = session.execute(
                 select(Job.source, func.count(Job.id))
                 .where(Job.status.in_(INTERVIEW_STATUSES))
@@ -668,7 +683,7 @@ def create_app(config: Config) -> FastAPI:
                 .order_by(func.count(Job.id).desc())
             ).all()
 
-        # ---- 基础计数 ----
+        # ---- Basic counts ----
         applied_total = len(all_applied)
         interview_statuses = {"phone_screen","hr_interview","interview","hm_interview","final_round"}
         in_process = [j for j in all_applied if j.status in interview_statuses]
@@ -677,20 +692,20 @@ def create_app(config: Config) -> FastAPI:
         got_reply = [j for j in all_applied if j.status not in {"applied","shortlisted"}]
         response_rate = f"{len(got_reply)/applied_total*100:.0f}%" if applied_total else "—"
 
-        # ---- 漏斗各阶段 ----
+        # ---- Funnel stages ----
         def _cnt(*statuses):
             return sum(1 for j in all_applied if j.status in statuses)
 
         funnel = [
-            {"label_zh": "已投递",    "label_en": "Applied",       "color": "#4f46e5", "count": applied_total},
-            {"label_zh": "电话/初筛", "label_en": "Phone Screen",  "color": "#0891b2", "count": _cnt("phone_screen")},
-            {"label_zh": "HR 面试",   "label_en": "HR Interview",  "color": "#7c3aed", "count": _cnt("hr_interview","interview")},
-            {"label_zh": "HM 面试",   "label_en": "HM Interview",  "color": "#d97706", "count": _cnt("hm_interview")},
-            {"label_zh": "终面",       "label_en": "Final Round",   "color": "#ea580c", "count": _cnt("final_round")},
+            {"label_zh": "Applied",    "label_en": "Applied",       "color": "#4f46e5", "count": applied_total},
+            {"label_zh": "Phone Screen", "label_en": "Phone Screen",  "color": "#0891b2", "count": _cnt("phone_screen")},
+            {"label_zh": "HR Interview",   "label_en": "HR Interview",  "color": "#7c3aed", "count": _cnt("hr_interview","interview")},
+            {"label_zh": "HM Interview",   "label_en": "HM Interview",  "color": "#d97706", "count": _cnt("hm_interview")},
+            {"label_zh": "Final Round",       "label_en": "Final Round",   "color": "#ea580c", "count": _cnt("final_round")},
             {"label_zh": "Offer",     "label_en": "Offer",          "color": "#16a34a", "count": _cnt("offer")},
         ]
 
-        # ---- 最近动态 (最多20条, 只展示10) ----
+        # ---- Recent activity (max 20, show only 10) ----
         def _job_to_timeline(j):
             meta = STAGE_META.get(j.status, {"label_zh": j.status, "label_en": j.status, "color": "#64748b", "bg": "#f1f5f9"})
             date = (j.applied_at or j.updated_at or j.created_at)
@@ -707,13 +722,13 @@ def create_app(config: Config) -> FastAPI:
 
         recent = [_job_to_timeline(j) for j in all_applied[:15]]
 
-        # ---- 来源分布 ----
+        # ---- Source distribution ----
         by_source = [{"source": row[0] or "unknown", "count": row[1]} for row in src_rows]
 
-        # ---- 进行中列表 ----
+        # ---- In-progress list ----
         in_process_list = [_job_to_timeline(j) for j in in_process]
 
-        # ---- Offer 列表 ----
+        # ---- Offer list ----
         offer_list = [_job_to_timeline(j) for j in offers]
 
         stats = {
@@ -732,14 +747,14 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/job/{job_id}/status")
     def update_status(job_id: int, to: str = Form(...)):
-        """通用状态切换. to in {shortlisted, applied, interview, offer, rejected, archived}"""
+        """Generic status switch. to in {shortlisted, applied, interview, offer, rejected, archived}"""
         allowed = {s.value for s in JobStatus}
         if to not in allowed:
-            raise HTTPException(400, f"非法状态 {to}, 允许: {sorted(allowed)}")
+            raise HTTPException(400, f"Invalid status {to}, allowed: {sorted(allowed)}")
         with session_scope(db_path) as session:
             job = session.get(Job, job_id)
             if not job:
-                raise HTTPException(404, "Job 不存在")
+                raise HTTPException(404, "Job does not exist")
             job.status = to
             if to == JobStatus.APPLIED.value and not job.applied_at:
                 job.applied_at = datetime.utcnow()
@@ -753,6 +768,7 @@ def create_app(config: Config) -> FastAPI:
         status: str = "active",
         sort: str = "score",
         profile_id: int | None = None,
+        job_type: str = "all",   # all / full-time / internship / contract / part-time
     ):
         with session_scope(db_path) as session:
             stmt = select(Job)
@@ -764,16 +780,35 @@ def create_app(config: Config) -> FastAPI:
                 stmt = stmt.where(Job.match_score >= min_score)
             if profile_id is not None:
                 stmt = stmt.where(Job.profile_id == profile_id)
+            if job_type == "internship":
+                # Match DB field OR title heuristic (for jobs collected before this column was added)
+                from sqlalchemy import or_, func
+                stmt = stmt.where(
+                    or_(
+                        Job.job_type == "internship",
+                        func.lower(Job.title).contains("intern"),
+                    )
+                )
+            elif job_type == "full-time":
+                from sqlalchemy import and_, func
+                stmt = stmt.where(
+                    and_(
+                        Job.job_type != "internship",
+                        ~func.lower(Job.title).contains("intern"),
+                    )
+                )
+            elif job_type not in ("all", ""):
+                stmt = stmt.where(Job.job_type == job_type)
             jobs = list(session.scalars(stmt).all())
             for j in jobs:
                 session.expunge(j)
 
-            # 当前过滤 profile 的 label, 用于显示横幅
+            # Current filtered profile's label for banner display
             profile_label = None
             if profile_id is not None:
                 from .db import Profile
                 p = session.get(Profile, profile_id)
-                profile_label = p.label if p else f"#{profile_id} (已删除)"
+                profile_label = p.label if p else f"#{profile_id} (deleted)"
 
         sort_fn = SORTERS.get(sort, SORTERS["score"])
         jobs.sort(key=sort_fn)
@@ -784,12 +819,13 @@ def create_app(config: Config) -> FastAPI:
             min_score=min_score,
             status=status,
             sort=sort,
+            job_type=job_type,
             total=len(jobs),
             profile_id=profile_id,
             profile_label=profile_label,
         )
 
-    # ---- 简历对话精修 (必须在 /job/{job_id} 之前注册) ----
+    # ---- Resume conversational refinement (must register before /job/{job_id}) ----
 
     @app.get("/job/{job_id}/refine")
     def refine_page(job_id: int):
@@ -797,7 +833,7 @@ def create_app(config: Config) -> FastAPI:
         job = _get_job(job_id)
         revisions = get_revisions(config, job_id)
         current_md = get_current_resume_md(config, job_id) or ""
-        # history 已经是精简格式（user=原始请求，assistant=改动说明），直接用
+        # history is already in compact format (user=original request, assistant=change notes), use directly
         messages = load_chat_history(config, job_id)
         return render("refine.html",
                       job=job,
@@ -823,16 +859,16 @@ def create_app(config: Config) -> FastAPI:
     @app.get("/job/{job_id}/refine/version/{version_num}")
     def refine_version(job_id: int, version_num: int):
         from .refine import get_revision, get_current_resume_md
-        # version_num=0 表示原始 tailor 输出
+        # version_num=0 means original tailor output
         if version_num == 0:
             md = get_current_resume_md(config, job_id)
             if not md:
-                raise HTTPException(404, "原始简历不存在")
-            return JSONResponse({"md_content": md, "note": "Tailor 生成版本",
+                raise HTTPException(404, "Original resume does not exist")
+            return JSONResponse({"md_content": md, "note": "Tailor generated version",
                                  "version_num": 0, "created_at": ""})
         rev = get_revision(config, job_id, version_num)
         if not rev:
-            raise HTTPException(404, "版本不存在")
+            raise HTTPException(404, "Version does not exist")
         return JSONResponse({"md_content": rev.md_content, "note": rev.note,
                              "version_num": rev.version_num,
                              "created_at": str(rev.created_at)})
@@ -842,7 +878,7 @@ def create_app(config: Config) -> FastAPI:
         from .refine import get_revision
         rev = get_revision(config, job_id, version_num)
         if not rev:
-            raise HTTPException(404, "版本不存在")
+            raise HTTPException(404, "Version does not exist")
         import re as _re
         import tempfile, os
         safe_company = _re.sub(r"[^\w\-]+", "_", _get_job(job_id).company)[:30]
@@ -851,11 +887,11 @@ def create_app(config: Config) -> FastAPI:
             try:
                 md_to_pdf(rev.md_content, pdf_path)
             except Exception as e:
-                raise HTTPException(500, f"PDF 生成失败: {e}")
+                raise HTTPException(500, f"PDF generation failed: {e}")
         return FileResponse(str(pdf_path), media_type="application/pdf",
                             filename=pdf_path.name)
 
-    # ---- 手动添加岗位 (必须在 /job/{job_id} 之前注册，否则 "add" 被当成 int 解析) ----
+    # ---- Manually add job (must register before /job/{job_id}, otherwise "add" parsed as int) ----
 
     @app.get("/job/add")
     def add_job_form(error: str = "", duplicate_id: int = 0, form_url: str = ""):
@@ -890,7 +926,7 @@ def create_app(config: Config) -> FastAPI:
         elif jd_text.strip():
             raw_text = jd_text.strip()
         else:
-            return RedirectResponse(url=f"/job/add?error=请提供JD文本或文件&form_url={url}", status_code=303)
+            return RedirectResponse(url=f"/job/add?error=Please provide JD text or file&form_url={url}", status_code=303)
 
         try:
             if tmp_path:
@@ -927,14 +963,14 @@ def create_app(config: Config) -> FastAPI:
         try:
             resume_text = load_cached(config.path("resume_dir"))
         except FileNotFoundError as e:
-            raise HTTPException(400, f"找不到简历: {e}")
+            raise HTTPException(400, f"Cannot find resume: {e}")
 
         try:
             tailor_for_job(config, resume_text, job_id, candidate_name=name)
             if with_cover:
                 write_cover_letter(config, resume_text, job_id)
         except Exception as e:
-            raise HTTPException(500, f"tailor 失败: {e}")
+            raise HTTPException(500, f"tailor failed: {e}")
 
         return RedirectResponse(url=f"/job/{job_id}", status_code=303)
 
@@ -942,27 +978,27 @@ def create_app(config: Config) -> FastAPI:
     def job_pdf(job_id: int):
         job = _get_job(job_id)
         if not job.tailored_resume_pdf_path:
-            raise HTTPException(404, "PDF 还没生成,先点 Tailor")
+            raise HTTPException(404, "PDF not generated yet, click Tailor first")
         path = Path(job.tailored_resume_pdf_path)
         if not path.exists():
-            raise HTTPException(404, f"PDF 文件不存在: {path}")
+            raise HTTPException(404, f"PDF file not found: {path}")
         return FileResponse(str(path), media_type="application/pdf", filename=path.name)
 
     @app.get("/job/{job_id}/md")
     def job_md(job_id: int):
         job = _get_job(job_id)
         if not job.tailored_resume_path:
-            raise HTTPException(404, "MD 还没生成,先点 Tailor")
+            raise HTTPException(404, "MD not generated yet, click Tailor first")
         path = Path(job.tailored_resume_path)
         if not path.exists():
-            raise HTTPException(404, f"MD 文件不存在: {path}")
+            raise HTTPException(404, f"MD file not found: {path}")
         return FileResponse(str(path), media_type="text/markdown", filename=path.name)
 
     @app.get("/job/{job_id}/cover")
     def job_cover(job_id: int):
         job = _get_job(job_id)
         if not job.cover_letter_path:
-            raise HTTPException(404, "Cover letter 还没生成")
+            raise HTTPException(404, "Cover letter not generated yet")
         path = Path(job.cover_letter_path)
         return FileResponse(str(path), media_type="text/plain", filename=path.name)
 
@@ -973,8 +1009,8 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/job/{job_id}/delete")
     def delete_job(job_id: int, redirect_to: str = Form(default="/jobs")):
-        """从数据库永久删除一个岗位及其所有事件记录.
-        删除后所有 counter 在下次页面加载时自动更新 (全部实时从 DB 计算).
+        """Permanently delete a job and all its event records from the database.
+        All counters automatically update on next page load (all calculated in real-time from DB).
         """
         with session_scope(config.path("db_path")) as session:
             job = session.get(Job, job_id)
@@ -987,21 +1023,21 @@ def create_app(config: Config) -> FastAPI:
         existing_desc = load_user_description(config) or ""
         profile = load_profile(config)
 
-        # 老 JSON 自动迁移到 DB (只跑一次): 如果有 _profile.json 但 DB 里完全没有任何 row,
-        # 才插一行历史 (防止删除画像后重新进来又创建出来).
+        # Old JSON auto-migration to DB (runs only once): if _profile.json exists but DB has no rows,
+        # insert one history record (prevent recreating after deletion).
         existing_snapshots = list_profile_snapshots(config)
         if profile and not existing_snapshots:
             save_profile_snapshot(
                 config, profile,
-                user_description=existing_desc or "(从旧 _profile.json 自动导入)",
+                user_description=existing_desc or "(auto-imported from old _profile.json)",
                 resume_filename=None,
             )
-            history = list_profile_snapshots(config)  # 新插入了一行，重新查
+            history = list_profile_snapshots(config)  # New row inserted, re-query
         else:
-            history = existing_snapshots  # 没有插入，复用已有结果，省一次 DB 查
+            history = existing_snapshots  # No insert, reuse existing, save one DB query
         current_id = get_current_profile_id(config)
 
-        # 每个 profile 的岗位计数 (展示在历史行)
+        # Job counts per profile (displayed in history row)
         from sqlalchemy import func
         job_counts: dict[int, dict] = {}
         with session_scope(db_path) as session:
@@ -1016,7 +1052,7 @@ def create_app(config: Config) -> FastAPI:
                 ) or 0
                 job_counts[h.id] = {"total": total, "top": top}
 
-        # 所有上传过的简历, mtime 降序 (第一个是当前激活的)
+        # All uploaded resumes, mtime descending (first is currently active)
         resume_dir = config.path("resume_dir")
         resume_files: list[dict[str, Any]] = []
         for p in list_resumes(resume_dir):
@@ -1048,10 +1084,10 @@ def create_app(config: Config) -> FastAPI:
         }
         freshness_info = {"hours": int(config.freshness.get("max_age_hours", 24))}
 
-        # Agent 总体状态
+        # Overall agent status
         has_profile = profile is not None
         has_schedule = cron_info["installed"] or scheduler.get_schedule_hours() > 0
-        # 持久化状态 (含 cron 启动的进程)
+        # Persistent state (includes cron-started processes)
         persistent = agent_state.get_state(config)
         cur_run = persistent.get("current_run")
         last_run = persistent.get("last_run")
@@ -1065,7 +1101,7 @@ def create_app(config: Config) -> FastAPI:
         else:
             agent_status = "idle"
 
-        # 计算 elapsed
+        # Calculate elapsed time
         cur_elapsed = ""
         if cur_run and cur_run.get("started_at"):
             try:
@@ -1075,7 +1111,7 @@ def create_app(config: Config) -> FastAPI:
             except Exception:
                 pass
 
-        # ---- 平台元数据 (供画像编辑页使用) ----
+        # ---- Platform metadata (for profile edit page) ----
         from .collect import PLATFORMS
         import json as _json
         _platform_meta = {
@@ -1149,15 +1185,11 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/onboarding/agents")
     def onboarding_agents():
-        """Per-agent 健康看板."""
+        """Per-agent health dashboard."""
         h = _compute_health()
         persistent = agent_state.get_state(config)
-        # 只有跑过 pipeline 才展示 agent 状态，否则显示"无活跃 agent"
-        has_any_run = bool(
-            persistent.get("current_run")
-            or persistent.get("last_run")
-            or persistent.get("agents")
-        )
+        # Only show agent cards when pipeline is actively running
+        has_any_run = bool(persistent.get("current_run"))
         agents = agent_state.get_agents_state(config) if has_any_run else {}
         timeouts = agent_state.AGENT_HEARTBEAT_TIMEOUT
         agents_with_timeout = {
@@ -1176,7 +1208,7 @@ def create_app(config: Config) -> FastAPI:
     def onboarding_resumes():
         return render("onboarding_resumes.html", **_build_onboarding_context())
 
-    # ---- 资料库 ----
+    # ---- Materials Library ----
 
     def _list_material_files() -> list[dict]:
         materials_dir = config.path("materials_dir")
@@ -1200,14 +1232,14 @@ def create_app(config: Config) -> FastAPI:
     @app.post("/materials/upload")
     async def upload_material(material: UploadFile = File(...)):
         if not material.filename:
-            return RedirectResponse("/onboarding/materials?error=未选择文件", status_code=303)
+            return RedirectResponse("/onboarding/materials?error=No file selected", status_code=303)
         safe_name = _validate_resume_filename(material.filename)
         content = await material.read()
         if not content:
-            return RedirectResponse("/onboarding/materials?error=文件为空", status_code=303)
+            return RedirectResponse("/onboarding/materials?error=File is empty", status_code=303)
         target = config.path("materials_dir") / safe_name
         target.write_bytes(content)
-        return RedirectResponse(f"/onboarding/materials?message={safe_name} 上传成功", status_code=303)
+        return RedirectResponse(f"/onboarding/materials?message={safe_name} uploaded successfully", status_code=303)
 
     @app.post("/materials/{filename}/delete")
     def delete_material(filename: str):
@@ -1215,7 +1247,7 @@ def create_app(config: Config) -> FastAPI:
         target = config.path("materials_dir") / safe_name
         if target.exists():
             target.unlink()
-        return RedirectResponse(f"/onboarding/materials?message={safe_name} 已删除", status_code=303)
+        return RedirectResponse(f"/onboarding/materials?message={safe_name} deleted", status_code=303)
 
     @app.get("/onboarding/profiles")
     def onboarding_profiles():
@@ -1225,7 +1257,7 @@ def create_app(config: Config) -> FastAPI:
     def onboarding_automation():
         return render("onboarding.html", **_build_onboarding_context())
 
-    # ---- 画像 新建 / 编辑 ----
+    # ---- Profile Create / Edit ----
     @app.get("/onboarding/profile/new")
     def profile_new_form():
         ctx = _build_onboarding_context()
@@ -1238,14 +1270,14 @@ def create_app(config: Config) -> FastAPI:
             from .db import Profile as ProfileModel
             row = session.get(ProfileModel, profile_id)
             if not row:
-                raise HTTPException(404, f"画像 #{profile_id} 不存在")
+                raise HTTPException(404, f"Profile #{profile_id} does not exist")
             try:
                 row.enabled_platforms_list = _json.loads(row.enabled_platforms) if row.enabled_platforms else None
             except Exception:
                 row.enabled_platforms_list = None
             session.expunge(row)
         ctx = _build_onboarding_context()
-        ctx["existing_desc"] = row.user_description  # 用该 profile 的描述覆盖全局默认
+        ctx["existing_desc"] = row.user_description  # Use this profile's description to override global default
         return render("onboarding_profile.html", profile=row, **ctx)
 
     @app.post("/onboarding/profile/new/submit")
@@ -1259,15 +1291,15 @@ def create_app(config: Config) -> FastAPI:
         schedule_hours: int = Form(24),
         action: str = Form("save_and_run"),
     ):
-        """创建新画像并可选立即运行."""
+        """Create a new profile and optionally run immediately."""
         import json as _json
         from .collect import PLATFORMS as ALL_PLATFORMS
 
         desc = (description or "").strip()
         if not desc:
-            raise HTTPException(400, "请填写求职目标描述")
+            raise HTTPException(400, "Please enter job search target description")
 
-        # 1) 处理简历
+        # 1) Handle resume
         resume_dir = config.path("resume_dir")
         uploaded_filename: str | None = None
         if resume_select == "__upload__" or not resume_select:
@@ -1275,15 +1307,15 @@ def create_app(config: Config) -> FastAPI:
                 safe_filename = _validate_resume_filename(resume.filename)
                 content = await resume.read()
                 if not content:
-                    raise HTTPException(400, "上传文件为空")
+                    raise HTTPException(400, "Uploaded file is empty")
                 (resume_dir / safe_filename).write_bytes(content)
                 uploaded_filename = safe_filename
                 try:
                     parse_and_cache(resume_dir)
                 except Exception as e:
-                    raise HTTPException(500, f"解析简历失败: {e}")
+                    raise HTTPException(500, f"Resume parsing failed: {e}")
         else:
-            # 选了已有简历 — 激活它
+            # Selected an existing resume — activate it
             target = resume_dir / resume_select
             if target.exists():
                 target.touch()
@@ -1293,21 +1325,34 @@ def create_app(config: Config) -> FastAPI:
                     pass
             uploaded_filename = resume_select
 
-        # 2) 停止当前流水线
+        # 2) Stop current pipeline
         if pipeline_state["running"]:
             _wait_for_cancel(timeout=60)
 
-        # 3) 保存描述 + 分析 + 创建 DB 行
+        # 3) Save description + analyze + create DB row
         save_user_description(config, desc)
         init_db(config.path("db_path"))
 
         enabled_plats = platforms if platforms else ALL_PLATFORMS
         enabled_json = _json.dumps(enabled_plats)
 
-        # 4) 后台跑 analyze → collect → match，并写入 Profile 行（含 schedule/platforms）
+        # 4) Run analyze → collect → match in background, write Profile row (with schedule/platforms)
         def _run_with_extra():
             from .profile_analyzer import analyze_profile, save_profile_snapshot
             import json as _j
+            # Reset pipeline_state immediately so processing page shows "analyzing" not last run's "done"
+            with pipeline_lock:
+                pipeline_state.update(
+                    running=True,
+                    phase="analyzing",
+                    started_at=datetime.now(),
+                    ended_at=None,
+                    error=None,
+                    stats={},
+                    cancel_requested=False,
+                    profile_id=None,
+                    current_platform=None,
+                )
             try:
                 pa = analyze_profile(config, desc, job_types=job_types if job_types else ["Full-time"])
                 save_profile(config, pa)
@@ -1316,7 +1361,7 @@ def create_app(config: Config) -> FastAPI:
                     user_description=desc,
                     resume_filename=uploaded_filename,
                 )
-                # 写入 schedule / platforms
+                # Write schedule / platforms
                 with session_scope(db_path) as session:
                     from .db import Profile as ProfileModel
                     row = session.get(ProfileModel, pid)
@@ -1325,11 +1370,18 @@ def create_app(config: Config) -> FastAPI:
                         row.enabled_platforms = enabled_json
                         row.job_types_json = _json.dumps(job_types if job_types else ["Full-time"])
                         session.commit()
-                # 更新调度器 (用画像自己的 schedule_hours)
+                # Update scheduler (use profile's own schedule_hours)
                 scheduler.enable(hours=schedule_hours)
             except Exception as e:
-                print(f"[profile_new] analyze 失败: {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"[profile_new] analyze failed: {e}")
+                with pipeline_lock:
+                    pipeline_state.update(running=False, phase="error", error=str(e), ended_at=datetime.now())
                 return
+            # Analysis done — release lock so _scheduled_run can take over for collect+match
+            with pipeline_lock:
+                pipeline_state.update(running=False, phase="analyzing")
             if action == "save_and_run":
                 _scheduled_run(run_trends=False)
 
@@ -1350,22 +1402,22 @@ def create_app(config: Config) -> FastAPI:
         schedule_hours: int = Form(24),
         action: str = Form("save"),
     ):
-        """更新已有画像的描述、简历、平台和调度设置。"""
+        """Update existing profile description, resume, platforms, and scheduling settings."""
         import json as _json
         from .collect import PLATFORMS as ALL_PLATFORMS
 
         desc = (description or "").strip()
         if not desc:
-            raise HTTPException(400, "请填写求职目标描述")
+            raise HTTPException(400, "Please enter job search target description")
 
-        # 检查画像存在
+        # Check profile exists
         with session_scope(db_path) as session:
             from .db import Profile as ProfileModel
             row = session.get(ProfileModel, profile_id)
             if not row:
-                raise HTTPException(404, f"画像 #{profile_id} 不存在")
+                raise HTTPException(404, f"Profile #{profile_id} does not exist")
 
-        # 1) 处理简历
+        # 1) Handle resume
         resume_dir = config.path("resume_dir")
         uploaded_filename: str | None = None
         if resume_select == "__upload__" or not resume_select:
@@ -1373,7 +1425,7 @@ def create_app(config: Config) -> FastAPI:
                 safe_filename = _validate_resume_filename(resume.filename)
                 content = await resume.read()
                 if not content:
-                    raise HTTPException(400, "上传文件为空")
+                    raise HTTPException(400, "Uploaded file is empty")
                 (resume_dir / safe_filename).write_bytes(content)
                 uploaded_filename = safe_filename
                 try:
@@ -1390,7 +1442,7 @@ def create_app(config: Config) -> FastAPI:
                 except Exception:
                     pass
 
-        # 2) 更新 DB 行
+        # 2) Update DB row
         enabled_plats = platforms if platforms else ALL_PLATFORMS
         with session_scope(db_path) as session:
             from .db import Profile as ProfileModel
@@ -1404,7 +1456,7 @@ def create_app(config: Config) -> FastAPI:
                 row.resume_filename = uploaded_filename
             session.commit()
 
-        # 3) 如果是当前激活画像，同步 description 文件
+        # 3) If this is the current active profile, sync description file
         current_id = get_current_profile_id(config)
         if current_id == profile_id:
             save_user_description(config, desc)
@@ -1419,24 +1471,24 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/onboarding/profile/{profile_id}/activate")
     def profile_activate(profile_id: int, background_tasks: BackgroundTasks):
-        """激活某画像，按该画像的 schedule_hours 设定调度并立即触发第一次 pipeline。"""
+        """Activate a profile, set scheduling based on its schedule_hours, and trigger first pipeline immediately."""
         try:
             activate_profile_snapshot(config, profile_id)
         except ValueError as e:
             raise HTTPException(404, str(e))
 
-        # 读取该画像自己的 schedule_hours
-        profile_hours = 24  # 默认
+        # Read the profile's own schedule_hours
+        profile_hours = 24  # Default
         with session_scope(db_path) as session:
             from .db import Profile as _P
             row = session.get(_P, profile_id)
             if row and row.schedule_hours is not None:
                 profile_hours = int(row.schedule_hours)
 
-        # 按画像设置的频率启动调度
+        # Start scheduling based on profile's frequency
         scheduler.enable(hours=profile_hours)
 
-        # 不管是手动还是定时，激活时都立即触发一次
+        # Trigger pipeline immediately on activation regardless of manual or scheduled
         if not pipeline_state["running"]:
             threading.Thread(
                 target=_scheduled_run, args=(False,),
@@ -1447,13 +1499,13 @@ def create_app(config: Config) -> FastAPI:
     def _validate_resume_filename(filename: str) -> str:
         name = (filename or "").strip()
         if not name:
-            raise HTTPException(400, "文件名为空")
+            raise HTTPException(400, "Filename is empty")
         if Path(name).name != name or "/" in name or "\\" in name:
-            raise HTTPException(400, "非法文件名")
+            raise HTTPException(400, "Invalid filename")
         if name.startswith("_") or name.startswith("."):
-            raise HTTPException(400, "文件名不能以 _ 或 . 开头")
+            raise HTTPException(400, "Filename cannot start with _ or .")
         if Path(name).suffix.lower() not in SUPPORTED_EXTS:
-            raise HTTPException(400, "不支持的格式")
+            raise HTTPException(400, "Unsupported format")
         return name
 
     @app.post("/onboarding/submit")
@@ -1462,22 +1514,22 @@ def create_app(config: Config) -> FastAPI:
         description: str = Form(...),
         resume: UploadFile | None = File(None),
     ):
-        # 如果当前描述跟上次完全相同, 不重复跑
+        # If current description is exactly the same as last time, don't run again
         existing = load_user_description(config) or ""
         desc = (description or "").strip()
         if not desc:
-            raise HTTPException(400, "请填写求职需求描述")
+            raise HTTPException(400, "Please enter job search requirements description")
 
         if existing.strip() == desc and not (resume and resume.filename):
-            # 描述和简历都没变, 直接回主页
+            # Description and resume haven't changed, go straight to home page
             return RedirectResponse(url="/", status_code=303)
 
-        # 如果有流水线在跑, 先中断
+        # If pipeline is running, stop it first
         if pipeline_state["running"]:
-            print("[onboarding] 检测到流水线在跑, 请求取消...")
+            print("[onboarding] Pipeline is running, requesting cancellation...")
             _wait_for_cancel(timeout=60)
 
-        # 1) 如果有新简历, 保存
+        # 1) If new resume, save it
         resume_dir = config.path("resume_dir")
         uploaded_filename = None
         if resume and resume.filename:
@@ -1486,27 +1538,27 @@ def create_app(config: Config) -> FastAPI:
             if ext not in SUPPORTED_EXTS:
                 raise HTTPException(
                     400,
-                    f"不支持的简历格式 {ext}. 仅支持: {sorted(SUPPORTED_EXTS)}",
+                    f"Unsupported resume format {ext}. Supported: {sorted(SUPPORTED_EXTS)}",
                 )
             content = await resume.read()
             if not content:
-                raise HTTPException(400, "上传文件为空")
+                raise HTTPException(400, "Uploaded file is empty")
             target = resume_dir / safe_filename
             target.write_bytes(content)
             uploaded_filename = safe_filename
             try:
                 parse_and_cache(resume_dir)
             except Exception as e:
-                raise HTTPException(500, f"解析简历失败: {e}")
+                raise HTTPException(500, f"Resume parsing failed: {e}")
 
-        # 2) 保存用户描述
+        # 2) Save user description
         save_user_description(config, desc)
 
-        # 3) 确认 DB 在
+        # 3) Ensure DB exists
         init_db(config.path("db_path"))
 
-        # 4) 不再阻塞: analyze + collect + match 都丢后台
-        # 旧版 onboarding 没有 job_types 选择，从 config.yaml 读取默认值
+        # 4) Don't block: run analyze + collect + match in background
+        # Old onboarding doesn't have job_types selection, read default from config.yaml
         default_job_types = config.preferences.get("job_types") or ["Full-time"]
         background_tasks.add_task(_run_pipeline_bg, True, desc, uploaded_filename, default_job_types)
 
@@ -1514,20 +1566,20 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/profiles/{profile_id}")
     def profile_detail(profile_id: int):
-        """单个历史画像详情: 完整描述 + Top-10 + 区域公司 + 本画像跑出的岗位."""
+        """Single historical profile details: full description + Top-10 + regional companies + positions from this profile."""
         from .db import Profile
         from .profile_analyzer import ProfileAnalysis
         import json as _json
         with session_scope(db_path) as session:
             row = session.get(Profile, profile_id)
             if not row:
-                raise HTTPException(404, f"Profile #{profile_id} 不存在")
+                raise HTTPException(404, f"Profile #{profile_id} does not exist")
             try:
                 pa = ProfileAnalysis.from_dict(_json.loads(row.profile_json))
             except Exception:
                 pa = None
 
-            # 这个画像跑出来的所有岗位
+            # All positions from this profile
             stmt = select(Job).where(Job.profile_id == profile_id).order_by(Job.match_score.desc().nulls_last())
             jobs = list(session.scalars(stmt).all())
             for j in jobs:
@@ -1548,25 +1600,25 @@ def create_app(config: Config) -> FastAPI:
         filename = _validate_resume_filename(filename)
         resume_dir = config.path("resume_dir")
         target = (resume_dir / filename).resolve()
-        # 防 path traversal
+        # Prevent path traversal
         if resume_dir.resolve() not in target.parents and target.parent != resume_dir.resolve():
-            raise HTTPException(400, "非法文件名")
+            raise HTTPException(400, "Invalid filename")
         if not target.exists():
-            raise HTTPException(404, f"简历不存在: {filename}")
+            raise HTTPException(404, f"Resume does not exist: {filename}")
         if target.suffix.lower() not in SUPPORTED_EXTS:
-            raise HTTPException(400, "不支持的格式")
+            raise HTTPException(400, "Unsupported format")
         return target
 
     @app.post("/resume/{filename}/activate")
     def activate_resume(filename: str, background_tasks: BackgroundTasks):
-        """激活某份简历: touch + 重新 parse + 用当前画像跑一遍流水线 (collect + match)."""
+        """Activate a resume: touch + re-parse + run current profile through pipeline (collect + match)."""
         target = _safe_resume_path(filename)
         target.touch()
         try:
             parse_and_cache(config.path("resume_dir"))
         except Exception as e:
-            raise HTTPException(500, f"重新解析失败: {e}")
-        # 取消正在跑的(如有), 然后启动新流水线
+            raise HTTPException(500, f"Re-parsing failed: {e}")
+        # Cancel running pipeline (if any), then start new pipeline
         if pipeline_state["running"]:
             _wait_for_cancel(timeout=60)
         background_tasks.add_task(_run_pipeline_bg, False, None, None)
@@ -1575,14 +1627,14 @@ def create_app(config: Config) -> FastAPI:
     @app.post("/resume/{filename}/delete")
     def delete_resume(filename: str):
         filename = _validate_resume_filename(filename)
-        # 先尝试在主目录, 找不到再尝试 _paused/
+        # Try main directory first, if not found try _paused/
         resume_dir = config.path("resume_dir")
         active_target = resume_dir / filename
         if active_target.exists() and active_target.is_file():
             active_target.unlink()
         else:
             delete_paused_resume(resume_dir, filename)
-        # 还有其他活跃简历就刷 cache; 否则清空
+        # If other active resumes exist, refresh cache; otherwise clear it
         if list_resumes(resume_dir):
             try:
                 parse_and_cache(resume_dir)
@@ -1601,8 +1653,8 @@ def create_app(config: Config) -> FastAPI:
         try:
             pause_resume_file(resume_dir, filename)
         except FileNotFoundError:
-            raise HTTPException(404, f"简历不存在: {filename}")
-        # 暂停了当前激活的话, 下个最新非暂停的成为激活, 刷新 cache
+            raise HTTPException(404, f"Resume does not exist: {filename}")
+        # If current active resume was paused, next latest non-paused becomes active, refresh cache
         if list_resumes(resume_dir):
             try:
                 parse_and_cache(resume_dir)
@@ -1621,10 +1673,10 @@ def create_app(config: Config) -> FastAPI:
         try:
             unpause_resume_file(resume_dir, filename)
         except FileNotFoundError:
-            raise HTTPException(404, f"暂停目录里没有: {filename}")
+            raise HTTPException(404, f"Not found in paused directory: {filename}")
         except FileExistsError as e:
             raise HTTPException(409, str(e))
-        # 恢复完, 刷 cache (它会成为最新, 也就是新的激活)
+        # After restoring, refresh cache (it becomes the latest, i.e., new active)
         try:
             parse_and_cache(resume_dir)
         except Exception:
@@ -1634,47 +1686,47 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/resume/upload")
     async def upload_resume_only(resume: UploadFile = File(...)):
-        """单独上传/替换简历, 不触发流水线. 后续任何 run-all / refresh 都用最新的."""
+        """Upload/replace resume separately, don't trigger pipeline. Any subsequent run-all / refresh uses the latest."""
         if not resume.filename:
-            raise HTTPException(400, "未选择文件")
+            raise HTTPException(400, "No file selected")
         safe_filename = _validate_resume_filename(resume.filename)
         ext = Path(safe_filename).suffix.lower()
         if ext not in SUPPORTED_EXTS:
-            raise HTTPException(400, f"不支持的格式 {ext}. 仅支持: {sorted(SUPPORTED_EXTS)}")
+            raise HTTPException(400, f"Unsupported format {ext}. Supported: {sorted(SUPPORTED_EXTS)}")
         content = await resume.read()
         if not content:
-            raise HTTPException(400, "上传文件为空")
+            raise HTTPException(400, "Uploaded file is empty")
         resume_dir = config.path("resume_dir")
         target = resume_dir / safe_filename
         target.write_bytes(content)
-        # 强制重新解析,刷新 _parsed.txt 缓存
+        # Force re-parse, refresh _parsed.txt cache
         try:
             parse_and_cache(resume_dir)
         except Exception as e:
-            raise HTTPException(500, f"解析失败: {e}")
+            raise HTTPException(500, f"Parsing failed: {e}")
         return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/profiles/{profile_id}/use")
     def use_profile(profile_id: int, background_tasks: BackgroundTasks):
-        """切回某历史画像 + 重跑流水线."""
-        # 取消当前跑的(如有)
+        """Switch back to a historical profile + re-run pipeline."""
+        # Cancel current running pipeline (if any)
         if pipeline_state["running"]:
-            print(f"[use_profile] 流水线在跑, 请求取消以切换到 #{profile_id}...")
+            print(f"[use_profile] Pipeline is running, requesting cancellation to switch to #{profile_id}...")
             _wait_for_cancel(timeout=60)
         try:
             activate_profile_snapshot(config, profile_id)
         except ValueError as e:
             raise HTTPException(404, str(e))
-        # do_analyze=False: 直接用已激活的画像跑 collect+match
+        # do_analyze=False: directly use activated profile to run collect+match
         background_tasks.add_task(_run_pipeline_bg, False, None, None)
         return RedirectResponse(url="/onboarding/processing", status_code=303)
 
     @app.post("/schedule/set")
     def set_schedule(hours: int = Form(...), backend: str = Form("cron")):
-        """设置自动跑.
+        """Set automatic scheduling.
 
-        backend='cron'   : 写入系统 crontab (24/7 真后台)
-        backend='inproc' : 进程内调度 (只在 web server 运行时跑)
+        backend='cron'   : Write to system crontab (true 24/7 background)
+        backend='inproc' : In-process scheduling (only runs when web server is running)
         """
         if backend == "cron":
             script = Path(__file__).resolve().parent.parent / "scripts" / "daily.sh"
@@ -1683,14 +1735,14 @@ def create_app(config: Config) -> FastAPI:
                     cron_uninstall()
                 else:
                     cron_install(hours, script)
-                # 同时关闭 in-process 调度避免双触发
+                # Also disable in-process scheduling to avoid double triggering
                 scheduler.set_schedule_hours(0)
             except Exception as e:
-                raise HTTPException(500, f"系统 cron 操作失败: {e}")
+                raise HTTPException(500, f"System cron operation failed: {e}")
         else:
-            # 进程内调度
+            # In-process scheduling
             scheduler.set_schedule_hours(hours)
-            # 关闭 cron 避免双触发
+            # Disable cron to avoid double triggering
             try:
                 cron_uninstall()
             except Exception:
@@ -1699,7 +1751,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/freshness/set")
     def set_freshness(hours: int = Form(...)):
-        """设置抓取时间窗 (config.freshness 会自动读这个值)."""
+        """Set crawl time window (config.freshness will automatically read this value)."""
         import json as _json
         settings_path = config.path("resume_dir").parent / "settings.json"
         try:
@@ -1720,16 +1772,16 @@ def create_app(config: Config) -> FastAPI:
         pipeline_state["cancel_requested"] = True
         return RedirectResponse(url="/onboarding/processing", status_code=303)
 
-    # ===== Agent 全局控制 =====
+    # ===== Agent Global Control =====
     @app.post("/agent/pause")
     def agent_pause():
-        """暂停 agent: 取消正在跑的, 关 in-process 调度, 卸 cron. 不动数据."""
-        # 1. 取消当前流水线
+        """Pause agent: cancel running, disable in-process scheduling, uninstall cron. Don't touch data."""
+        # 1. Cancel current pipeline
         if pipeline_state["running"]:
             pipeline_state["cancel_requested"] = True
-        # 2. 关进程内调度
+        # 2. Disable in-process scheduling
         scheduler.set_schedule_hours(0)
-        # 3. 卸系统 cron
+        # 3. Uninstall system cron
         try:
             cron_uninstall()
         except Exception:
@@ -1738,11 +1790,11 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/agent/delete")
     def agent_delete():
-        """删除 agent: 暂停 + 清画像 + 解绑所有岗位 profile_id, 回到 onboarding 初态.
+        """Delete agent: pause + clear profile + unbind all job profile_id, return to onboarding initial state.
 
-        不删 Jobs 数据 (你历史的岗位还在 /jobs 看得到), 不删简历文件.
+        Don't delete Jobs data (historical positions still visible at /jobs), don't delete resume files.
         """
-        # 1. 暂停
+        # 1. Pause
         if pipeline_state["running"]:
             pipeline_state["cancel_requested"] = True
             _wait_for_cancel(timeout=30)
@@ -1752,20 +1804,20 @@ def create_app(config: Config) -> FastAPI:
         except Exception:
             pass
 
-        # 2. 清画像
+        # 2. Clear profile
         resume_dir = config.path("resume_dir")
         for fname in ("_profile.json", "_user_description.txt"):
             f = resume_dir / fname
             if f.exists():
                 f.unlink()
-        # DB 里所有 profile 取消激活 (但不删历史快照, 用户可以再激活)
+        # Deactivate all profiles in DB (but don't delete historical snapshots, users can reactivate)
         from sqlalchemy import update as _update
         from .db import Profile
         with session_scope(db_path) as session:
             session.execute(_update(Profile).where(Profile.is_current).values(is_current=False))
             session.commit()
 
-        # 3. 清 pipeline 状态 (内存 + 持久化)
+        # 3. Clear pipeline state (memory + persistent)
         pipeline_state.update(
             running=False,
             phase="idle",
@@ -1786,8 +1838,8 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/profiles/{profile_id}/delete")
     def delete_profile(profile_id: int):
-        """删除任意画像. 如果删的是当前激活的, 自动激活下一个最新的画像;
-        没有其他画像则清空 _profile.json + _user_description.txt, 用户需重新 onboarding.
+        """Delete any profile. If deleting the current active one, automatically activate the next newest;
+        if no other profiles exist, clear _profile.json + _user_description.txt, user needs to re-onboard.
         """
         from .db import Profile
         from sqlalchemy import update as _update
@@ -1795,16 +1847,16 @@ def create_app(config: Config) -> FastAPI:
         with session_scope(db_path) as session:
             row = session.get(Profile, profile_id)
             if not row:
-                raise HTTPException(404, "画像不存在")
+                raise HTTPException(404, "Profile does not exist")
             was_current = bool(row.is_current)
-            # 解绑该画像下的所有 jobs
+            # Unbind all jobs under this profile
             session.execute(
                 _update(Job).where(Job.profile_id == profile_id).values(profile_id=None)
             )
             session.delete(row)
             session.commit()
 
-        # 如果删的是 current,激活次新的;没有就清空 JSON
+        # If current was deleted, activate next newest; if none, clear JSON
         if was_current:
             with session_scope(db_path) as session:
                 next_row = session.scalar(
@@ -1819,9 +1871,9 @@ def create_app(config: Config) -> FastAPI:
                 try:
                     activate_profile_snapshot(config, next_id)
                 except Exception as e:
-                    print(f"[delete] 自动激活次新画像失败: {e}")
+                    print(f"[delete] Auto-activate next profile failed: {e}")
             else:
-                # 没有别的画像了, 清空 JSON + 用户描述, 回到无 profile 状态
+                # No other profiles, clear JSON + user description, return to no-profile state
                 resume_dir = config.path("resume_dir")
                 for fname in ("_profile.json", "_user_description.txt"):
                     f = resume_dir / fname
@@ -1866,7 +1918,7 @@ def _elapsed(state: dict) -> str:
 
 
 def _find_free_port(host: str, start: int, max_tries: int = 20) -> int:
-    """从 start 开始递增找一个能 bind 上的端口."""
+    """Find an available port starting from start and incrementing."""
     import socket
     for p in range(start, start + max_tries):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1878,14 +1930,14 @@ def _find_free_port(host: str, start: int, max_tries: int = 20) -> int:
         except OSError:
             s.close()
             continue
-    raise RuntimeError(f"在 {start}..{start + max_tries - 1} 范围内找不到可用端口")
+    raise RuntimeError(f"Cannot find available port in range {start}..{start + max_tries - 1}")
 
 
 def run_server(config: Config, host: str = "127.0.0.1", port: int = 8765):
     import uvicorn
     actual_port = _find_free_port(host, port)
     if actual_port != port:
-        print(f"⚠️  端口 {port} 被占用,改用 {actual_port}")
+        print(f"Port {port} is in use, using {actual_port} instead")
     app = create_app(config)
     print(f"\n→ JobHunter web UI: http://{host}:{actual_port}\n")
     uvicorn.run(app, host=host, port=actual_port, log_level="info")

@@ -1,54 +1,103 @@
 {% extends "base.html" %}
-{% block title %}简历库 · JobHunter{% endblock %}
+{% block title %}<span class="zh">简历库</span><span class="en">Resume Library</span> · JobHunter{% endblock %}
 {% block content %}
 <div style="max-width:1040px; margin:0 auto;">
   <div style="display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:18px;">
     <div>
-      <h1 style="margin:0 0 6px; font-size:24px; letter-spacing:0;">简历库</h1>
-      <p style="margin:0; color:var(--color-text-muted);">管理用于采集、评分和定制材料的简历文件。</p>
+      <h1 style="margin:0 0 6px; font-size:24px; letter-spacing:0;">
+        <span class="zh">简历库</span><span class="en">Resume Library</span>
+      </h1>
+      <p style="margin:0; color:var(--color-text-muted);">
+        <span class="zh">管理用于采集、评分和定制材料的简历文件。</span>
+        <span class="en">Manage the resume files used for job collection, scoring, and tailoring.</span>
+      </p>
     </div>
-    <a href="/onboarding" class="btn btn-secondary btn-sm">回到画像</a>
+    <a href="/onboarding" class="btn btn-secondary btn-sm">
+      <span class="zh">回到画像</span><span class="en">Back to Dashboard</span>
+    </a>
   </div>
 
   <div class="card">
-    <form method="post" action="/resume/upload" enctype="multipart/form-data" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-      <input type="file" name="resume" accept=".pdf,.docx,.md,.txt" required style="padding:7px 10px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm);">
-      <button type="submit" class="btn btn-primary">上传简历</button>
-      <span style="color:var(--color-text-muted); font-size:12px;">支持 {{ supported_exts }}</span>
+    <form method="post" action="/resume/upload" enctype="multipart/form-data"
+          style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <input type="file" name="resume" accept=".pdf,.docx,.md,.txt" required
+             style="padding:7px 10px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm);">
+      <button type="submit" class="btn btn-primary">
+        <span class="zh">上传简历</span><span class="en">Upload resume</span>
+      </button>
+      <span style="color:var(--color-text-muted); font-size:12px;">
+        <span class="zh">支持</span><span class="en">Supports</span> {{ supported_exts }}
+      </span>
     </form>
   </div>
 
   <div class="card card-flat">
     {% if resume_files %}
     <table>
-      <thead><tr><th>文件名</th><th>大小</th><th>修改时间</th><th>状态</th><th></th></tr></thead>
+      <thead>
+        <tr>
+          <th><span class="zh">文件名</span><span class="en">Filename</span></th>
+          <th><span class="zh">大小</span><span class="en">Size</span></th>
+          <th><span class="zh">修改时间</span><span class="en">Modified</span></th>
+          <th><span class="zh">状态</span><span class="en">Status</span></th>
+          <th></th>
+        </tr>
+      </thead>
       <tbody>
         {% set ns = namespace(first_active=true) %}
         {% for r in resume_files %}
         <tr>
-          <td style="font-weight:600;">{{ r.filename }}{% if r.paused %}<span style="font-size:11px; color:var(--color-text-dim); margin-left:4px;">(_paused)</span>{% endif %}</td>
+          <td style="font-weight:600;">
+            {{ r.filename }}
+            {% if r.paused %}<span style="font-size:11px; color:var(--color-text-dim); margin-left:4px;">(_paused)</span>{% endif %}
+          </td>
           <td style="color:var(--color-text-muted);">{{ r.size_kb }} KB</td>
           <td style="color:var(--color-text-muted);">{{ r.modified }}</td>
           <td>
-            {% if r.paused %}<span class="badge badge-gray">暂停</span>
-            {% elif ns.first_active %}<span class="badge badge-green">激活</span>{% set ns.first_active = false %}
-            {% else %}<span class="badge badge-gray">备用</span>{% endif %}
+            {% if r.paused %}
+              <span class="badge badge-gray"><span class="zh">暂停</span><span class="en">Paused</span></span>
+            {% elif ns.first_active %}
+              <span class="badge badge-green"><span class="zh">激活</span><span class="en">Active</span></span>
+              {% set ns.first_active = false %}
+            {% else %}
+              <span class="badge badge-gray"><span class="zh">备用</span><span class="en">Standby</span></span>
+            {% endif %}
           </td>
           <td style="text-align:right; white-space:nowrap;">
             {% if r.paused %}
-              <form method="post" action="/resume/{{ r.filename }}/unpause" style="display:inline;"><button type="submit" class="btn btn-secondary btn-sm">恢复</button></form>
+              <form method="post" action="/resume/{{ r.filename }}/unpause" style="display:inline;">
+                <button type="submit" class="btn btn-secondary btn-sm">
+                  <span class="zh">恢复</span><span class="en">Unpause</span>
+                </button>
+              </form>
             {% else %}
-              <form method="post" action="/resume/{{ r.filename }}/activate" style="display:inline;"><button type="submit" class="btn btn-primary btn-sm">激活</button></form>
-              <form method="post" action="/resume/{{ r.filename }}/pause" style="display:inline;"><button type="submit" class="btn btn-secondary btn-sm">暂停</button></form>
+              <form method="post" action="/resume/{{ r.filename }}/activate" style="display:inline;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                  <span class="zh">激活</span><span class="en">Activate</span>
+                </button>
+              </form>
+              <form method="post" action="/resume/{{ r.filename }}/pause" style="display:inline;">
+                <button type="submit" class="btn btn-secondary btn-sm">
+                  <span class="zh">暂停</span><span class="en">Pause</span>
+                </button>
+              </form>
             {% endif %}
-            <form method="post" action="/resume/{{ r.filename }}/delete" style="display:inline;"><button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);" onclick="return confirm('删除 {{ r.filename }}?')">删除</button></form>
+            <form method="post" action="/resume/{{ r.filename }}/delete" style="display:inline;">
+              <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);"
+                      onclick="return confirm('Delete {{ r.filename }}?')">
+                <span class="zh">删除</span><span class="en">Delete</span>
+              </button>
+            </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-      <div class="empty">还没有上传简历。</div>
+      <div class="empty">
+        <span class="zh">还没有上传简历。</span>
+        <span class="en">No resumes uploaded yet.</span>
+      </div>
     {% endif %}
   </div>
 </div>

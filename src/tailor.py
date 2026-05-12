@@ -1,14 +1,14 @@
-"""简历定制器 — 两轮 pipeline.
+"""Resume tailor — two-round pipeline.
 
-Round 1 (DeepSeek, 便宜快):
-    JD + 简历 + 资料库 → 差距分析 + 具体修改 plan
+Round 1 (DeepSeek, cheap & fast):
+    JD + resume + materials → gap analysis + specific modification plan
 
-Round 2 (Claude Opus, 高质量):
-    plan + 简历 + 资料库 → 最终定制简历
+Round 2 (Claude Opus, high quality):
+    plan + resume + materials → final tailored resume
 
-输出 2 个文件:
-    {id:03d}_{company}_{title}_resume.md   (源,可编辑)
-    {id:03d}_{company}_{title}_resume.pdf  (用于投递)
+Output 2 files:
+    {id:03d}_{company}_{title}_resume.md   (source, editable)
+    {id:03d}_{company}_{title}_resume.pdf  (for submission)
 """
 from __future__ import annotations
 
@@ -24,76 +24,76 @@ from .pdf_generator import md_to_pdf
 from .resume_reader import read_materials
 
 
-# ── Round 1 Tool Schema (DeepSeek 生成 plan) ────────────────────────────────
+# ── Round 1 Tool Schema (DeepSeek generates plan) ────────────────────────────────
 
 RESUME_PLAN_TOOL: dict[str, Any] = {
     "name": "submit_resume_plan",
-    "description": "提交简历修改 plan：差距分析 + 具体可执行的修改指令",
+    "description": "Submit resume modification plan: gap analysis + specific executable instructions",
     "input_schema": {
         "type": "object",
         "properties": {
             "gap_analysis": {
                 "type": "object",
-                "description": "JD 与简历的差距分析",
+                "description": "Gap analysis between JD and resume",
                 "properties": {
                     "jd_keywords": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "JD 中高频出现的技术词/动词/指标，这些是 ATS 核心",
+                        "description": "Frequently appearing tech terms/verbs/metrics in JD, these are ATS core",
                     },
                     "strong_matches": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "候选人简历中强匹配 JD 的经历/技能，直接保留并突出",
+                        "description": "Experiences/skills in candidate's resume that strongly match JD, keep and highlight directly",
                     },
                     "gaps": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "JD 要求但简历中明显不足或缺失的项（只列真实差距，不捏造）",
+                        "description": "Required by JD but clearly insufficient or missing in resume (list only real gaps, don't fabricate)",
                     },
                     "hidden_strengths": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "资料库中有但简历里没有充分展示的技术深度，可以补充",
+                        "description": "Technical depth in materials but not fully shown in resume, can be added",
                     },
                 },
                 "required": ["jd_keywords", "strong_matches", "gaps"],
             },
             "plan": {
                 "type": "object",
-                "description": "具体修改指令",
+                "description": "Specific modification instructions",
                 "properties": {
                     "summary_rewrite": {
                         "type": "string",
-                        "description": "Summary 段的改写方向：应该强调什么、用哪些 JD 关键词、第一句如何定位",
+                        "description": "Summary section rewrite direction: what to emphasize, which JD keywords to use, how to position first sentence",
                     },
                     "skills_priority": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Skills 里按 JD 优先级排列的技能组，格式：'分组名: 技能1, 技能2'",
+                        "description": "Skills sections arranged by JD priority, format: 'Group name: skill1, skill2'",
                     },
                     "experience_adjustments": {
                         "type": "array",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "section": {"type": "string", "description": "哪个项目/经历"},
+                                "section": {"type": "string", "description": "Which project/experience"},
                                 "action": {"type": "string", "enum": ["emphasize", "rewrite", "deprioritize", "add_from_materials"]},
-                                "instruction": {"type": "string", "description": "具体怎么改，引用 JD 关键词"},
+                                "instruction": {"type": "string", "description": "How to modify specifically, reference JD keywords"},
                             },
                             "required": ["section", "action", "instruction"],
                         },
-                        "description": "每个经历/项目的具体调整指令",
+                        "description": "Specific adjustment instructions per experience/project",
                     },
                     "sections_order": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "最终简历的章节顺序，例如 ['Summary','Skills','Experience','Projects','Education','Publications']",
+                        "description": "Final resume section order, e.g. ['Summary','Skills','Experience','Projects','Education','Publications']",
                     },
                     "keywords_to_inject": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "必须在简历中出现的 JD 关键词（只选候选人真实用过的）",
+                        "description": "JD keywords that must appear in resume (select only those candidate actually used)",
                     },
                 },
                 "required": ["summary_rewrite", "skills_priority", "experience_adjustments", "keywords_to_inject"],
@@ -104,10 +104,10 @@ RESUME_PLAN_TOOL: dict[str, Any] = {
 }
 
 
-# ── 核心函数 ─────────────────────────────────────────────────────────────────
+# ── Core functions ─────────────────────────────────────────────────────────────
 
 def _extract_md_section(text: str) -> str:
-    """从模型输出中抽出 ```markdown ... ``` 包裹的主体."""
+    """Extract body wrapped in ```markdown ... ``` from model output."""
     m = re.search(r"```(?:markdown|md)?\s*\n(.*?)\n```", text, re.DOTALL)
     return m.group(1).strip() if m else text.strip()
 
@@ -118,89 +118,110 @@ def _round1_plan(
     job: Job,
     extras_text: str,
 ) -> str:
-    """Round 1: DeepSeek 分析 gap，生成修改 plan，返回 plan 的 JSON 字符串。"""
-    client, model_name = make_client(config, "matcher")  # matcher → DeepSeek
+    """Round 1: DeepSeek analyzes gaps, generates modification plan, return plan JSON string."""
+    client, model_name, provider = make_client(config, "matcher")  # matcher → DeepSeek
 
     prompt = render(
         load_prompt("tailor_plan"),
         resume=resume_text,
         title=job.title,
         company=job.company,
-        description=job.description or "(无 JD)",
-        extras=extras_text or "(无附加材料)",
+        description=job.description or "(no JD)",
+        extras=extras_text or "(no additional materials)",
     )
 
-    print(f"[tailor] Round 1 — DeepSeek 分析差距并生成 plan...")
-    resp = client.messages.create(
-        model=model_name,
-        max_tokens=4096,
-        tools=[RESUME_PLAN_TOOL],
-        tool_choice={"type": "tool", "name": "submit_resume_plan"},
-        messages=[{"role": "user", "content": prompt}],
-    )
+    print(f"[tailor] Round 1 — {provider} analyzing gaps and generating plan...")
 
-    for block in resp.content:
-        if getattr(block, "type", None) == "tool_use" and block.name == "submit_resume_plan":
-            plan_data = block.input
-            # 转成可读文本传给 Round 2
+    if provider == "deepseek":
+        # OpenAI format
+        from .agent import _convert_tool_to_openai
+        tools = [_convert_tool_to_openai(RESUME_PLAN_TOOL)]
+        with client.chat.completions.stream(
+            model=model_name,
+            max_tokens=4096,
+            tools=tools,
+            tool_choice={"type": "function", "function": {"name": "submit_resume_plan"}},
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            resp = stream.get_final_completion()
+        if resp.choices[0].message.tool_calls:
+            tool_call = resp.choices[0].message.tool_calls[0]
+            plan_data = json.loads(tool_call.function.arguments)
             return _plan_to_text(plan_data)
+        raise RuntimeError("[tailor] Round 1 failed: model did not return submit_resume_plan")
+    else:
+        # Anthropic format
+        with client.messages.stream(
+            model=model_name,
+            max_tokens=4096,
+            tools=[RESUME_PLAN_TOOL],
+            tool_choice={"type": "tool", "name": "submit_resume_plan"},
+            messages=[{"role": "user", "content": prompt}],
+        ) as _s:
+            resp = _s.get_final_message()
 
-    raise RuntimeError("[tailor] Round 1 失败: DeepSeek 未返回 submit_resume_plan")
+        for block in resp.content:
+            if getattr(block, "type", None) == "tool_use" and block.name == "submit_resume_plan":
+                plan_data = block.input
+                # Convert to readable text to pass to Round 2
+                return _plan_to_text(plan_data)
+
+        raise RuntimeError("[tailor] Round 1 failed: model did not return submit_resume_plan")
 
 
 def _plan_to_text(plan_data: dict) -> str:
-    """把结构化 plan 转成易读的文本，供 Claude 在 Round 2 执行。"""
+    """Convert structured plan to readable text for Claude to execute in Round 2."""
     gap = plan_data.get("gap_analysis", {})
     plan = plan_data.get("plan", {})
 
-    lines = ["## 差距分析\n"]
+    lines = ["## Gap Analysis\n"]
 
     if gap.get("jd_keywords"):
-        lines.append("**JD 核心关键词**（必须在简历中出现）：")
+        lines.append("**Core JD Keywords** (must appear in resume):")
         lines.append(", ".join(gap["jd_keywords"]))
 
     if gap.get("strong_matches"):
-        lines.append("\n**强匹配项**（保留并突出）：")
+        lines.append("\n**Strong Matches** (keep and highlight):")
         for item in gap["strong_matches"]:
             lines.append(f"- {item}")
 
     if gap.get("gaps"):
-        lines.append("\n**差距项**（能包装的包装，不能的直接跳过）：")
+        lines.append("\n**Gap Items** (package if possible, skip if not):")
         for item in gap["gaps"]:
             lines.append(f"- {item}")
 
     if gap.get("hidden_strengths"):
-        lines.append("\n**资料库中的隐藏优势**（可补充到 bullet 中）：")
+        lines.append("\n**Hidden Strengths in Materials** (can add to bullets):")
         for item in gap["hidden_strengths"]:
             lines.append(f"- {item}")
 
-    lines.append("\n## 修改指令\n")
+    lines.append("\n## Modification Instructions\n")
 
     if plan.get("summary_rewrite"):
-        lines.append(f"**Summary 改写方向**：{plan['summary_rewrite']}")
+        lines.append(f"**Summary Rewrite Direction**: {plan['summary_rewrite']}")
 
     if plan.get("skills_priority"):
-        lines.append("\n**Skills 优先级排列**：")
+        lines.append("\n**Skills Priority Arrangement**:")
         for s in plan["skills_priority"]:
             lines.append(f"- {s}")
 
     if plan.get("experience_adjustments"):
-        lines.append("\n**各经历/项目调整指令**：")
+        lines.append("\n**Adjustments per Experience/Project**:")
         for adj in plan["experience_adjustments"]:
             action_map = {
-                "emphasize": "🔼 重点突出",
-                "rewrite": "✏️ 改写",
-                "deprioritize": "🔽 弱化",
-                "add_from_materials": "📎 从资料库补充",
+                "emphasize": "UP Emphasize",
+                "rewrite": "EDIT Rewrite",
+                "deprioritize": "DOWN Deprioritize",
+                "add_from_materials": "ADD From materials",
             }
             action_label = action_map.get(adj.get("action", ""), adj.get("action", ""))
-            lines.append(f"- [{action_label}] **{adj.get('section', '')}**：{adj.get('instruction', '')}")
+            lines.append(f"- [{action_label}] **{adj.get('section', '')}**: {adj.get('instruction', '')}")
 
     if plan.get("keywords_to_inject"):
-        lines.append(f"\n**必须注入的关键词**：{', '.join(plan['keywords_to_inject'])}")
+        lines.append(f"\n**Keywords to Inject**: {', '.join(plan['keywords_to_inject'])}")
 
     if plan.get("sections_order"):
-        lines.append(f"\n**章节顺序**：{' → '.join(plan['sections_order'])}")
+        lines.append(f"\n**Section Order**: {' → '.join(plan['sections_order'])}")
 
     return "\n".join(lines)
 
@@ -211,7 +232,7 @@ def tailor_for_job(
     job_id: int,
     candidate_name: str = "Candidate",
 ) -> Path:
-    """两轮 pipeline 生成定制简历: .md + .pdf。返回 .md 路径。"""
+    """Two-round pipeline generates tailored resume: .md + .pdf. Return .md path."""
     db_path = config.path("db_path")
     outputs_dir = config.path("outputs_dir")
     extras_text = read_materials(config.path("materials_dir"))
@@ -219,32 +240,32 @@ def tailor_for_job(
     with session_scope(db_path) as session:
         job = session.get(Job, job_id)
         if not job:
-            raise ValueError(f"Job id={job_id} 不存在")
+            raise ValueError(f"Job id={job_id} does not exist")
 
         # ── Round 1: DeepSeek → plan ─────────────────────────────────────────
         try:
             plan_text = _round1_plan(config, resume_text, job, extras_text or "")
-            print(f"[tailor] Round 1 完成，plan 长度: {len(plan_text)} 字符")
+            print(f"[tailor] Round 1 complete, plan length: {len(plan_text)} characters")
         except Exception as e:
-            print(f"[tailor] Round 1 失败: {e}")
-            raise RuntimeError(f"简历定制 Round 1 失败（DeepSeek 分析阶段）：{str(e)[:120]}") from e
+            print(f"[tailor] Round 1 failed: {e}")
+            raise RuntimeError(f"Resume tailor Round 1 failed (DeepSeek analysis phase): {str(e)[:120]}") from e
 
-        # ── Round 2: Claude Opus → 最终简历 ──────────────────────────────────
-        print(f"[tailor] Round 2 — Claude Opus 执行 plan 改写简历...")
+        # ── Round 2: Claude Opus → final resume ──────────────────────────────────
+        print(f"[tailor] Round 2 — Claude Opus executing plan to rewrite resume...")
         client = ClaudeClient(config)
         prompt = render(
             load_prompt("tailor"),
             plan=plan_text,
             resume=resume_text,
-            extras=extras_text or "(无附加材料)",
+            extras=extras_text or "(no additional materials)",
             candidate_name=candidate_name,
         )
-        # 简历改写输出可能较长（完整 markdown + 各项目详细 bullet），给足 token 空间
+        # Resume rewrite output can be long (complete markdown + detailed project bullets), allocate token space
         text = client.complete("tailor", prompt, max_tokens=8000)
         md_body = _extract_md_section(text)
-        print(f"[tailor] Round 2 完成，简历长度: {len(md_body)} 字符")
+        print(f"[tailor] Round 2 complete, resume length: {len(md_body)} characters")
 
-        # ── 写文件 ────────────────────────────────────────────────────────────
+        # ── Write files ────────────────────────────────────────────────────────────
         safe_company = re.sub(r"[^\w\-]+", "_", job.company)[:40]
         safe_title   = re.sub(r"[^\w\-]+", "_", job.title)[:40]
         base = f"{job.id:03d}_{safe_company}_{safe_title}_resume"
@@ -252,14 +273,14 @@ def tailor_for_job(
         md_path  = outputs_dir / f"{base}.md"
         pdf_path = outputs_dir / f"{base}.pdf"
 
-        # md 文件保存完整输出（含改写说明），方便回顾
+        # md file saves complete output (with rewrite notes) for easy review
         full_output = f"<!-- Plan -->\n<!--\n{plan_text}\n-->\n\n{text}"
         md_path.write_text(full_output, encoding="utf-8")
 
         try:
             md_to_pdf(md_body, pdf_path)
         except Exception as e:
-            print(f"[tailor] PDF 生成失败 ({e}), 只留 .md")
+            print(f"[tailor] PDF generation failed ({e}), keeping only .md")
             pdf_path = None
 
         job.tailored_resume_path = str(md_path)

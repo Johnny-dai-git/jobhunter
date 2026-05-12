@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}历史画像 · JobHunter{% endblock %}
+{% block title %}<span class="zh">历史画像</span><span class="en">Profile History</span> · JobHunter{% endblock %}
 {% block content %}
 <style>
   .profiles-shell { max-width: 1100px; margin: 0 auto; }
@@ -22,10 +22,15 @@
 <div class="profiles-shell">
   <div class="page-head">
     <div>
-      <h1>历史画像</h1>
-      <p>切换求职策略、查看每个画像跑出的岗位，或清理不再使用的画像。</p>
+      <h1><span class="zh">历史画像</span><span class="en">Profile History</span></h1>
+      <p>
+        <span class="zh">切换求职策略、查看每个画像跑出的岗位，或清理不再使用的画像。</span>
+        <span class="en">Switch job strategies, view results per profile, or clean up unused profiles.</span>
+      </p>
     </div>
-    <a href="/onboarding" class="btn btn-secondary btn-sm">回到画像</a>
+    <a href="/onboarding" class="btn btn-secondary btn-sm">
+      <span class="zh">回到画像</span><span class="en">Back to Dashboard</span>
+    </a>
   </div>
 
   <div class="card card-flat">
@@ -40,10 +45,10 @@
       </colgroup>
       <thead>
         <tr>
-          <th>时间</th>
-          <th>画像</th>
-          <th>岗位</th>
-          <th>状态</th>
+          <th><span class="zh">时间</span><span class="en">Date</span></th>
+          <th><span class="zh">画像</span><span class="en">Profile</span></th>
+          <th><span class="zh">岗位</span><span class="en">Jobs</span></th>
+          <th><span class="zh">状态</span><span class="en">Status</span></th>
           <th></th>
         </tr>
       </thead>
@@ -53,7 +58,9 @@
         <tr>
           <td style="color:var(--color-text-muted); white-space:nowrap;">{{ h.created_at.strftime('%m-%d %H:%M') }}</td>
           <td>
-            <a href="/profiles/{{ h.id }}" class="profile-label" title="{{ h.user_description }}">{{ h.label or '(无描述)' }}</a>
+            <a href="/profiles/{{ h.id }}" class="profile-label" title="{{ h.user_description }}">
+              {{ h.label or '(no description)' }}
+            </a>
             {% if h.resume_filename %}
               <div style="font-size:11px; color:var(--color-text-dim); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ h.resume_filename }}</div>
             {% endif %}
@@ -61,36 +68,61 @@
           <td>
             {% if counts.total > 0 %}
               <a href="/jobs?profile_id={{ h.id }}" style="text-decoration:none;">
-                <span class="badge badge-indigo">{{ counts.total }} 个</span>
-                {% if counts.top > 0 %}<span class="badge badge-green" style="margin-left:4px;">{{ counts.top }} 高分</span>{% endif %}
+                <span class="badge badge-indigo">
+                  {{ counts.total }} <span class="zh">个</span><span class="en">jobs</span>
+                </span>
+                {% if counts.top > 0 %}
+                  <span class="badge badge-green" style="margin-left:4px;">
+                    {{ counts.top }} <span class="zh">高分</span><span class="en">top</span>
+                  </span>
+                {% endif %}
               </a>
             {% else %}
               <span style="color:var(--color-text-dim);">—</span>
             {% endif %}
           </td>
           <td>
-            {% if h.id == current_id %}<span class="badge badge-green">当前</span>
-            {% else %}<span class="badge badge-gray">历史</span>{% endif %}
+            {% if h.id == current_id %}
+              <span class="badge badge-green"><span class="zh">当前</span><span class="en">Active</span></span>
+            {% else %}
+              <span class="badge badge-gray"><span class="zh">历史</span><span class="en">Past</span></span>
+            {% endif %}
           </td>
           <td>
             <div class="actions">
               {% if counts.total > 0 %}
-                <a href="/jobs?profile_id={{ h.id }}" class="btn btn-secondary btn-sm">查看结果</a>
+                <a href="/jobs?profile_id={{ h.id }}" class="btn btn-secondary btn-sm">
+                  <span class="zh">查看结果</span><span class="en">View results</span>
+                </a>
               {% endif %}
               {% if h.id != current_id %}
                 <form method="post" action="/profiles/{{ h.id }}/use" style="margin:0;">
                   <button class="btn btn-primary btn-sm" type="submit"
-                          {% if pipeline_running %}onclick="return confirm('当前有流水线在跑，切换会先取消它。继续?')"{% else %}onclick="return confirm('切换到这个画像并跑流水线?')"{% endif %}>激活</button>
+                          {% if pipeline_running %}
+                            onclick="return confirm('当前有流水线在跑，切换会先取消它。继续? / A pipeline is running. Switch anyway?')"
+                          {% else %}
+                            onclick="return confirm('切换到这个画像并跑流水线? / Switch to this profile and run the pipeline?')"
+                          {% endif %}>
+                    <span class="zh">激活</span><span class="en">Activate</span>
+                  </button>
                 </form>
               {% else %}
                 <form method="post" action="/refresh" style="margin:0;">
                   <button class="btn btn-secondary btn-sm" type="submit"
-                          {% if pipeline_running %}disabled{% else %}onclick="return confirm('用当前画像跑流水线?')"{% endif %}>重跑</button>
+                          {% if pipeline_running %}
+                            disabled
+                          {% else %}
+                            onclick="return confirm('用当前画像跑流水线? / Run the pipeline with this profile?')"
+                          {% endif %}>
+                    <span class="zh">重跑</span><span class="en">Re-run</span>
+                  </button>
                 </form>
               {% endif %}
               <form method="post" action="/profiles/{{ h.id }}/delete" style="margin:0;">
                 <button class="btn btn-secondary btn-sm" type="submit" style="color:var(--color-danger);"
-                        onclick="return confirm('{% if h.id == current_id %}这是当前画像，删除后会自动激活次新的画像。{% endif %}删除 &quot;{{ h.label[:30] }}&quot;? 操作不可恢复。')">删除</button>
+                        onclick="return confirm('Delete &quot;{{ h.label[:30] }}&quot;? This cannot be undone.')">
+                  <span class="zh">删除</span><span class="en">Delete</span>
+                </button>
               </form>
             </div>
           </td>
@@ -99,7 +131,10 @@
       </tbody>
     </table>
     {% else %}
-      <div class="empty">还没有历史画像。先回到画像页创建一个求职画像。</div>
+      <div class="empty">
+        <span class="zh">还没有历史画像。先回到画像页创建一个求职画像。</span>
+        <span class="en">No profiles yet. Go back to the dashboard to create your first job profile.</span>
+      </div>
     {% endif %}
   </div>
 </div>
