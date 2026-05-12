@@ -613,9 +613,7 @@ def create_app(config: Config) -> FastAPI:
         mark_applied(config, job_id, note=note)
         return RedirectResponse(url=f"/job/{job_id}", status_code=303)
 
-    # ---- Onboarding (首次使用 / 重设画像) ----
-    @app.get("/onboarding")
-    def onboarding_form():
+    def _build_onboarding_context() -> dict[str, Any]:
         existing_desc = load_user_description(config) or ""
         profile = load_profile(config)
 
@@ -705,27 +703,48 @@ def create_app(config: Config) -> FastAPI:
             except Exception:
                 pass
 
-        return render(
-            "onboarding.html",
-            existing_desc=existing_desc,
-            has_profile=profile is not None,
-            supported_exts=", ".join(sorted(SUPPORTED_EXTS)),
-            history=history,
-            current_id=current_id,
-            job_counts=job_counts,
-            pipeline_running=pipeline_state["running"],
-            resume_files=resume_files,
-            schedule=schedule_info,
-            freshness=freshness_info,
-            agent_state=agent_status,
-            persistent_state=persistent,
-            cur_run=cur_run,
-            last_run=last_run,
-            cur_elapsed=cur_elapsed,
-            health=_compute_health(),
-            counts=_compute_counts(),
-            lifetime=agent_state.get_lifetime_stats(config),
-        )
+        return {
+            "existing_desc": existing_desc,
+            "has_profile": profile is not None,
+            "supported_exts": ", ".join(sorted(SUPPORTED_EXTS)),
+            "history": history,
+            "current_id": current_id,
+            "job_counts": job_counts,
+            "pipeline_running": pipeline_state["running"],
+            "resume_files": resume_files,
+            "schedule": schedule_info,
+            "freshness": freshness_info,
+            "agent_state": agent_status,
+            "persistent_state": persistent,
+            "cur_run": cur_run,
+            "last_run": last_run,
+            "cur_elapsed": cur_elapsed,
+            "health": _compute_health(),
+            "counts": _compute_counts(),
+            "lifetime": agent_state.get_lifetime_stats(config),
+            "digest_to": (config.digest or {}).get("to"),
+        }
+
+    # ---- Onboarding (首次使用 / 重设画像) ----
+    @app.get("/onboarding")
+    def onboarding_form():
+        return render("onboarding.html", **_build_onboarding_context())
+
+    @app.get("/onboarding/status")
+    def onboarding_status():
+        return render("onboarding_status.html", **_build_onboarding_context())
+
+    @app.get("/onboarding/resumes")
+    def onboarding_resumes():
+        return render("onboarding_resumes.html", **_build_onboarding_context())
+
+    @app.get("/onboarding/profiles")
+    def onboarding_profiles():
+        return render("onboarding_profiles.html", **_build_onboarding_context())
+
+    @app.get("/onboarding/automation")
+    def onboarding_automation():
+        return render("onboarding_automation.html", **_build_onboarding_context())
 
     @app.post("/onboarding/submit")
     async def onboarding_submit(

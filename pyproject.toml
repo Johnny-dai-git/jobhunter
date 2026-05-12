@@ -9,4 +9,4 @@ readme = "README.md"
 job-agent = "src.main:cli"
 
 [tool.setuptools]
-packages = ["src", "src.collectors"]
+packages = ["src", "src.collectors", "src.multiagent"]

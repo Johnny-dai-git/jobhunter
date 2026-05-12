@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{% if has_profile %}更新画像{% else %}开始使用{% endif %} · JobHunter{% endblock %}
+{% block content %}
+
+<style>
+  .setup-shell { max-width: 960px; margin: 0 auto; }
+  .page-head { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; margin-bottom:18px; }
+  .page-head h1 { margin:0 0 6px; font-size:26px; letter-spacing:0; }
+  .page-head p { margin:0; color:var(--color-text-muted); max-width:640px; }
+  .quick-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:18px; }
+  .quick-link {
+    display:block; text-decoration:none; color:inherit; background:white; border:1px solid var(--color-border);
+    border-radius:var(--radius-sm); padding:14px; box-shadow:var(--shadow-sm);
+  }
+  .quick-link:hover { border-color:var(--color-border-strong); box-shadow:var(--shadow); }
+  .quick-link strong { display:block; font-size:14px; margin-bottom:4px; }
+  .quick-link span { display:block; color:var(--color-text-muted); font-size:12px; line-height:1.45; }
+  .field { margin-bottom:22px; }
+  .field label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--color-text); }
+  .field .hint { font-size:12px; color:var(--color-text-muted); margin-bottom:8px; line-height:1.5; }
+  textarea, .file-input {
+    width:100%; padding:12px 14px; border:1px solid var(--color-border-strong);
+    border-radius:var(--radius-sm); font-family:inherit; font-size:14px; background:white;
+    color:var(--color-text); line-height:1.5;
+  }
+  textarea { min-height:220px; resize:vertical; }
+  textarea:focus, .file-input:focus { outline:none; border-color:var(--color-accent); box-shadow:0 0 0 3px var(--color-accent-light); }
+  .submit-row { display:flex; gap:12px; align-items:center; margin-top:22px; }
+  .notice { background:var(--color-warn-light); color:#713f12; padding:12px 14px; border-radius:var(--radius-sm); font-size:13px; border-left:3px solid var(--color-warn); }
+  @media (max-width: 820px) {
+    .page-head { display:block; }
+    .quick-grid { grid-template-columns:1fr 1fr; }
+  }
+  @media (max-width: 520px) { .quick-grid { grid-template-columns:1fr; } }
+</style>
+
+<div class="setup-shell">
+  <div class="page-head">
+    <div>
+      <h1>{% if has_profile %}更新求职画像{% else %}创建求职画像{% endif %}</h1>
+      <p>用这一页描述目标岗位并选择简历。运行状态、简历库、历史画像和自动运行设置已经拆到独立页面。</p>
+    </div>
+    {% if cur_run %}
+      <a href="/onboarding/processing" class="btn btn-secondary btn-sm">查看进度</a>
+    {% endif %}
+  </div>
+
+  <div class="quick-grid">
+    <a class="quick-link" href="/onboarding/status"><strong>运行状态</strong><span>当前任务、健康检查、累计统计。</span></a>
+    <a class="quick-link" href="/onboarding/resumes"><strong>简历库</strong><span>上传、激活、暂停或删除简历。</span></a>
+    <a class="quick-link" href="/onboarding/profiles"><strong>历史画像</strong><span>切换求职策略并查看结果。</span></a>
+    <a class="quick-link" href="/onboarding/automation"><strong>自动运行</strong><span>定时任务和抓取时间窗。</span></a>
+  </div>
+
+  {% if pipeline_running %}
+  <div class="notice" style="margin-bottom:16px;">
+    当前有流水线在跑。提交新画像会先中断当前任务，然后按新画像重新运行。
+    <a href="/onboarding/processing" style="color:var(--color-accent); margin-left:8px;">查看进度</a>
+  </div>
+  {% endif %}
+
+  <form action="/onboarding/submit" method="post" enctype="multipart/form-data" class="card">
+    <div class="field">
+      <label>求职目标</label>
+      <div class="hint">写清方向、地点、工作模式、公司类型、薪资期望、必须条件和不想看的方向。这里不需要格式化成简历。</div>
+      <textarea name="description" required placeholder="例如:
+
+我是 AI 基础设施方向的 PhD 候选人，研究经历包括分布式训练、模型服务、系统观测和性能优化。
+
+希望找美国湾区或西雅图的 ML Engineer / ML Infrastructure Engineer / Backend Infrastructure 岗位。优先 AI 公司、高成长 startup 或基础设施团队。Remote 或 Hybrid 优先，排除 management / PM / postdoc 方向。">{{ existing_desc }}</textarea>
+    </div>
+
+    <div class="field">
+      <label>简历</label>
+      <div class="hint">
+        {% if resume_files %}
+          可不上传新文件，系统会使用当前激活简历：{{ resume_files[0].filename }}。需要管理简历请去 <a href="/onboarding/resumes">简历库</a>。
+        {% else %}
+          首次使用必须上传一份简历。支持格式：{{ supported_exts }}。
+        {% endif %}
+      </div>
+      <input type="file" name="resume" accept=".pdf,.docx,.md,.txt"
+             {% if not resume_files %}required{% endif %} class="file-input">
+    </div>
+
+    <div class="notice">提交后会分析你的简历和目标描述，然后自动进入采集与评分流程。通常需要十几秒开始显示进度。</div>
+
+    <div class="submit-row">
+      <button type="submit" class="btn btn-primary">{% if has_profile %}重新分析画像{% else %}创建画像并开始{% endif %}</button>
+      {% if has_profile %}<a href="/jobs" class="btn btn-secondary">查看岗位</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+{% endblock %}

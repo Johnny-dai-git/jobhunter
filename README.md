@@ -10,6 +10,7 @@
 - **简历定制**: 针对感兴趣的岗位重写简历重点
 - **求职信生成**: 复用 matcher 提取的 connector / fit_bullets,一次生成针对性 cover letter
 - **每日邮件**: Top-N 高匹配岗位拼成 HTML digest 发到你信箱
+- **LangGraph 多 Agent 编排**: `run-all` 由 orchestrator 串起采集、匹配、digest、趋势和验证节点
 - **市场趋势报告**: 主要 Player / 技术栈热度 / 薪资水位 / 给你的具体建议
 - **手动投递追踪**: 你在网站上自己投完之后跑 `mark-applied` 记录状态
 
@@ -74,7 +75,7 @@ python -m src.main trends --email         # 生成趋势报告并邮件发送
 **一键全流程** (不含投递):
 ```bash
 python -m src.main run-all
-# 流程: collect → match → digest 邮件 → 趋势报告邮件
+# 流程: context_agent → collection_agent → matching_agent → digest_agent → trend_agent → validation_agent
 ```
 
 **每天自动跑** (cron):
@@ -104,7 +105,47 @@ crontab -e
 | `mark-applied --job-id N` | 标记你手动投了 |
 | `digest` | 生成今日 HTML digest |
 | `trends [--email]` | 生成市场趋势报告 |
-| `run-all` | 一键 collect → match → digest 邮件 → 趋势邮件 |
+| `run-all` | 一键 LangGraph multi-agent workflow |
+
+---
+
+## Multi-Agent 架构
+
+`run-all` 使用 LangGraph 作为 orchestration layer. 每个 agent 是一个 graph node, 但底层继续复用已有模块, 避免重复实现 collectors、matcher、digest 和 trends.
+
+```mermaid
+flowchart TD
+    O[LangGraph Orchestrator] --> Ctx[Context Agent]
+    Ctx --> Collect[Collection Agent]
+    Collect --> Match[Matching Agent]
+    Match --> Digest{Need Digest?}
+    Digest -->|yes| D[Digest Agent]
+    Digest -->|no| Trend{Need Trends?}
+    D --> Trend
+    Trend -->|yes| T[Trend Agent]
+    Trend -->|no| V[Validation Agent]
+    T --> V
+    V --> Done[Done]
+
+    Collect --> Web[LinkedIn / Indeed / Glassdoor / Other Platforms]
+    Match --> LLM1[DeepSeek / Claude]
+    T --> LLM2[DeepSeek / Claude]
+    Collect --> DB[(SQLite Jobs)]
+    Match --> DB
+    T --> Outputs[(Reports)]
+    D --> Outputs
+```
+
+Agent responsibilities:
+
+| Agent | Responsibility | External access |
+|---|---|---|
+| `context_agent` | Loads active profile metadata and cached resume text | Local files + DB |
+| `collection_agent` | Calls platform collectors and writes raw job evidence | Web/platform collectors + DB |
+| `matching_agent` | Scores new jobs with the configured LLM role | LLM + DB |
+| `digest_agent` | Produces the daily digest email/report | DB + SMTP when configured |
+| `trend_agent` | Computes evidence-backed trend report and asks LLM for narrative | DB + LLM + SMTP when configured |
+| `validation_agent` | Checks expected artifacts and records known limitations | Local files |
 
 ---
 
@@ -152,6 +193,11 @@ job-agent/
 │   ├── auth.py              # 各平台登录 + cookie 保存
 │   ├── resume_reader.py
 │   ├── agent.py             # LLM 调用工厂 (Claude / DeepSeek 共用)
+│   ├── multiagent/          # LangGraph orchestration layer
+│   │   ├── graph.py         # graph topology + run entry
+│   │   ├── nodes.py         # individual agent node implementations
+│   │   ├── state.py         # shared graph state + run options
+│   │   └── types.py
 │   ├── matcher.py           # 6 维度评分 (tool_use 结构化输出)
 │   ├── tailor.py            # 简历定制
 │   ├── cover_letter.py      # 求职信生成 (复用 matcher 的 connector/fit_bullets)

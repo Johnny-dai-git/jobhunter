@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}运行状态 · JobHunter{% endblock %}
+{% block content %}
+<style>
+  .settings-shell { max-width: 980px; margin: 0 auto; }
+  .page-head { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:18px; }
+  .page-head h1 { margin:0 0 6px; font-size:24px; letter-spacing:0; }
+  .page-head p { margin:0; color:var(--color-text-muted); }
+  .metric-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; }
+  .metric { background:#f8fafc; border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:14px; }
+  .metric strong { display:block; font-size:22px; line-height:1; margin-bottom:6px; }
+  .metric span { color:var(--color-text-muted); font-size:12px; }
+  .kv { display:grid; grid-template-columns:130px 1fr; gap:8px 12px; font-size:13px; }
+  .kv div:nth-child(odd) { color:var(--color-text-muted); }
+  @media (max-width: 760px) { .metric-grid { grid-template-columns:1fr 1fr; } .kv { grid-template-columns:1fr; } }
+</style>
+
+<div class="settings-shell">
+  <div class="page-head">
+    <div>
+      <h1>运行状态</h1>
+      <p>查看当前任务、上次运行、健康检查和累计统计。</p>
+    </div>
+    <a href="/onboarding" class="btn btn-secondary btn-sm">回到画像</a>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div>
+        <h3 style="margin:0 0 8px;">Agent 状态</h3>
+        {% if agent_state == 'running' %}
+          <span class="badge badge-green">运行中</span>
+        {% elif agent_state == 'scheduled' %}
+          <span class="badge badge-indigo">已安排</span>
+        {% elif agent_state == 'idle' %}
+          <span class="badge badge-gray">空闲</span>
+        {% else %}
+          <span class="badge badge-red">未初始化</span>
+        {% endif %}
+      </div>
+      <div style="display:flex; gap:8px;">
+        {% if agent_state in ['running', 'scheduled'] %}
+        <form method="post" action="/agent/pause" style="margin:0;">
+          <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('暂停 Agent? 会取消正在跑的流水线并关闭定时任务。')">暂停</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/agent/delete" style="margin:0;">
+          <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);" onclick="return confirm('删除 Agent? 会关闭定时任务并清空当前画像，历史岗位数据保留。')">删除 Agent</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {% if cur_run %}
+  <div class="card">
+    <h3 style="margin-top:0;">当前运行</h3>
+    <div class="kv">
+      <div>已运行</div><div>{{ cur_elapsed }}</div>
+      <div>当前阶段</div><div>{{ cur_run.phase }}{% if cur_run.current_platform %} · {{ cur_run.current_platform }}{% endif %}</div>
+      <div>画像</div><div>{% if cur_run.profile_id %}#{{ cur_run.profile_id }} {{ cur_run.profile_label or '' }}{% else %}—{% endif %}</div>
+      <div>触发源</div><div>{{ cur_run.trigger }} · PID {{ cur_run.pid }}</div>
+    </div>
+    <div style="margin-top:12px;"><a href="/onboarding/processing" class="btn btn-primary btn-sm">查看详细进度</a></div>
+  </div>
+  {% endif %}
+
+  {% if last_run and not cur_run %}
+  <div class="card">
+    <h3 style="margin-top:0;">上次运行</h3>
+    <div class="kv">
+      <div>状态</div><div>{{ last_run.phase }}</div>
+      <div>结束时间</div><div>{{ last_run.ended_at[:19].replace('T',' ') if last_run.ended_at else '—' }}</div>
+      <div>用时</div><div>{% if last_run.duration_sec %}{{ last_run.duration_sec // 60 }}m {{ last_run.duration_sec % 60 }}s{% else %}—{% endif %}</div>
+      <div>画像</div><div>{% if last_run.profile_id %}#{{ last_run.profile_id }} {{ last_run.profile_label or '' }}{% else %}—{% endif %}</div>
+      {% if last_run.error %}<div>错误</div><div style="color:var(--color-danger); font-family:monospace;">{{ last_run.error[:240] }}</div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3 style="margin-top:0;">健康检查</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div class="metric">
+        <strong>{% if health.liveness in ['running', 'healthy'] %}正常{% else %}{{ health.liveness }}{% endif %}</strong>
+        <span>Liveness</span>
+      </div>
+      <div class="metric">
+        <strong>{% if health.readiness == 'ready' %}就绪{% else %}未就绪{% endif %}</strong>
+        <span>Readiness</span>
+      </div>
+    </div>
+    {% if health.issues_live or health.issues_ready %}
+      <ul style="margin:14px 0 0 18px; color:var(--color-text-muted);">
+        {% for issue in health.issues_live %}<li>{{ issue }}</li>{% endfor %}
+        {% for issue in health.issues_ready %}<li>{{ issue }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">任务计数</h3>
+    <div class="metric-grid">
+      <div class="metric"><strong>{{ lifetime.total_runs or 0 }}</strong><span>累计跑次</span></div>
+      <div class="metric"><strong>{{ counts.total_jobs }}</strong><span>岗位总数</span></div>
+      <div class="metric"><strong>{{ counts.high_match_jobs }}</strong><span>高分岗位</span></div>
+      <div class="metric"><strong>{{ counts.applied_jobs }}</strong><span>已投递</span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

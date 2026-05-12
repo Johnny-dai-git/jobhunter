@@ -10,7 +10,6 @@ from rich.console import Console
 from rich.table import Table
 from sqlalchemy import select
 
-from . import agent_state
 from .auth import login_and_save
 from .collect import collect_all, PLATFORMS
 from .config import Config
@@ -409,11 +408,12 @@ def web(host, port):
 @click.option("--no-digest", is_flag=True, help="跳过发 daily digest 邮件")
 @click.option("--no-trends", is_flag=True, help="跳过趋势报告邮件")
 def run_all(platform, no_collect, no_digest, no_trends):
-    """每日全流程: collect -> match -> digest -> trends. 都通过邮件发出. 不含 apply.
+    """每日全流程: LangGraph multi-agent orchestration. 不含 apply.
 
     适合 cron 触发. 你想投哪个就手动跑 'apply --job-id N',默认流程不投.
     """
     config = _load_config()
+    from .multiagent import JobAgentRunOptions, run_job_agent_graph
 
     # 拿当前画像 label
     from .profile_analyzer import get_current_profile_id
@@ -426,55 +426,25 @@ def run_all(platform, no_collect, no_digest, no_trends):
             if row:
                 label = row.label
 
-    # 写持久化 "current_run"
     trigger = "cron" if os.environ.get("JOBHUNTER_TRIGGER") == "cron" else "cli"
-    try:
-        agent_state.start_run(config, trigger=trigger, profile_id=profile_id, profile_label=label)
-    except Exception:
-        pass
+    plats = PLATFORMS if platform == "all" else [platform]
+    options = JobAgentRunOptions(
+        platforms=plats,
+        collect=not no_collect,
+        digest=not no_digest,
+        trends=not no_trends,
+        trigger=trigger,
+        profile_id=profile_id,
+        profile_label=label,
+    )
 
-    try:
-        if not no_collect:
-            plats = PLATFORMS if platform == "all" else [platform]
-            console.print("[bold]→ 采集...[/bold]")
-            try: agent_state.update_phase(config, "collecting")
-            except Exception: pass
+    console.print("[bold]→ 启动 LangGraph multi-agent workflow...[/bold]")
+    final_state = run_job_agent_graph(config, options)
+    for ev in final_state.get("events", []):
+        data = f" {ev.get('data')}" if ev.get("data") else ""
+        console.print(f"[dim]{ev.get('agent')}:[/dim] {ev.get('message')}{data}")
 
-            def _on_plat(name):
-                try: agent_state.set_platform(config, name)
-                except Exception: pass
-
-            stats = collect_all(config, plats, on_platform_start=_on_plat, profile_id=profile_id)
-            try:
-                agent_state.set_platform(config, None)
-                agent_state.update_phase(config, "collecting", stats={"collect": stats})
-            except Exception: pass
-
-        console.print("[bold]→ 评分 (6 维度)...[/bold]")
-        try: agent_state.update_phase(config, "matching")
-        except Exception: pass
-        resume_text = load_cached(config.path("resume_dir"))
-        results = score_pending(config, resume_text)
-        try: agent_state.update_phase(config, "matching", stats={"match": {"scored": len(results)}})
-        except Exception: pass
-
-        if not no_digest:
-            console.print("[bold]→ 发送 Top-N 岗位 digest 邮件...[/bold]")
-            run_digest(config)
-
-        if not no_trends:
-            console.print("[bold]→ 发送市场趋势报告邮件...[/bold]")
-            generate_trends_report(
-                config, days=30, min_score=50.0, formats=("md", "html"), send_email=True
-            )
-
-        console.print("[green bold]✓ 全流程完成 (未触发任何投递)[/green bold]")
-        try: agent_state.end_run(config, success=True, phase="done")
-        except Exception: pass
-    except Exception as e:
-        try: agent_state.end_run(config, success=False, phase="error", error=str(e))
-        except Exception: pass
-        raise
+    console.print("[green bold]✓ 全流程完成 (未触发任何投递)[/green bold]")
 
 
 @cli.command()
