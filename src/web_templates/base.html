@@ -363,17 +363,80 @@
       font-size: 14px;
     }
     .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+
+    /* ============ i18n ============ */
+    /* Default: Chinese visible, English hidden */
+    .en { display: none; }
+    /* When body has lang-en: flip */
+    body.lang-en .zh { display: none; }
+    body.lang-en .en { display: revert; }
+
+    /* Lang toggle pill */
+    .lang-toggle {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      padding: 2px;
+      gap: 2px;
+      cursor: pointer;
+      user-select: none;
+      margin-left: 12px;
+    }
+    .lang-toggle span {
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.55);
+      transition: all 0.18s;
+    }
+    .lang-toggle .active-lang {
+      background: white;
+      color: #1e293b;
+    }
   </style>
 </head>
 <body>
   <header>
     <a href="/onboarding" style="color:white; text-decoration:none;"><h1>🎯 JobHunter</h1></a>
-    <nav>
-      <a href="/onboarding">首页 / 画像</a>
-      <a href="/jobs">所有岗位</a>
-      <a href="/applied">已投递</a>
+    <nav style="display:flex; align-items:center;">
+      <a href="/onboarding"><span class="zh">首页</span><span class="en">Home</span></a>
+      <a href="/jobs"><span class="zh">所有岗位</span><span class="en">Jobs</span></a>
+      <a href="/applied"><span class="zh">已投递</span><span class="en">Applied</span></a>
+      <!-- Language Toggle -->
+      <button class="lang-toggle" id="langToggle" onclick="toggleLang()" title="切换语言 / Switch language">
+        <span id="zhLabel" class="active-lang">中</span>
+        <span id="enLabel">EN</span>
+      </button>
     </nav>
   </header>
+
+  <script>
+    (function() {
+      var saved = localStorage.getItem('jh_lang') || 'zh';
+      if (saved === 'en') {
+        document.body.classList.add('lang-en');
+        document.documentElement.lang = 'en';
+      }
+      function updateToggle() {
+        var isEn = document.body.classList.contains('lang-en');
+        var zh = document.getElementById('zhLabel');
+        var en = document.getElementById('enLabel');
+        if (!zh || !en) return;
+        zh.className = isEn ? '' : 'active-lang';
+        en.className = isEn ? 'active-lang' : '';
+      }
+      updateToggle();
+      window.toggleLang = function() {
+        var isEn = document.body.classList.toggle('lang-en');
+        document.documentElement.lang = isEn ? 'en' : 'zh-CN';
+        localStorage.setItem('jh_lang', isEn ? 'en' : 'zh');
+        updateToggle();
+      };
+    })();
+  </script>
   <main>
     {% block content %}{% endblock %}
   </main>

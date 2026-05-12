@@ -1,218 +1,78 @@
 {% extends "base.html" %}
-{% block title %}{{ '编辑画像' if profile else '新建画像' }} · JobHunter{% endblock %}
+{% block title %}{{ 'Edit Profile' if profile else 'New Profile' }} · JobHunter{% endblock %}
 {% block content %}
 <style>
   .profile-edit-wrap { max-width: 780px; margin: 0 auto; }
 
-  /* ── 页头 ── */
-  .pe-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 28px;
-  }
+  .pe-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
   .pe-head h1 { font-size: 22px; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.02em; }
   .pe-head p  { margin: 0; color: var(--color-text-muted); font-size: 13px; }
 
-  /* ── 步骤导航 ── */
-  .steps {
-    display: flex;
-    gap: 0;
-    margin-bottom: 28px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    background: white;
-  }
-  .step {
-    flex: 1;
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border-right: 1px solid var(--color-border);
-    cursor: pointer;
-    transition: background 0.1s;
-  }
+  .steps { display: flex; gap: 0; margin-bottom: 28px; border: 1px solid var(--color-border); border-radius: var(--radius); overflow: hidden; background: white; }
+  .step { flex: 1; padding: 12px 16px; display: flex; align-items: center; gap: 10px; border-right: 1px solid var(--color-border); transition: background 0.1s; }
   .step:last-child { border-right: none; }
   .step.active { background: var(--color-accent-light); }
-  .step-num {
-    width: 22px; height: 22px;
-    border-radius: 50%;
-    background: #e2e8f0;
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; background: #e2e8f0; color: #64748b; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .step.active .step-num { background: var(--color-accent); color: white; }
   .step.done .step-num { background: var(--color-success); color: white; }
   .step-label { font-size: 13px; font-weight: 600; color: var(--color-text-muted); }
   .step.active .step-label { color: var(--color-accent); }
   .step.done .step-label { color: var(--color-success); }
 
-  /* ── Section 卡片 ── */
-  .section-card {
-    background: white;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    padding: 24px;
-    margin-bottom: 16px;
-    box-shadow: var(--shadow-sm);
-  }
-  .section-title {
-    font-size: 15px;
-    font-weight: 700;
-    margin: 0 0 4px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  .section-card { background: white; border: 1px solid var(--color-border); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
+  .section-title { font-size: 15px; font-weight: 700; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
   .section-desc { font-size: 12px; color: var(--color-text-muted); margin: 0 0 18px; line-height: 1.5; }
 
-  /* ── Fields ── */
   .field { margin-bottom: 20px; }
   .field:last-child { margin-bottom: 0; }
   .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
   .field .hint { font-size: 12px; color: var(--color-text-muted); margin-bottom: 8px; line-height: 1.5; }
   textarea, input[type="text"], input[type="number"], select {
-    width: 100%; padding: 10px 13px;
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    font-family: inherit; font-size: 14px;
+    width: 100%; padding: 10px 13px; border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm); font-family: inherit; font-size: 14px;
     background: white; color: var(--color-text); line-height: 1.5;
   }
   textarea { min-height: 200px; resize: vertical; }
-  textarea:focus, input:focus, select:focus {
-    outline: none;
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 3px var(--color-accent-light);
-  }
-  input[type="file"] {
-    padding: 8px 12px;
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    width: 100%;
-    background: #f8fafc;
-  }
+  textarea:focus, input:focus, select:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-light); }
+  input[type="file"] { padding: 8px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); font-size: 13px; width: 100%; background: #f8fafc; }
 
-  /* ── 平台 Toggle 网格 ── */
-  .platform-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-  }
+  .platform-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .platform-toggle { position: relative; }
   .platform-toggle input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
   .platform-toggle label {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 8px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    background: #f8fafc;
-    transition: all 0.15s;
-    text-align: center;
-    user-select: none;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px;
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm); cursor: pointer;
+    font-size: 12px; font-weight: 600; color: var(--color-text-muted); background: #f8fafc;
+    transition: all 0.15s; text-align: center; user-select: none;
   }
-  .platform-toggle input:checked + label {
-    border-color: var(--color-accent);
-    background: var(--color-accent-light);
-    color: var(--color-accent);
-  }
+  .platform-toggle input:checked + label { border-color: var(--color-accent); background: var(--color-accent-light); color: var(--color-accent); }
   .platform-toggle label:hover { border-color: var(--color-border-strong); background: white; }
-  .platform-icon { font-size: 20px; }
   .platform-disabled label { opacity: 0.45; cursor: not-allowed; }
+  .platform-icon { font-size: 20px; }
 
-  /* ── 简历选择 ── */
   .resume-options { display: flex; flex-direction: column; gap: 8px; }
-  .resume-option {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: border-color 0.1s;
-  }
+  .resume-option { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); cursor: pointer; transition: border-color 0.1s; }
   .resume-option:has(input:checked) { border-color: var(--color-accent); background: var(--color-accent-light); }
   .resume-option input[type="radio"] { accent-color: var(--color-accent); }
   .ro-info { flex: 1; }
   .ro-name { font-size: 13px; font-weight: 600; }
   .ro-meta { font-size: 12px; color: var(--color-text-muted); }
 
-  /* ── 调度选择 ── */
   .schedule-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .sched-opt { position: relative; }
   .sched-opt input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
-  .sched-opt label {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 12px 8px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: center;
-    background: #f8fafc;
-    transition: all 0.15s;
-  }
-  .sched-opt input:checked + label {
-    border-color: var(--color-accent);
-    background: var(--color-accent-light);
-    color: var(--color-accent);
-  }
+  .sched-opt label { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); cursor: pointer; text-align: center; background: #f8fafc; transition: all 0.15s; }
+  .sched-opt input:checked + label { border-color: var(--color-accent); background: var(--color-accent-light); color: var(--color-accent); }
   .sched-opt label:hover { border-color: var(--color-border-strong); background: white; }
   .sched-label { font-size: 13px; font-weight: 700; }
   .sched-sub { font-size: 11px; color: var(--color-text-muted); }
   .sched-opt input:checked + label .sched-sub { color: inherit; opacity: 0.75; }
 
-  /* ── 底部操作栏 ── */
-  .action-bar {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    padding: 18px 24px;
-    background: white;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 32px;
-  }
+  .action-bar { display: flex; gap: 12px; align-items: center; padding: 18px 24px; background: white; border: 1px solid var(--color-border); border-radius: var(--radius); box-shadow: var(--shadow-sm); margin-bottom: 32px; }
   .action-bar .spacer { flex: 1; }
 
-  /* ── 通知 ── */
-  .notice {
-    background: var(--color-warn-light);
-    color: #713f12;
-    padding: 12px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    border-left: 3px solid var(--color-warn);
-    margin-bottom: 16px;
-  }
-  .notice-info {
-    background: var(--color-accent-light);
-    color: #3730a3;
-    padding: 12px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    border-left: 3px solid var(--color-accent);
-    margin-bottom: 16px;
-  }
+  .notice { background: var(--color-warn-light); color: #713f12; padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; border-left: 3px solid var(--color-warn); margin-bottom: 16px; }
+  .notice-info { background: var(--color-accent-light); color: #3730a3; padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; border-left: 3px solid var(--color-accent); margin-bottom: 16px; }
 
   @media (max-width: 640px) {
     .platform-grid { grid-template-columns: repeat(2, 1fr); }
@@ -226,42 +86,55 @@
   <!-- 页头 -->
   <div class="pe-head">
     <div>
-      <h1>{{ '✏️  编辑画像' if profile else '🎯  新建求职画像' }}</h1>
+      <h1>
+        {% if profile %}
+          ✏️ <span class="zh">编辑画像</span><span class="en">Edit Profile</span>
+        {% else %}
+          🎯 <span class="zh">新建求职画像</span><span class="en">New Job Profile</span>
+        {% endif %}
+      </h1>
       <p>
         {% if profile %}
-          修改目标描述、简历或设置，保存后可立即激活并运行。
+          <span class="zh">修改目标描述、简历或设置，保存后可立即激活并运行。</span>
+          <span class="en">Update your goal, resume, or settings. You can activate and run immediately after saving.</span>
         {% else %}
-          填写求职目标、选择简历和平台，每个画像独立保存自己的设置。
+          <span class="zh">填写求职目标、选择简历和平台，每个画像独立保存自己的设置。</span>
+          <span class="en">Set your job goal, pick a resume and platforms. Each profile saves its own settings.</span>
         {% endif %}
       </p>
     </div>
-    <a href="/onboarding" class="btn btn-secondary">← 返回控制台</a>
+    <a href="/onboarding" class="btn btn-secondary">
+      ← <span class="zh">返回控制台</span><span class="en">Back to Dashboard</span>
+    </a>
   </div>
 
   <!-- 步骤条 -->
   <div class="steps">
     <div class="step active">
       <div class="step-num">1</div>
-      <div class="step-label">求职目标</div>
+      <div class="step-label"><span class="zh">求职目标</span><span class="en">Job Goal</span></div>
     </div>
     <div class="step">
       <div class="step-num">2</div>
-      <div class="step-label">简历</div>
+      <div class="step-label"><span class="zh">简历</span><span class="en">Resume</span></div>
     </div>
     <div class="step">
       <div class="step-num">3</div>
-      <div class="step-label">平台</div>
+      <div class="step-label"><span class="zh">平台</span><span class="en">Platforms</span></div>
     </div>
     <div class="step">
       <div class="step-num">4</div>
-      <div class="step-label">自动化</div>
+      <div class="step-label"><span class="zh">自动化</span><span class="en">Automation</span></div>
     </div>
   </div>
 
   {% if pipeline_running %}
   <div class="notice">
-    当前有流水线在跑。保存新画像会先中断当前任务，再按新画像重新运行。
-    <a href="/onboarding/processing" style="color:var(--color-warn); margin-left:6px;">查看进度 →</a>
+    <span class="zh">当前有流水线在跑。保存新画像会先中断当前任务，再按新画像重新运行。</span>
+    <span class="en">A pipeline is currently running. Saving will cancel it and restart with the new profile.</span>
+    <a href="/onboarding/processing" style="color:var(--color-warn); margin-left:6px;">
+      <span class="zh">查看进度 →</span><span class="en">View progress →</span>
+    </a>
   </div>
   {% endif %}
 
@@ -270,29 +143,35 @@
 
     <!-- ① 求职目标 -->
     <div class="section-card">
-      <div class="section-title">🎯 求职目标描述</div>
-      <div class="section-desc">用自然语言描述你想找什么岗位、在哪、什么公司类型、签证状态等。不需要格式化，写清楚就行。</div>
+      <div class="section-title">
+        🎯 <span class="zh">求职目标描述</span><span class="en">Job Goal Description</span>
+      </div>
+      <div class="section-desc">
+        <span class="zh">用自然语言描述你想找什么岗位、在哪、什么公司类型、签证状态等。不需要格式化，写清楚就行。</span>
+        <span class="en">Describe in plain language what role you want, where, what kind of company, visa status, etc. No formatting needed.</span>
+      </div>
       <div class="field">
         <textarea name="description" required
-          placeholder="例如：我是 AI 基础设施方向的 PhD 候选人，研究经历包括分布式训练、模型服务、系统观测和性能优化。
-
-希望找美国湾区或西雅图的 ML Engineer / ML Infrastructure Engineer 岗位。优先 AI 公司或高成长 startup。Remote 或 Hybrid 优先。OPT/CPT 可工作，不需要 H1B 担保。
-
-排除 management / PM / postdoc / intern 方向。薪资期望 $140k+。">{{ existing_desc or (profile.user_description if profile else '') }}</textarea>
+          placeholder="e.g. I'm a PhD candidate in AI infrastructure (distributed training, model serving, eBPF). Looking for ML Engineer / ML Infra roles in the US (Bay Area or Seattle). Prefer AI startups or infra teams. OPT available, no H1B sponsorship needed. Salary target $140k+. Exclude intern / PM / postdoc.">{{ existing_desc or (profile.user_description if profile else '') }}</textarea>
       </div>
     </div>
 
     <!-- ② 简历 -->
     <div class="section-card">
-      <div class="section-title">📄 简历</div>
+      <div class="section-title">
+        📄 <span class="zh">简历</span><span class="en">Resume</span>
+      </div>
       <div class="section-desc">
-        选择简历库中已有的简历，或上传新文件。每个画像绑定一份简历，可随时换。
-        <a href="/onboarding/resumes" target="_blank" style="color:var(--color-accent); margin-left:4px;">管理简历库 →</a>
+        <span class="zh">选择简历库中已有的简历，或上传新文件。每个画像绑定一份简历，可随时更换。</span>
+        <span class="en">Pick an existing resume from the library, or upload a new file. Each profile binds one resume.</span>
+        <a href="/onboarding/resumes" target="_blank" style="color:var(--color-accent); margin-left:4px;">
+          <span class="zh">管理简历库 →</span><span class="en">Manage library →</span>
+        </a>
       </div>
 
       {% if resume_files %}
         <div class="field">
-          <label>选择已有简历</label>
+          <label><span class="zh">选择已有简历</span><span class="en">Select existing resume</span></label>
           <div class="resume-options">
             {% for r in resume_files %}
               {% if not r.paused %}
@@ -301,7 +180,7 @@
                   {{ 'checked' if (profile and profile.resume_filename == r.filename) or (loop.first and not profile) }}>
                 <div class="ro-info">
                   <div class="ro-name">{{ r.filename }}</div>
-                  <div class="ro-meta">{{ r.size_kb }} KB · 修改于 {{ r.modified }}</div>
+                  <div class="ro-meta">{{ r.size_kb }} KB · {{ r.modified }}</div>
                 </div>
               </label>
               {% endif %}
@@ -309,18 +188,21 @@
             <label class="resume-option">
               <input type="radio" name="resume_select" value="__upload__">
               <div class="ro-info">
-                <div class="ro-name">上传新简历</div>
-                <div class="ro-meta">将自动加入简历库</div>
+                <div class="ro-name"><span class="zh">上传新简历</span><span class="en">Upload new resume</span></div>
+                <div class="ro-meta"><span class="zh">将自动加入简历库</span><span class="en">Will be added to the library</span></div>
               </div>
             </label>
           </div>
         </div>
         <div class="field" id="upload-field" style="display:none;">
-          <label>选择文件</label>
+          <label><span class="zh">选择文件</span><span class="en">Choose file</span></label>
           <input type="file" name="resume" accept=".pdf,.docx,.md,.txt">
         </div>
       {% else %}
-        <div class="notice-info">简历库为空，请上传第一份简历。支持格式：{{ supported_exts }}</div>
+        <div class="notice-info">
+          <span class="zh">简历库为空，请上传第一份简历。支持格式：{{ supported_exts }}</span>
+          <span class="en">No resumes yet. Please upload your first resume. Supported: {{ supported_exts }}</span>
+        </div>
         <div class="field">
           <input type="file" name="resume" accept=".pdf,.docx,.md,.txt" required>
         </div>
@@ -329,8 +211,13 @@
 
     <!-- ③ 平台 -->
     <div class="section-card">
-      <div class="section-title">🌐 采集平台</div>
-      <div class="section-desc">选择要从哪些平台抓取岗位。已禁用的平台（灰色）在 config.yaml 中关闭，需要手动开启。</div>
+      <div class="section-title">
+        🌐 <span class="zh">采集平台</span><span class="en">Collection Platforms</span>
+      </div>
+      <div class="section-desc">
+        <span class="zh">选择要从哪些平台抓取岗位。灰色平台在 config.yaml 中已禁用，需要手动开启。</span>
+        <span class="en">Choose which platforms to collect jobs from. Grayed-out platforms are disabled in config.yaml.</span>
+      </div>
       <div class="platform-grid">
         {% set enabled_plats = profile.enabled_platforms_list if profile and profile.enabled_platforms else default_platforms %}
         {% for plat in all_platforms %}
@@ -342,7 +229,9 @@
           <label for="plat-{{ plat.id }}">
             <span class="platform-icon">{{ plat.icon }}</span>
             {{ plat.label }}
-            {% if not plat.available %}<br><small style="font-size:10px;">(禁用)</small>{% endif %}
+            {% if not plat.available %}
+              <br><small style="font-size:10px;">(<span class="zh">禁用</span><span class="en">off</span>)</small>
+            {% endif %}
           </label>
         </div>
         {% endfor %}
@@ -351,42 +240,45 @@
 
     <!-- ④ 自动化 -->
     <div class="section-card">
-      <div class="section-title">⏰ 自动化设置</div>
-      <div class="section-desc">设置这个画像专属的运行频率。激活画像后，系统会按此节奏自动采集和评分。</div>
+      <div class="section-title">
+        ⏰ <span class="zh">自动化设置</span><span class="en">Automation</span>
+      </div>
+      <div class="section-desc">
+        <span class="zh">设置这个画像专属的运行频率。激活画像后，系统会按此节奏自动采集和评分。</span>
+        <span class="en">Set the run frequency for this profile. Once activated, the system will collect and score on this schedule.</span>
+      </div>
       <div class="field">
-        <label>运行频率</label>
+        <label><span class="zh">运行频率</span><span class="en">Run Frequency</span></label>
         <div class="schedule-options">
           {% set cur_hours = profile.schedule_hours if profile and profile.schedule_hours is not none else 24 %}
           <div class="sched-opt">
-            <input type="radio" name="schedule_hours" value="0" id="sched-0"
-              {{ 'checked' if cur_hours == 0 }}>
+            <input type="radio" name="schedule_hours" value="0" id="sched-0" {{ 'checked' if cur_hours == 0 }}>
             <label for="sched-0">
-              <span class="sched-label">手动</span>
-              <span class="sched-sub">只在你手动触发时跑</span>
+              <span class="sched-label"><span class="zh">手动</span><span class="en">Manual</span></span>
+              <span class="sched-sub"><span class="zh">只在你手动触发时跑</span><span class="en">Only when you trigger it</span></span>
             </label>
           </div>
           <div class="sched-opt">
-            <input type="radio" name="schedule_hours" value="12" id="sched-12"
-              {{ 'checked' if cur_hours == 12 }}>
+            <input type="radio" name="schedule_hours" value="12" id="sched-12" {{ 'checked' if cur_hours == 12 }}>
             <label for="sched-12">
-              <span class="sched-label">每 12h</span>
-              <span class="sched-sub">每天早晚各一次</span>
+              <span class="sched-label"><span class="zh">每 12h</span><span class="en">Every 12h</span></span>
+              <span class="sched-sub"><span class="zh">每天早晚各一次</span><span class="en">Twice a day</span></span>
             </label>
           </div>
           <div class="sched-opt">
-            <input type="radio" name="schedule_hours" value="24" id="sched-24"
-              {{ 'checked' if cur_hours == 24 or (not profile) }}>
+            <input type="radio" name="schedule_hours" value="24" id="sched-24" {{ 'checked' if cur_hours == 24 or (not profile) }}>
             <label for="sched-24">
-              <span class="sched-label">每 24h</span>
-              <span class="sched-sub">每天一次（推荐）</span>
+              <span class="sched-label"><span class="zh">每 24h</span><span class="en">Every 24h</span></span>
+              <span class="sched-sub">
+                <span class="zh">每天一次（推荐）</span><span class="en">Once a day (recommended)</span>
+              </span>
             </label>
           </div>
           <div class="sched-opt">
-            <input type="radio" name="schedule_hours" value="48" id="sched-48"
-              {{ 'checked' if cur_hours == 48 }}>
+            <input type="radio" name="schedule_hours" value="48" id="sched-48" {{ 'checked' if cur_hours == 48 }}>
             <label for="sched-48">
-              <span class="sched-label">每 48h</span>
-              <span class="sched-sub">每两天一次</span>
+              <span class="sched-label"><span class="zh">每 48h</span><span class="en">Every 48h</span></span>
+              <span class="sched-sub"><span class="zh">每两天一次</span><span class="en">Every two days</span></span>
             </label>
           </div>
         </div>
@@ -395,33 +287,41 @@
 
     <!-- 操作栏 -->
     <div class="action-bar">
-      <a href="/onboarding" class="btn btn-secondary">取消</a>
+      <a href="/onboarding" class="btn btn-secondary">
+        <span class="zh">取消</span><span class="en">Cancel</span>
+      </a>
       <div class="spacer"></div>
       {% if profile %}
-        <button type="submit" name="action" value="save" class="btn btn-secondary">仅保存</button>
-        <button type="submit" name="action" value="save_and_run" class="btn btn-primary">保存并立即运行 →</button>
+        <button type="submit" name="action" value="save" class="btn btn-secondary">
+          <span class="zh">仅保存</span><span class="en">Save only</span>
+        </button>
+        <button type="submit" name="action" value="save_and_run" class="btn btn-primary">
+          <span class="zh">保存并立即运行 →</span><span class="en">Save & Run now →</span>
+        </button>
       {% else %}
-        <button type="submit" name="action" value="save" class="btn btn-secondary">创建画像（不运行）</button>
-        <button type="submit" name="action" value="save_and_run" class="btn btn-primary">创建并立即运行 →</button>
+        <button type="submit" name="action" value="save" class="btn btn-secondary">
+          <span class="zh">创建画像（不运行）</span><span class="en">Create (don't run)</span>
+        </button>
+        <button type="submit" name="action" value="save_and_run" class="btn btn-primary">
+          <span class="zh">创建并立即运行 →</span><span class="en">Create & Run now →</span>
+        </button>
       {% endif %}
     </div>
   </form>
 </div>
 
 <script>
-  // 切换上传区
+  // 上传区显示控制
   const radios = document.querySelectorAll('input[name="resume_select"]');
   const uploadField = document.getElementById('upload-field');
   function updateUploadVisibility() {
     const selected = document.querySelector('input[name="resume_select"]:checked');
-    if (uploadField) {
-      uploadField.style.display = selected && selected.value === '__upload__' ? 'block' : 'none';
-    }
+    if (uploadField) uploadField.style.display = (selected && selected.value === '__upload__') ? 'block' : 'none';
   }
   radios.forEach(r => r.addEventListener('change', updateUploadVisibility));
   updateUploadVisibility();
 
-  // 步骤条高亮（随滚动更新）
+  // 步骤条随滚动高亮
   const sections = document.querySelectorAll('.section-card');
   const steps = document.querySelectorAll('.step');
   const observer = new IntersectionObserver(entries => {

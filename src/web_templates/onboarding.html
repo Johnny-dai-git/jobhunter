@@ -1,15 +1,12 @@
 {% extends "base.html" %}
-{% block title %}控制台 · JobHunter{% endblock %}
+{% block title %}{% if has_profile %}<span class="zh">控制台</span><span class="en">Dashboard</span>{% else %}JobHunter{% endif %} · JobHunter{% endblock %}
 {% block content %}
 <style>
   .hub-wrap { max-width: 980px; margin: 0 auto; }
-
-  /* ── 页头 ── */
   .hub-head { margin-bottom: 28px; }
   .hub-head h1 { font-size: 24px; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.02em; }
   .hub-head p  { margin: 0; color: var(--color-text-muted); font-size: 14px; }
 
-  /* ── 当前画像 Banner ── */
   .profile-banner {
     background: linear-gradient(135deg, #1e293b 0%, #312e81 100%);
     border-radius: var(--radius);
@@ -22,118 +19,59 @@
     margin-bottom: 24px;
     box-shadow: var(--shadow-md);
   }
-  .profile-banner.no-profile {
-    background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
-  }
+  .profile-banner.no-profile { background: linear-gradient(135deg, #374151 0%, #1f2937 100%); }
   .pb-left { flex: 1; min-width: 0; }
   .pb-tag {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    background: rgba(255,255,255,0.15);
-    padding: 3px 8px;
-    border-radius: 4px;
-    margin-bottom: 8px;
+    display: inline-block; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    background: rgba(255,255,255,0.15); padding: 3px 8px; border-radius: 4px; margin-bottom: 8px;
   }
-  .pb-name {
-    font-size: 20px;
-    font-weight: 700;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 6px;
-  }
+  .pb-name { font-size: 20px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
   .pb-meta { font-size: 12px; opacity: 0.7; display: flex; gap: 16px; flex-wrap: wrap; }
   .pb-actions { display: flex; gap: 10px; flex-shrink: 0; }
   .btn-ghost {
-    background: rgba(255,255,255,0.12);
-    border: 1px solid rgba(255,255,255,0.2);
-    color: white;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    transition: background 0.15s;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+    color: white; padding: 8px 16px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; transition: background 0.15s;
   }
   .btn-ghost:hover { background: rgba(255,255,255,0.22); }
   .btn-ghost-primary {
-    background: #4f46e5;
-    border: 1px solid #4338ca;
-    color: white;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    transition: background 0.15s;
+    background: #4f46e5; border: 1px solid #4338ca; color: white; padding: 8px 16px;
+    border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+    cursor: pointer; text-decoration: none; transition: background 0.15s;
   }
   .btn-ghost-primary:hover { background: #4338ca; }
 
-  /* ── 统计行 ── */
   .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-  .stat-card {
-    background: white;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 16px 18px;
-    box-shadow: var(--shadow-sm);
-  }
+  .stat-card { background: white; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 16px 18px; box-shadow: var(--shadow-sm); }
   .stat-card strong { display: block; font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 4px; color: var(--color-accent); }
   .stat-card span { font-size: 12px; color: var(--color-text-muted); }
 
-  /* ── 模块网格 ── */
   .module-title { font-size: 13px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 12px; }
   .module-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
   .module-card {
-    background: white;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    padding: 20px;
-    text-decoration: none;
-    color: inherit;
-    box-shadow: var(--shadow-sm);
+    background: white; border: 1px solid var(--color-border); border-radius: var(--radius);
+    padding: 20px; text-decoration: none; color: inherit; box-shadow: var(--shadow-sm);
     transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: flex; flex-direction: column; gap: 8px;
   }
   .module-card:hover { box-shadow: var(--shadow-md); border-color: var(--color-border-strong); transform: translateY(-1px); }
   .module-icon { font-size: 24px; }
   .module-name { font-size: 15px; font-weight: 700; }
   .module-desc { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; }
-  .module-badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 4px;
-    margin-top: 4px;
-    align-self: flex-start;
-  }
+  .module-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-top: 4px; align-self: flex-start; }
   .badge-green  { background: var(--color-success-light); color: #15803d; }
   .badge-yellow { background: var(--color-warn-light); color: #92400e; }
   .badge-gray   { background: #f1f5f9; color: #475569; }
   .badge-blue   { background: #eff6ff; color: #1d4ed8; }
   .badge-red    { background: var(--color-danger-light); color: #b91c1c; }
 
-  /* ── 历史画像列表 ── */
   .profiles-section { margin-bottom: 28px; }
   .profile-list { display: flex; flex-direction: column; gap: 10px; }
   .profile-row {
-    background: white;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 14px 18px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    box-shadow: var(--shadow-sm);
-    transition: box-shadow 0.15s;
+    background: white; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    padding: 14px 18px; display: flex; align-items: center; gap: 16px;
+    box-shadow: var(--shadow-sm); transition: box-shadow 0.15s;
   }
   .profile-row:hover { box-shadow: var(--shadow); border-color: var(--color-border-strong); }
   .profile-row.active { border-left: 3px solid var(--color-accent); padding-left: 15px; }
@@ -144,14 +82,9 @@
   .pr-meta { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
   .pr-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
-  /* ── 空态 ── */
   .empty-state {
-    text-align: center;
-    padding: 48px 24px;
-    color: var(--color-text-muted);
-    background: white;
-    border: 1px dashed var(--color-border-strong);
-    border-radius: var(--radius);
+    text-align: center; padding: 48px 24px; color: var(--color-text-muted);
+    background: white; border: 1px dashed var(--color-border-strong); border-radius: var(--radius);
   }
   .empty-state h2 { font-size: 18px; color: var(--color-text); margin: 12px 0 8px; }
   .empty-icon { font-size: 40px; }
@@ -163,16 +96,17 @@
   }
   @media (max-width: 480px) {
     .module-grid { grid-template-columns: 1fr; }
-    .stat-row { grid-template-columns: 1fr 1fr; }
   }
 </style>
 
 <div class="hub-wrap">
 
-  <!-- 页头 -->
   <div class="hub-head">
-    <h1>JobHunter 控制台</h1>
-    <p>管理你的求职画像、简历、平台采集和自动化设置。</p>
+    <h1><span class="zh">JobHunter 控制台</span><span class="en">JobHunter Dashboard</span></h1>
+    <p>
+      <span class="zh">管理你的求职画像、简历、平台采集和自动化设置。</span>
+      <span class="en">Manage your job profiles, resumes, platform collectors, and automation.</span>
+    </p>
   </div>
 
   <!-- 当前画像 Banner -->
@@ -180,39 +114,55 @@
     {% set cur_profile = profiles | selectattr("is_current") | list | first %}
     <div class="profile-banner">
       <div class="pb-left">
-        <div class="pb-tag">当前激活画像</div>
-        <div class="pb-name">{{ cur_profile.label if cur_profile else '未知' }}</div>
+        <div class="pb-tag">
+          <span class="zh">当前激活画像</span><span class="en">Active Profile</span>
+        </div>
+        <div class="pb-name">{{ cur_profile.label if cur_profile else '—' }}</div>
         <div class="pb-meta">
           {% if cur_profile %}
-            <span>📄 {{ cur_profile.resume_filename or '未绑定简历' }}</span>
+            <span>📄 {{ cur_profile.resume_filename or '—' }}</span>
             <span>📅 {{ cur_profile.created_at[:10] if cur_profile.created_at else '' }}</span>
             {% if cur_profile.schedule_hours and cur_profile.schedule_hours > 0 %}
-              <span>⏰ 每 {{ cur_profile.schedule_hours }}h 自动跑</span>
+              <span>⏰ <span class="zh">每 {{ cur_profile.schedule_hours }}h 自动跑</span><span class="en">every {{ cur_profile.schedule_hours }}h</span></span>
             {% else %}
-              <span>⏰ 手动触发</span>
+              <span>⏰ <span class="zh">手动触发</span><span class="en">Manual</span></span>
             {% endif %}
           {% endif %}
         </div>
       </div>
       <div class="pb-actions">
         {% if cur_run %}
-          <a href="/onboarding/processing" class="btn-ghost">查看进度</a>
+          <a href="/onboarding/processing" class="btn-ghost">
+            <span class="zh">查看进度</span><span class="en">View Progress</span>
+          </a>
         {% endif %}
         {% if cur_profile %}
-          <a href="/onboarding/profile/{{ cur_profile.id }}" class="btn-ghost">编辑画像</a>
+          <a href="/onboarding/profile/{{ cur_profile.id }}" class="btn-ghost">
+            <span class="zh">编辑画像</span><span class="en">Edit Profile</span>
+          </a>
         {% endif %}
-        <a href="/onboarding/profile/new" class="btn-ghost-primary">+ 新建画像</a>
+        <a href="/onboarding/profile/new" class="btn-ghost-primary">
+          + <span class="zh">新建画像</span><span class="en">New Profile</span>
+        </a>
       </div>
     </div>
   {% else %}
     <div class="profile-banner no-profile">
       <div class="pb-left">
-        <div class="pb-tag">还没有画像</div>
-        <div class="pb-name">先创建一个求职画像开始</div>
-        <div class="pb-meta"><span>填写目标描述 + 上传简历 + 选择平台</span></div>
+        <div class="pb-tag"><span class="zh">还没有画像</span><span class="en">No profile yet</span></div>
+        <div class="pb-name">
+          <span class="zh">先创建一个求职画像开始</span>
+          <span class="en">Create your first job profile to get started</span>
+        </div>
+        <div class="pb-meta">
+          <span class="zh">填写目标描述 + 上传简历 + 选择平台</span>
+          <span class="en">Add a description, upload a resume, and pick platforms</span>
+        </div>
       </div>
       <div class="pb-actions">
-        <a href="/onboarding/profile/new" class="btn-ghost-primary">+ 创建第一个画像</a>
+        <a href="/onboarding/profile/new" class="btn-ghost-primary">
+          + <span class="zh">创建第一个画像</span><span class="en">Create First Profile</span>
+        </a>
       </div>
     </div>
   {% endif %}
@@ -221,68 +171,89 @@
   <div class="stat-row">
     <div class="stat-card">
       <strong>{{ counts.total_jobs }}</strong>
-      <span>岗位总数</span>
+      <span><span class="zh">岗位总数</span><span class="en">Total Jobs</span></span>
     </div>
     <div class="stat-card">
       <strong>{{ counts.high_match_jobs }}</strong>
-      <span>高分岗位 (≥70)</span>
+      <span><span class="zh">高分岗位 (≥70)</span><span class="en">High-Match (≥70)</span></span>
     </div>
     <div class="stat-card">
       <strong>{{ counts.applied_jobs }}</strong>
-      <span>已投递</span>
+      <span><span class="zh">已投递</span><span class="en">Applied</span></span>
     </div>
     <div class="stat-card">
       <strong>{{ lifetime.total_runs or 0 }}</strong>
-      <span>累计运行次数</span>
+      <span><span class="zh">累计运行次数</span><span class="en">Total Runs</span></span>
     </div>
   </div>
 
   <!-- 功能模块 -->
-  <p class="module-title">功能模块</p>
+  <p class="module-title"><span class="zh">功能模块</span><span class="en">Modules</span></p>
   <div class="module-grid">
     <a class="module-card" href="/onboarding/resumes">
       <div class="module-icon">📄</div>
-      <div class="module-name">简历库</div>
-      <div class="module-desc">上传、激活、暂停或删除简历。每个画像可独立绑定一份简历，随时更换。</div>
+      <div class="module-name"><span class="zh">简历库</span><span class="en">Resume Library</span></div>
+      <div class="module-desc">
+        <span class="zh">上传、激活、暂停或删除简历。每个画像可独立绑定一份简历，随时更换。</span>
+        <span class="en">Upload, activate, pause, or delete resumes. Each profile binds its own resume.</span>
+      </div>
       {% if resume_files %}
-        <span class="module-badge badge-green">{{ resume_files | length }} 份简历</span>
+        <span class="module-badge badge-green">
+          {{ resume_files | length }} <span class="zh">份简历</span><span class="en">resume(s)</span>
+        </span>
       {% else %}
-        <span class="module-badge badge-yellow">未上传简历</span>
+        <span class="module-badge badge-yellow">
+          <span class="zh">未上传简历</span><span class="en">No resume uploaded</span>
+        </span>
       {% endif %}
     </a>
 
     <a class="module-card" href="/onboarding/status">
       <div class="module-icon">📊</div>
-      <div class="module-name">运行状态</div>
-      <div class="module-desc">查看当前任务进度、上次运行结果和健康检查报告。</div>
+      <div class="module-name"><span class="zh">运行状态</span><span class="en">Run Status</span></div>
+      <div class="module-desc">
+        <span class="zh">查看当前任务进度、上次运行结果和健康检查报告。</span>
+        <span class="en">View current task progress, last run result, and health checks.</span>
+      </div>
       {% if agent_state == 'running' %}
-        <span class="module-badge badge-green">运行中</span>
+        <span class="module-badge badge-green"><span class="zh">运行中</span><span class="en">Running</span></span>
       {% elif agent_state == 'scheduled' %}
-        <span class="module-badge badge-blue">已安排</span>
+        <span class="module-badge badge-blue"><span class="zh">已安排</span><span class="en">Scheduled</span></span>
       {% elif agent_state == 'idle' %}
-        <span class="module-badge badge-gray">空闲</span>
+        <span class="module-badge badge-gray"><span class="zh">空闲</span><span class="en">Idle</span></span>
       {% else %}
-        <span class="module-badge badge-red">未初始化</span>
+        <span class="module-badge badge-red"><span class="zh">未初始化</span><span class="en">Not initialized</span></span>
       {% endif %}
     </a>
 
     <a class="module-card" href="/jobs">
       <div class="module-icon">🔍</div>
-      <div class="module-name">岗位列表</div>
-      <div class="module-desc">浏览采集到的岗位，按匹配分筛选，查看详情并生成定制简历和求职信。</div>
+      <div class="module-name"><span class="zh">岗位列表</span><span class="en">Job Listings</span></div>
+      <div class="module-desc">
+        <span class="zh">浏览采集到的岗位，按匹配分筛选，查看详情并生成定制材料。</span>
+        <span class="en">Browse collected jobs, filter by match score, and generate tailored materials.</span>
+      </div>
       {% if counts.high_match_jobs > 0 %}
-        <span class="module-badge badge-green">{{ counts.high_match_jobs }} 个高分岗位</span>
+        <span class="module-badge badge-green">
+          {{ counts.high_match_jobs }} <span class="zh">个高分岗位</span><span class="en">high-match job(s)</span>
+        </span>
       {% else %}
-        <span class="module-badge badge-gray">暂无高分岗位</span>
+        <span class="module-badge badge-gray">
+          <span class="zh">暂无高分岗位</span><span class="en">No high-match jobs yet</span>
+        </span>
       {% endif %}
     </a>
   </div>
 
-  <!-- 历史画像 -->
+  <!-- 所有画像 -->
   <div class="profiles-section">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <p class="module-title" style="margin:0;">所有画像</p>
-      <a href="/onboarding/profile/new" class="btn btn-primary btn-sm">+ 新建画像</a>
+      <p class="module-title" style="margin:0;">
+        <span class="zh">所有画像</span><span class="en">All Profiles</span>
+      </p>
+      <a href="/onboarding/profile/new" class="btn btn-primary btn-sm">
+        + <span class="zh">新建画像</span><span class="en">New Profile</span>
+      </a>
     </div>
 
     {% if profiles %}
@@ -295,17 +266,29 @@
             <div class="pr-meta">
               {{ p.created_at[:10] if p.created_at else '' }}
               {% if p.resume_filename %} · 📄 {{ p.resume_filename }}{% endif %}
-              {% if p.schedule_hours and p.schedule_hours > 0 %} · ⏰ 每 {{ p.schedule_hours }}h{% else %} · 手动{% endif %}
-              {% if p.is_current %} · <strong style="color:var(--color-accent);">当前激活</strong>{% endif %}
+              {% if p.schedule_hours and p.schedule_hours > 0 %}
+                · ⏰ <span class="zh">每 {{ p.schedule_hours }}h</span><span class="en">every {{ p.schedule_hours }}h</span>
+              {% else %}
+                · <span class="zh">手动</span><span class="en">Manual</span>
+              {% endif %}
+              {% if p.is_current %}
+                · <strong style="color:var(--color-accent);">
+                    <span class="zh">当前激活</span><span class="en">Active</span>
+                  </strong>
+              {% endif %}
             </div>
           </div>
           <div class="pr-actions">
             {% if not p.is_current %}
               <form method="post" action="/onboarding/profile/{{ p.id }}/activate" style="margin:0;">
-                <button type="submit" class="btn btn-secondary btn-sm">激活</button>
+                <button type="submit" class="btn btn-secondary btn-sm">
+                  <span class="zh">激活</span><span class="en">Activate</span>
+                </button>
               </form>
             {% endif %}
-            <a href="/onboarding/profile/{{ p.id }}" class="btn btn-secondary btn-sm">编辑</a>
+            <a href="/onboarding/profile/{{ p.id }}" class="btn btn-secondary btn-sm">
+              <span class="zh">编辑</span><span class="en">Edit</span>
+            </a>
           </div>
         </div>
         {% endfor %}
@@ -313,9 +296,14 @@
     {% else %}
       <div class="empty-state">
         <div class="empty-icon">🎯</div>
-        <h2>还没有求职画像</h2>
-        <p>创建第一个画像，设置你的目标岗位描述和搜索偏好。</p>
-        <a href="/onboarding/profile/new" class="btn btn-primary" style="margin-top:16px; display:inline-block;">创建画像</a>
+        <h2><span class="zh">还没有求职画像</span><span class="en">No profiles yet</span></h2>
+        <p>
+          <span class="zh">创建第一个画像，设置你的目标岗位描述和搜索偏好。</span>
+          <span class="en">Create your first profile with a job goal description and search preferences.</span>
+        </p>
+        <a href="/onboarding/profile/new" class="btn btn-primary" style="margin-top:16px; display:inline-block;">
+          <span class="zh">创建画像</span><span class="en">Create Profile</span>
+        </a>
       </div>
     {% endif %}
   </div>
