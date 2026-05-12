@@ -26,7 +26,7 @@ Actor input schema (https://apify.com/harvestapi/linkedin-job-search):
     locations:       List[str]    地点列表
     sortBy:          "relevance" | "date"
     workplaceType:   List["Remote"|"Hybrid"|"On-site"]
-    employmentType:  List["Full-time"|"Part-time"|"Contract"|...]
+    employmentType:  List["full-time"|"part-time"|"contract"|"internship"|"temporary"]
     experienceLevel: List["Entry Level"|"Mid Level"|"Senior Level"]
     postedLimit:     "1h"|"24h"|"week"|"month"
     maxItems:        int     这次搜索最多返回多少条
@@ -78,21 +78,21 @@ class LinkedInApifyCollector(ApifyCollector):
         raw = getattr(self, "_job_types_override", None) \
               or self.config.preferences.get("job_types") \
               or ["Full-time"]
-        # 标准化映射
+        # 标准化映射 — harvestapi 要求全小写
         mapping = {
-            "full-time": "Full-time",
-            "full_time": "Full-time",
-            "fulltime": "Full-time",
-            "part-time": "Part-time",
-            "part_time": "Part-time",
-            "parttime": "Part-time",
-            "contract": "Contract",
-            "internship": "Internship",
-            "intern": "Internship",
-            "temporary": "Temporary",
-            "temp": "Temporary",
-            "volunteer": "Volunteer",
-            "other": "Other",
+            "full-time": "full-time",
+            "full_time": "full-time",
+            "fulltime":  "full-time",
+            "part-time": "part-time",
+            "part_time": "part-time",
+            "parttime":  "part-time",
+            "contract":  "contract",
+            "internship":"internship",
+            "intern":    "internship",
+            "temporary": "temporary",
+            "temp":      "temporary",
+            "volunteer": "volunteer",
+            "other":     "other",
         }
         result = []
         for t in raw:
