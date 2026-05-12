@@ -82,12 +82,30 @@ def _chat_path(config: Config, job_id: int) -> Path:
     return outputs_dir / f"{job_id:03d}_chat.json"
 
 
+def _migrate_message(msg: dict) -> dict:
+    """兼容旧格式: 旧版 user message 里嵌入了完整简历，新版只存用户原始请求。
+    检测方式: user content 里有 '---\n当前简历' 分隔符 → 截取分隔符前的部分。
+    """
+    if msg.get("role") == "user":
+        content = msg.get("content", "")
+        sep = "---\n当前简历"
+        if sep in content:
+            return {"role": "user", "content": content.split(sep)[0].strip()}
+    return msg
+
+
 def load_chat_history(config: Config, job_id: int) -> list[dict]:
     path = _chat_path(config, job_id)
     if not path.exists():
         return []
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        # 兼容旧格式：剥离 user message 中嵌入的简历全文
+        migrated = [_migrate_message(m) for m in raw]
+        # 如果有变化，原地回写，避免下次再做迁移
+        if migrated != raw:
+            path.write_text(json.dumps(migrated, ensure_ascii=False, indent=2), encoding="utf-8")
+        return migrated
     except Exception:
         return []
 
@@ -149,7 +167,8 @@ def save_revision(config: Config, job_id: int, md_content: str, note: str = "") 
         )
         session.add(rev)
         session.commit()
-        session.expunge(rev)
+        session.refresh(rev)   # commit 后 expire，refresh 重新加载 id/version_num 等字段
+        session.expunge(rev)   # 再 detach，外面访问属性才安全
         return rev
 
 
@@ -218,15 +237,29 @@ def chat_refine(
     if not current_resume:
         raise ValueError("还没有生成定制简历，请先点击「生成定制简历」")
 
-    # 加载对话历史
-    messages = load_chat_history(config, job_id)
+    # 加载对话历史（只存储用户原始请求 + assistant 改动说明，不存嵌入简历的完整消息）
+    history = load_chat_history(config, job_id)   # [{role, content}] 精简版本
 
-    # 构造这一轮的 user message（注入当前简历）
-    user_content = REFINE_USER_TEMPLATE.format(
-        user_message=user_message,
-        current_resume=current_resume,
-    )
-    messages.append({"role": "user", "content": user_content})
+    # 追加本轮用户请求（仅存原文，不含简历）
+    history.append({"role": "user", "content": user_message})
+
+    # 构造发给 API 的完整 messages：历史消息 + 最后一条注入当前简历
+    # 只有最后一条 user message 需要带完整简历，历史消息只保留对话摘要
+    api_messages: list[dict] = []
+    for i, msg in enumerate(history):
+        if msg["role"] == "user":
+            is_last = (i == len(history) - 1)
+            if is_last:
+                # 最后一条注入最新简历
+                api_messages.append({"role": "user", "content": REFINE_USER_TEMPLATE.format(
+                    user_message=msg["content"],
+                    current_resume=current_resume,
+                )})
+            else:
+                # 历史用户消息只保留原始请求（简短），避免 context 爆炸
+                api_messages.append({"role": "user", "content": msg["content"]})
+        else:
+            api_messages.append(msg)
 
     # 调用 Claude Opus
     client, model_name = make_client(config, "tailor")
@@ -236,16 +269,16 @@ def chat_refine(
         model=model_name,
         max_tokens=4096,
         system=system_prompt,
-        messages=messages,
+        messages=api_messages,
     )
     assistant_text = resp.content[0].text
 
     # 解析输出
     md_content, note = _extract_md_and_note(assistant_text)
 
-    # 追加 assistant 回复到历史（存原始回复，不截断）
-    messages.append({"role": "assistant", "content": assistant_text})
-    save_chat_history(config, job_id, messages)
+    # 只存 assistant 的改动说明（不存完整简历），保持 history 精简
+    history.append({"role": "assistant", "content": note or "(简历已更新)"})
+    save_chat_history(config, job_id, history)
 
     # 保存版本
     version_num = None
@@ -270,24 +303,10 @@ def chat_refine(
         except Exception as e:
             print(f"[refine] PDF 生成失败: {e}")
 
-    # 返回给前端的消息历史只保留 role/content 的摘要（不含嵌入的简历全文，减少传输）
-    display_messages = []
-    for msg in messages:
-        if msg["role"] == "user":
-            # 只展示用户原始请求，不展示嵌入的简历
-            original_request = msg["content"].split("---\n当前简历")[0].strip()
-            display_messages.append({"role": "user", "content": original_request})
-        else:
-            # assistant 只展示围栏外的说明部分
-            _, note_text = _extract_md_and_note(msg["content"])
-            display_messages.append({
-                "role": "assistant",
-                "content": note_text or "(简历已更新)",
-            })
-
+    # history 本身已经是精简版（user=原始请求，assistant=改动说明），直接返回
     return {
         "md_content": md_content,
         "note": note,
         "version_num": version_num,
-        "messages": display_messages,
+        "messages": history,  # 已经是干净的精简格式
     }

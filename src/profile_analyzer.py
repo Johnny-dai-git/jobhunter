@@ -76,8 +76,14 @@ PROFILE_TOOL: dict[str, Any] = {
                             "enum": [
                                 "engineering",
                                 "research-engineering",
+                                "internship",
                             ],
-                            "description": "engineering (SWE/MLE/Backend/Platform/Infra) | research-engineering (Anthropic/DeepMind 类工业实验室). 仅 industry, 不做 academic.",
+                            "description": (
+                                "engineering (SWE/MLE/Backend/Platform/Infra 全职) | "
+                                "research-engineering (Anthropic/DeepMind 类工业实验室全职) | "
+                                "internship (实习岗位，title 需含 Intern/Co-op). "
+                                "仅 industry，不做 academic."
+                            ),
                         },
                         "scores": {
                             "type": "object",
@@ -659,15 +665,19 @@ def load_profile(config: Config) -> ProfileAnalysis | None:
         return None
 
 
-def analyze_profile(config: Config, user_description: str | None = None) -> ProfileAnalysis:
+def analyze_profile(
+    config: Config,
+    user_description: str | None = None,
+    job_types: list[str] | None = None,
+) -> ProfileAnalysis:
     """三轮 pipeline 分析候选人画像.
 
     Round 1: resume + materials → 结构化技能提取
     Round 2: 提取结果 → HR / HM / 策略师三视角评估
-    Round 3: 全部上下文 + 用户需求 → Top-10 positions
+    Round 3: 全部上下文 + 用户需求 + job_types → Top-10 positions
 
-    每轮输出作为下一轮 messages 历史的一部分传入,
-    模型在完整对话上下文中做最终决策.
+    job_types: ["Full-time"] / ["Internship"] / ["Full-time","Internship"]
+    不同类型会生成不同定位的 Top-10（实习 vs 正式员工）.
     """
     from .resume_reader import read_materials
 
@@ -676,6 +686,32 @@ def analyze_profile(config: Config, user_description: str | None = None) -> Prof
         user_description = load_user_description(config)
     materials_text = read_materials(config.path("materials_dir"))
     materials_str = materials_text or "(候选人未上传任何资料库材料)"
+
+    # 构建 job_types 上下文说明，注入到 Round 3
+    if not job_types:
+        job_types = config.preferences.get("job_types") or ["Full-time"]
+    is_intern_only  = job_types == ["Internship"] or job_types == ["intern"]
+    is_ft_only      = "Internship" not in job_types and "intern" not in [j.lower() for j in job_types]
+    if is_intern_only:
+        job_type_instruction = (
+            "**本次分析专门针对实习岗位（Internship）。**\n"
+            "Top-10 方向必须全部是实习职位，title 中明确包含 'Intern'、'Internship' 或 'Co-op'。\n"
+            "评估标准以在校生或应届生视角为主，不要求多年工作经验。\n"
+            "搜索词（aliases/broader_terms）也应包含实习相关变体，如 'Software Engineer Intern'、'ML Research Intern' 等。"
+        )
+    elif is_ft_only:
+        job_type_instruction = (
+            "**本次分析专门针对正式全职岗位（Full-time）。**\n"
+            "Top-10 方向全部面向全职职位，不要包含任何实习（Intern/Internship/Co-op）title。\n"
+            "aliases 和 broader_terms 中也不得出现实习相关词汇。"
+        )
+    else:
+        # 多个类型时，profile 分析生成通用 Top-10，collect 阶段分别跑每个类型
+        job_type_instruction = (
+            f"**本次分析覆盖：{', '.join(job_types)}（采集阶段将分别独立运行两次）。**\n"
+            "Top-10 请生成通用岗位方向，不带 Intern 后缀，collect 阶段会分别用 Full-time 和 Internship 过滤器各跑一次。\n"
+            "aliases 和 broader_terms 同样使用通用写法。"
+        )
 
     role = "profile_analyzer"
     if not config.raw.get("model", {}).get(role):
@@ -704,6 +740,13 @@ def analyze_profile(config: Config, user_description: str | None = None) -> Prof
     if r1_tool_result is None:
         raise RuntimeError("[profile] Round 1 失败: 模型未返回 submit_skill_extraction")
 
+    # 提取 tool_use_id，供 tool_result 引用（没有 default，失败就 raise）
+    _r1_tool_id = next(
+        (b.id for b in r1_resp.content if getattr(b, "type", None) == "tool_use"), None
+    )
+    if not _r1_tool_id:
+        raise RuntimeError("[profile] Round 1 response missing tool_use block id")
+
     r1_summary = json.dumps(r1_tool_result, ensure_ascii=False, indent=2)
     print(f"[profile] Round 1 完成: 提取 {len(r1_tool_result.get('technical_skills', []))} 项技能, "
           f"{len(r1_tool_result.get('ats_keywords', []))} 个关键词")
@@ -718,10 +761,7 @@ def analyze_profile(config: Config, user_description: str | None = None) -> Prof
         {"role": "user", "content": [
             {
                 "type": "tool_result",
-                "tool_use_id": next(
-                    b.id for b in r1_resp.content
-                    if getattr(b, "type", None) == "tool_use"
-                ),
+                "tool_use_id": _r1_tool_id,
                 "content": r1_summary,
             }
         ]},
@@ -743,6 +783,12 @@ def analyze_profile(config: Config, user_description: str | None = None) -> Prof
     if r2_tool_result is None:
         raise RuntimeError("[profile] Round 2 失败: 模型未返回 submit_perspectives")
 
+    _r2_tool_id = next(
+        (b.id for b in r2_resp.content if getattr(b, "type", None) == "tool_use"), None
+    )
+    if not _r2_tool_id:
+        raise RuntimeError("[profile] Round 2 response missing tool_use block id")
+
     r2_summary = json.dumps(r2_tool_result, ensure_ascii=False, indent=2)
     combined_kw = r2_tool_result.get("combined_keywords", [])
     print(f"[profile] Round 2 完成: {len(combined_kw)} 个核心关键词, "
@@ -754,6 +800,7 @@ def analyze_profile(config: Config, user_description: str | None = None) -> Prof
         load_prompt("profile_analyzer"),
         user_description=user_description or "(候选人未提供自述,只根据简历和默认偏好推断)",
         preferences=json.dumps(config.preferences, ensure_ascii=False, indent=2),
+        job_type_instruction=job_type_instruction,
     )
     messages_r3: list[dict] = [
         *messages,
@@ -761,10 +808,7 @@ def analyze_profile(config: Config, user_description: str | None = None) -> Prof
         {"role": "user", "content": [
             {
                 "type": "tool_result",
-                "tool_use_id": next(
-                    b.id for b in r2_resp.content
-                    if getattr(b, "type", None) == "tool_use"
-                ),
+                "tool_use_id": _r2_tool_id,
                 "content": r2_summary,
             }
         ]},

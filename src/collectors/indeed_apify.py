@@ -59,14 +59,15 @@ class IndeedApifyCollector(ApifyCollector):
                     "url": f"https://www.indeed.com/jobs?{urlencode(params)}"
                 })
 
-        # 总量除以 search 数, 取上限
-        per_search = max(1, self.max_per_run // max(1, len(start_urls)))
+        # 每个 URL 固定返回 results_per_url 条（默认 15，对标 LinkedIn）
+        # max_per_run 是本地总量上限（apify_base.search() 里 cap），与每 URL 数量无关
+        results_per_url = int(self._settings.get("results_per_url", 15))
 
         return {
             "startUrls": start_urls,
-            "maxItemsPerSearch": per_search,
+            "maxItemsPerSearch": results_per_url,
             "country": "US",
-            "parseCompanyDetails": False,    # 省钱: 不抓公司详情
+            "parseCompanyDetails": False,
             "saveOnlyUniqueItems": True,
         }
 

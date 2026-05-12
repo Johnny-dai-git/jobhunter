@@ -88,32 +88,60 @@ def collection_agent(state: JobAgentState) -> JobAgentState:
     except Exception:
         pass
 
-    platforms_done: list[str] = []
-
-    def on_platform_start(name: str) -> None:
-        try:
-            agent_state.set_platform(config, name)
-        except Exception:
-            pass
-        _hb(config, "collection_agent",
-            current_platform=name,
-            platforms_done=list(platforms_done))
-
-    def on_platform_done(name: str, new: int) -> None:
-        platforms_done.append(name)
-        _hb(config, "collection_agent",
-            current_platform=None,
-            platforms_done=list(platforms_done),
-            last_platform_new=new)
-
     try:
-        stats = collect_all(
-            config,
-            options.platforms,
-            on_platform_start=on_platform_start,
-            on_platform_done=on_platform_done,
-            profile_id=state.get("profile_id"),
-        )
+        # 读取 profile 的 job_types
+        import json as _json
+        profile_job_types = ["Full-time"]
+        pid = state.get("profile_id")
+        if pid:
+            try:
+                with session_scope(config.path("db_path")) as _s:
+                    _p = _s.get(Profile, pid)
+                    if _p and _p.job_types_json:
+                        profile_job_types = _json.loads(_p.job_types_json)
+            except Exception:
+                pass
+
+        # 多个 job_type 时分别跑一次 collect，合并统计
+        merged: dict = {"total_new": 0, "total_seen": 0, "total_excluded": 0, "by_platform": {}}
+        for jt in profile_job_types:
+            # platforms_done 每次 job_type 独立，不跨迭代累积
+            platforms_done: list[str] = []
+
+            def on_platform_start(name: str) -> None:
+                try:
+                    agent_state.set_platform(config, name)
+                except Exception:
+                    pass
+                _hb(config, "collection_agent",
+                    job_type=jt, current_platform=name,
+                    platforms_done=list(platforms_done))
+
+            def on_platform_done(name: str, new: int) -> None:
+                platforms_done.append(name)
+                _hb(config, "collection_agent",
+                    job_type=jt, current_platform=None,
+                    platforms_done=list(platforms_done),
+                    last_platform_new=new)
+
+            print(f"[collection_agent] 采集 job_type={jt}")
+            _hb(config, "collection_agent", job_type=jt, platforms_done=[])
+            s = collect_all(
+                config,
+                options.platforms,
+                on_platform_start=on_platform_start,
+                on_platform_done=on_platform_done,
+                profile_id=state.get("profile_id"),
+                job_types=[jt],
+            )
+            merged["total_new"]      += s.get("total_new", 0)
+            merged["total_seen"]     += s.get("total_seen", 0)
+            merged["total_excluded"] += s.get("total_excluded", 0)
+            for plat, pstat in s.get("by_platform", {}).items():
+                key = f"{plat}({jt})"
+                merged["by_platform"][key] = pstat
+
+        stats = merged
         try:
             agent_state.set_platform(config, None)
             agent_state.update_phase(config, "collecting", stats={"collect": stats})

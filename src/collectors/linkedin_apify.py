@@ -70,16 +70,52 @@ class LinkedInApifyCollector(ApifyCollector):
         默认 40, 可在 config.yaml 里限制."""
         return int(self._settings.get("max_titles", 40))
 
+    @property
+    def employment_types(self) -> list[str]:
+        """job_types → harvestapi employmentType 格式.
+        优先读 collect_all 注入的实例覆盖值，否则读 config.yaml（不修改共享对象）。
+        """
+        raw = getattr(self, "_job_types_override", None) \
+              or self.config.preferences.get("job_types") \
+              or ["Full-time"]
+        # 标准化映射
+        mapping = {
+            "full-time": "Full-time",
+            "full_time": "Full-time",
+            "fulltime": "Full-time",
+            "part-time": "Part-time",
+            "part_time": "Part-time",
+            "parttime": "Part-time",
+            "contract": "Contract",
+            "internship": "Internship",
+            "intern": "Internship",
+            "temporary": "Temporary",
+            "temp": "Temporary",
+            "volunteer": "Volunteer",
+            "other": "Other",
+        }
+        result = []
+        for t in raw:
+            normalized = mapping.get(t.lower().strip(), t)
+            if normalized not in result:
+                result.append(normalized)
+        return result
+
     def _build_single_input(self, title: str, locations: list[str]) -> dict:
         """为单个 title 构建 Apify 请求 input."""
         max_age_hours = int(self.config.freshness.get("max_age_hours", 0) or 24)
-        return {
+        inp = {
             "jobTitles": [title],
             "locations": locations,
             "sortBy": "date",
             "postedLimit": _hours_to_posted_limit(max_age_hours),
             "maxItems": self.results_per_title,
         }
+        emp_types = self.employment_types
+        if emp_types:
+            inp["employmentType"] = emp_types
+        return inp
+
 
     # _build_input 保留兼容性 (基类 search() 不再用, 但其他代码可能调用)
     def _build_input(self, keywords: list[str], locations: list[str]) -> dict:

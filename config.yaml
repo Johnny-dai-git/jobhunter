@@ -47,11 +47,13 @@ preferences:
   locations:
     - United States
 
-  # 工作类型
+  # 工作类型 (可多选，LinkedIn 采集时作为过滤条件传给 Apify)
+  # 支持: Full-time, Part-time, Contract, Internship, Temporary, Volunteer
   job_types:
     - Full-time
     # - Internship
     # - Contract
+    # - Part-time
 
   # 公司规模偏好(用于匹配评分加权)
   company_size:
@@ -150,7 +152,9 @@ collectors:
       actor: misceres/indeed-scraper      # $5/1000 = $0.005/岗位
       input_overrides: {}
     cookie_file: data/cookies/indeed.json  # 仅 backend=playwright 时用
-    max_per_run: 12                        # ~$0.06 一次
+    results_per_url: 15                    # 每个 keyword-location URL 返回多少条
+    max_per_run: 400                       # 全局去重上限 (40 keywords × 15 = 600原始, 去重后约400)
+    # 费用估算: 40 keywords × 15条 = 600条原始 ≈ $3.00/次 (misceres $5/1000)
 
   glassdoor:
     # 禁用: Apify 上无便宜可用的 jobs scraper (都偏评论/薪资类)

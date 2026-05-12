@@ -166,6 +166,8 @@ def create_app(config: Config) -> FastAPI:
     app = FastAPI(title="JobHunter")
     env = _make_env()
     db_path = config.path("db_path")
+    # 启动时确保所有表和 migration 都到位
+    init_db(db_path)
 
     # ===== 后台流水线状态 (单实例够用,多用户场景需换 DB) =====
     pipeline_state: dict[str, Any] = {
@@ -189,6 +191,7 @@ def create_app(config: Config) -> FastAPI:
         do_analyze: bool,
         user_description: str | None = None,
         resume_filename: str | None = None,
+        job_types: list[str] | None = None,
     ):
         """后台跑 [analyze_profile] -> collect -> match. 失败也能 graceful exit."""
         with pipeline_lock:
@@ -214,7 +217,11 @@ def create_app(config: Config) -> FastAPI:
 
         try:
             if do_analyze:
-                profile = analyze_profile(config, user_description=user_description)
+                profile = analyze_profile(
+                    config,
+                    user_description=user_description,
+                    job_types=job_types or ["Full-time"],
+                )
                 save_profile(config, profile)
                 # 同时写历史 DB
                 pid = save_profile_snapshot(
@@ -314,64 +321,6 @@ def create_app(config: Config) -> FastAPI:
                 pass
 
 
-    def _run_pipeline_collect_match(platforms: list[str] | None, profile_id: int | None):
-        """仅跑 collect + match（不做 analyze），供画像保存后立即运行用。"""
-        with pipeline_lock:
-            if pipeline_state["running"]:
-                return
-            pipeline_state.update(
-                running=True, phase="collecting",
-                started_at=datetime.now(), ended_at=None,
-                error=None, stats={}, cancel_requested=False,
-                profile_id=profile_id, current_platform=None,
-            )
-        try:
-            agent_state.start_run(config, trigger="web", profile_id=profile_id)
-            agent_state.update_phase(config, "collecting")
-        except Exception:
-            pass
-        try:
-            def _on_plat(name: str):
-                pipeline_state["current_platform"] = name
-                try: agent_state.set_platform(config, name)
-                except Exception: pass
-
-            stats = collect_all(
-                config,
-                platforms,
-                should_continue=_should_continue,
-                profile_id=profile_id,
-                on_platform_start=_on_plat,
-            )
-            pipeline_state["stats"]["collect"] = stats
-            pipeline_state["current_platform"] = None
-            try: agent_state.set_platform(config, None)
-            except Exception: pass
-
-            if not _should_continue():
-                pipeline_state["phase"] = "cancelled"
-                return
-
-            pipeline_state["phase"] = "matching"
-            try: agent_state.update_phase(config, "matching")
-            except Exception: pass
-
-            resume_text = load_cached(config.path("resume_dir"))
-            results = score_pending(config, resume_text, should_continue=_should_continue)
-            pipeline_state["stats"]["match"] = {"scored": len(results)}
-            final_phase = "cancelled" if not _should_continue() else "done"
-            pipeline_state["phase"] = final_phase
-            try: agent_state.end_run(config, success=final_phase == "done", phase=final_phase)
-            except Exception: pass
-        except Exception as e:
-            pipeline_state["phase"] = "error"
-            pipeline_state["error"] = str(e)
-            try: agent_state.end_run(config, success=False, phase="error", error=str(e))
-            except Exception: pass
-        finally:
-            pipeline_state["running"] = False
-            pipeline_state["ended_at"] = datetime.now()
-
     def _wait_for_cancel(timeout: float = 30) -> bool:
         """请求取消,轮询等到流水线真停下来(或超时). 返回是否成功停下."""
         import time as _time
@@ -386,15 +335,63 @@ def create_app(config: Config) -> FastAPI:
         return False
 
     # ===== 自动调度 =====
-    def _scheduled_run():
-        """scheduler 触发的回调: 用当前画像跑一次 collect+match (不阻塞调用方)."""
+    def _scheduled_run(run_trends: bool = False):
+        """scheduler 触发的回调: collect + match + digest [+ trends(weekly)].
+
+        完整流程:
+          1. collect: 采集所有新岗位入库 (不限条数)
+          2. match:   对所有 NEW 状态岗位评分
+          3. digest:  取最近高分岗位发 Top-15 邮件
+          4. trends:  (每7天) 市场趋势分析邮件
+        """
         if pipeline_state["running"]:
             print("[scheduler] pipeline 已经在跑, 跳过本次")
             return
-        threading.Thread(
-            target=_run_pipeline_bg, args=(False, None, None),
-            daemon=True, name="ScheduledPipeline",
-        ).start()
+
+        from .multiagent import JobAgentRunOptions, run_job_agent_graph
+        from .profile_analyzer import load_profile as _lp
+
+        profile_id = get_current_profile_id(config)
+        profile_label = None
+        if profile_id:
+            with session_scope(db_path) as _s:
+                from .db import Profile as _P
+                row = _s.get(_P, profile_id)
+                if row:
+                    profile_label = row.label
+
+        def _bg():
+            with pipeline_lock:
+                if pipeline_state["running"]:
+                    return
+                pipeline_state.update(running=True, phase="collecting",
+                                      started_at=datetime.now(), ended_at=None,
+                                      error=None, stats={}, cancel_requested=False,
+                                      profile_id=profile_id)
+            try:
+                from .collect import PLATFORMS as _ALL_PLATS
+                options = JobAgentRunOptions(
+                    platforms=_ALL_PLATS,
+                    trigger="scheduler",
+                    collect=True,
+                    digest=True,
+                    trends=run_trends,
+                    profile_id=profile_id,
+                    profile_label=profile_label,
+                )
+                run_job_agent_graph(config, options)
+                with pipeline_lock:
+                    pipeline_state.update(running=False, phase="done", ended_at=datetime.now())
+                # 无论是调度器触发还是手动直接调用，完成后都记录运行时间
+                # 防止调度器在下次循环（60s内）看到 last_auto_run=None 而重复触发
+                scheduler.mark_ran(include_trends=run_trends)
+            except Exception as e:
+                with pipeline_lock:
+                    pipeline_state.update(running=False, phase="error", error=str(e), ended_at=datetime.now())
+                scheduler.mark_ran(include_trends=False)  # 失败也标记，避免无限重试
+                print(f"[scheduler] pipeline 失败: {e}")
+
+        threading.Thread(target=_bg, daemon=True, name="ScheduledPipeline").start()
 
     settings_path = config.path("resume_dir").parent / "settings.json"
     scheduler = AgentScheduler(settings_path, _scheduled_run)
@@ -800,25 +797,13 @@ def create_app(config: Config) -> FastAPI:
         job = _get_job(job_id)
         revisions = get_revisions(config, job_id)
         current_md = get_current_resume_md(config, job_id) or ""
+        # history 已经是精简格式（user=原始请求，assistant=改动说明），直接用
         messages = load_chat_history(config, job_id)
-        # 只展示简洁版消息（不含嵌入简历）
-        import re as _re
-        display_msgs = []
-        for msg in messages:
-            if msg["role"] == "user":
-                display_msgs.append({
-                    "role": "user",
-                    "content": msg["content"].split("---\n当前简历")[0].strip(),
-                })
-            else:
-                m = _re.search(r"```(?:markdown|md)?\s*\n.*?\n```", msg["content"], _re.DOTALL)
-                note = msg["content"][m.end():].strip() if m else msg["content"]
-                display_msgs.append({"role": "assistant", "content": note or "(简历已更新)"})
         return render("refine.html",
                       job=job,
                       revisions=revisions,
                       current_md=current_md,
-                      messages=display_msgs)
+                      messages=messages)
 
     @app.post("/job/{job_id}/refine/chat")
     async def refine_chat(job_id: int, message: str = Form(...)):
@@ -1002,16 +987,18 @@ def create_app(config: Config) -> FastAPI:
         existing_desc = load_user_description(config) or ""
         profile = load_profile(config)
 
-        # 老 JSON 自动迁移到 DB (只跑一次): 如果有 _profile.json 但 DB 里没对应 row,
-        # 就插一行历史. 之后历史 table 就有内容了.
-        if profile and not get_current_profile_id(config):
+        # 老 JSON 自动迁移到 DB (只跑一次): 如果有 _profile.json 但 DB 里完全没有任何 row,
+        # 才插一行历史 (防止删除画像后重新进来又创建出来).
+        existing_snapshots = list_profile_snapshots(config)
+        if profile and not existing_snapshots:
             save_profile_snapshot(
                 config, profile,
                 user_description=existing_desc or "(从旧 _profile.json 自动导入)",
                 resume_filename=None,
             )
-
-        history = list_profile_snapshots(config)
+            history = list_profile_snapshots(config)  # 新插入了一行，重新查
+        else:
+            history = existing_snapshots  # 没有插入，复用已有结果，省一次 DB 查
         current_id = get_current_profile_id(config)
 
         # 每个 profile 的岗位计数 (展示在历史行)
@@ -1114,12 +1101,16 @@ def create_app(config: Config) -> FastAPI:
         # 默认启用平台
         default_platforms = [p["id"] for p in all_platforms if p["available"]]
 
-        # 给 history profiles 挂上 enabled_platforms_list 辅助属性
+        # 给 history profiles 挂上辅助属性
         for h in history:
             try:
                 h.enabled_platforms_list = _json.loads(h.enabled_platforms) if h.enabled_platforms else default_platforms
             except Exception:
                 h.enabled_platforms_list = default_platforms
+            try:
+                h.job_types_list = _json.loads(h.job_types_json) if h.job_types_json else ["Full-time"]
+            except Exception:
+                h.job_types_list = ["Full-time"]
 
         return {
             "existing_desc": existing_desc,
@@ -1155,6 +1146,31 @@ def create_app(config: Config) -> FastAPI:
     @app.get("/onboarding/status")
     def onboarding_status():
         return render("onboarding_status.html", **_build_onboarding_context())
+
+    @app.get("/onboarding/agents")
+    def onboarding_agents():
+        """Per-agent 健康看板."""
+        h = _compute_health()
+        persistent = agent_state.get_state(config)
+        # 只有跑过 pipeline 才展示 agent 状态，否则显示"无活跃 agent"
+        has_any_run = bool(
+            persistent.get("current_run")
+            or persistent.get("last_run")
+            or persistent.get("agents")
+        )
+        agents = agent_state.get_agents_state(config) if has_any_run else {}
+        timeouts = agent_state.AGENT_HEARTBEAT_TIMEOUT
+        agents_with_timeout = {
+            name: {**info, "heartbeat_timeout_sec": timeouts.get(name, agent_state.DEFAULT_HEARTBEAT_TIMEOUT)}
+            for name, info in agents.items()
+        }
+        return render("onboarding_agents.html",
+                      agents=agents_with_timeout,
+                      has_any_run=has_any_run,
+                      liveness=h["liveness"],
+                      readiness=h["readiness"],
+                      issues_live=h["issues_live"],
+                      issues_ready=h["issues_ready"])
 
     @app.get("/onboarding/resumes")
     def onboarding_resumes():
@@ -1229,7 +1245,8 @@ def create_app(config: Config) -> FastAPI:
                 row.enabled_platforms_list = None
             session.expunge(row)
         ctx = _build_onboarding_context()
-        return render("onboarding_profile.html", profile=row, existing_desc=row.user_description, **ctx)
+        ctx["existing_desc"] = row.user_description  # 用该 profile 的描述覆盖全局默认
+        return render("onboarding_profile.html", profile=row, **ctx)
 
     @app.post("/onboarding/profile/new/submit")
     async def profile_new_submit(
@@ -1238,6 +1255,7 @@ def create_app(config: Config) -> FastAPI:
         resume: UploadFile | None = File(None),
         resume_select: str = Form("__upload__"),
         platforms: list[str] = Form(default=[]),
+        job_types: list[str] = Form(default=[]),
         schedule_hours: int = Form(24),
         action: str = Form("save_and_run"),
     ):
@@ -1291,7 +1309,7 @@ def create_app(config: Config) -> FastAPI:
             from .profile_analyzer import analyze_profile, save_profile_snapshot
             import json as _j
             try:
-                pa = analyze_profile(config, desc)
+                pa = analyze_profile(config, desc, job_types=job_types if job_types else ["Full-time"])
                 save_profile(config, pa)
                 pid = save_profile_snapshot(
                     config, pa,
@@ -1305,15 +1323,15 @@ def create_app(config: Config) -> FastAPI:
                     if row:
                         row.schedule_hours = schedule_hours
                         row.enabled_platforms = enabled_json
+                        row.job_types_json = _json.dumps(job_types if job_types else ["Full-time"])
                         session.commit()
-                # 更新调度器
-                if schedule_hours and schedule_hours > 0:
-                    scheduler.set_schedule_hours(schedule_hours)
+                # 更新调度器 (用画像自己的 schedule_hours)
+                scheduler.enable(hours=schedule_hours)
             except Exception as e:
                 print(f"[profile_new] analyze 失败: {e}")
                 return
             if action == "save_and_run":
-                _run_pipeline_collect_match(enabled_plats, pid)
+                _scheduled_run(run_trends=False)
 
         background_tasks.add_task(_run_with_extra)
         if action == "save_and_run":
@@ -1328,6 +1346,7 @@ def create_app(config: Config) -> FastAPI:
         resume: UploadFile | None = File(None),
         resume_select: str = Form("__upload__"),
         platforms: list[str] = Form(default=[]),
+        job_types: list[str] = Form(default=[]),
         schedule_hours: int = Form(24),
         action: str = Form("save"),
     ):
@@ -1380,6 +1399,7 @@ def create_app(config: Config) -> FastAPI:
             row.label = desc[:60].strip()
             row.schedule_hours = schedule_hours
             row.enabled_platforms = _json.dumps(enabled_plats)
+            row.job_types_json = _json.dumps(job_types if job_types else ["Full-time"])
             if uploaded_filename:
                 row.resume_filename = uploaded_filename
             session.commit()
@@ -1388,25 +1408,40 @@ def create_app(config: Config) -> FastAPI:
         current_id = get_current_profile_id(config)
         if current_id == profile_id:
             save_user_description(config, desc)
-            if schedule_hours and schedule_hours > 0:
-                scheduler.set_schedule_hours(schedule_hours)
-            elif schedule_hours == 0:
-                scheduler.set_schedule_hours(0)
+            scheduler.enable(hours=schedule_hours)
 
         if action == "save_and_run":
             if pipeline_state["running"]:
                 _wait_for_cancel(timeout=60)
-            background_tasks.add_task(_run_pipeline_collect_match, enabled_plats, profile_id)
+            background_tasks.add_task(_scheduled_run, False)
             return RedirectResponse(url="/onboarding/processing", status_code=303)
         return RedirectResponse(url="/onboarding", status_code=303)
 
     @app.post("/onboarding/profile/{profile_id}/activate")
     def profile_activate(profile_id: int, background_tasks: BackgroundTasks):
-        """激活某画像（不重跑流水线）。"""
+        """激活某画像，按该画像的 schedule_hours 设定调度并立即触发第一次 pipeline。"""
         try:
             activate_profile_snapshot(config, profile_id)
         except ValueError as e:
             raise HTTPException(404, str(e))
+
+        # 读取该画像自己的 schedule_hours
+        profile_hours = 24  # 默认
+        with session_scope(db_path) as session:
+            from .db import Profile as _P
+            row = session.get(_P, profile_id)
+            if row and row.schedule_hours is not None:
+                profile_hours = int(row.schedule_hours)
+
+        # 按画像设置的频率启动调度
+        scheduler.enable(hours=profile_hours)
+
+        # 不管是手动还是定时，激活时都立即触发一次
+        if not pipeline_state["running"]:
+            threading.Thread(
+                target=_scheduled_run, args=(False,),
+                daemon=True, name="ActivatePipeline",
+            ).start()
         return RedirectResponse(url="/onboarding", status_code=303)
 
     def _validate_resume_filename(filename: str) -> str:
@@ -1471,7 +1506,9 @@ def create_app(config: Config) -> FastAPI:
         init_db(config.path("db_path"))
 
         # 4) 不再阻塞: analyze + collect + match 都丢后台
-        background_tasks.add_task(_run_pipeline_bg, True, desc, uploaded_filename)
+        # 旧版 onboarding 没有 job_types 选择，从 config.yaml 读取默认值
+        default_job_types = config.preferences.get("job_types") or ["Full-time"]
+        background_tasks.add_task(_run_pipeline_bg, True, desc, uploaded_filename, default_job_types)
 
         return RedirectResponse(url="/onboarding/processing", status_code=303)
 
@@ -1808,10 +1845,10 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/refresh")
     def refresh(background_tasks: BackgroundTasks):
-        """主页点 'Refresh' 时手动重跑 collect + match (不重做 analyze)."""
+        """主页点 'Refresh' 时手动重跑完整 pipeline: collect + match + digest."""
         if pipeline_state["running"]:
             raise HTTPException(409, "已有流水线在跑")
-        background_tasks.add_task(_run_pipeline_bg, False, None)
+        background_tasks.add_task(_scheduled_run, False)
         return RedirectResponse(url="/onboarding/processing", status_code=303)
 
     return app

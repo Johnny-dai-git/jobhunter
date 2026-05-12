@@ -75,12 +75,22 @@ def parse_resume():
 
 @cli.command("analyze-profile")
 @click.option("--force", is_flag=True, help="覆盖现有 _profile.json 重新分析")
-def analyze_profile_cmd(force):
-    """让 DeepSeek 读你的简历, 推断 Top-10 能力方向 + 真实搜索 title.
+@click.option("--job-type", "job_type", default="full-time",
+              type=click.Choice(["full-time", "internship", "both"], case_sensitive=False),
+              help="工作类型: full-time | internship | both")
+def analyze_profile_cmd(force, job_type):
+    """让模型读你的简历, 推断 Top-10 能力方向 + 真实搜索 title.
 
     第一步定 10 个 primary, 然后 collect 阶段用 aliases + broader_terms 模糊扩展.
     结果存到 data/resume/_profile.json.
+
+    示例:
+      analyze-profile --force --job-type internship   # 专门找实习
+      analyze-profile --force --job-type both         # 同时找全职和实习
     """
+    jt_map = {"full-time": ["Full-time"], "internship": ["Internship"], "both": ["Full-time","Internship"]}
+    job_types = jt_map.get(job_type.lower(), ["Full-time"])
+
     config = _load_config()
     existing = load_profile(config)
     if existing and not force:
@@ -88,8 +98,8 @@ def analyze_profile_cmd(force):
         _print_profile(existing)
         return
 
-    console.print("[cyan]→ DeepSeek 正在读你的简历...[/cyan]")
-    profile = _analyze_profile(config)
+    console.print(f"[cyan]→ 分析画像 (job_types={job_types})...[/cyan]")
+    profile = _analyze_profile(config, job_types=job_types)
     path = save_profile(config, profile)
     console.print(f"[green]✓[/green] 已保存到 {path}\n")
     _print_profile(profile)

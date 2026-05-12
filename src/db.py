@@ -61,6 +61,7 @@ class Profile(Base):
     # 每画像独立的自动化设置
     schedule_hours: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)          # 每 N 小时跑一次, 0=关闭
     enabled_platforms: Mapped[Optional[str]] = mapped_column(Text, nullable=True)          # JSON list, e.g. '["linkedin","yc"]'
+    job_types_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)             # JSON list, e.g. '["Full-time","Internship"]'
 
 
 class Job(Base):
@@ -174,17 +175,21 @@ def init_db(db_path: Path) -> None:
 
 
 def _migrate_add_columns(engine) -> None:
-    """检测并添加新版本引入的列, 已存在则跳过."""
+    """检测并添加新版本引入的列/表, 已存在则跳过.
+    使用 engine.begin() 确保每个 DDL 语句自动提交, 避免跨连接可见性问题.
+    """
+    import sqlalchemy as _sa
     migrations = [
         ("jobs", "content_hash", "VARCHAR(16)"),
+        ("profiles", "job_types_json", "TEXT"),
     ]
-    # 新表 migration
-    with engine.connect() as conn:
+    # 新表 migration — 用 begin() 自动提交 DDL
+    with engine.begin() as conn:
         tables = [row[0] for row in conn.execute(
-            __import__("sqlalchemy").text("SELECT name FROM sqlite_master WHERE type='table'")
+            _sa.text("SELECT name FROM sqlite_master WHERE type='table'")
         )]
         if "resume_revisions" not in tables:
-            conn.execute(__import__("sqlalchemy").text("""
+            conn.execute(_sa.text("""
                 CREATE TABLE resume_revisions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     job_id INTEGER NOT NULL REFERENCES jobs(id),
@@ -194,23 +199,24 @@ def _migrate_add_columns(engine) -> None:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """))
-            conn.commit()
             print("[db] migration: created resume_revisions table")
-    with engine.connect() as conn:
-        for table, col, col_type in migrations:
-            try:
+
+    # 列 migration — 每列用独立事务，避免一列失败影响其他列
+    for table, col, col_type in migrations:
+        try:
+            with engine.begin() as conn:
                 existing = [
                     row[1] for row in
-                    conn.execute(__import__("sqlalchemy").text(f"PRAGMA table_info({table})"))
+                    conn.execute(_sa.text(f"PRAGMA table_info({table})"))
                 ]
                 if col not in existing:
-                    conn.execute(__import__("sqlalchemy").text(
+                    conn.execute(_sa.text(
                         f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"
                     ))
-                    conn.commit()
+                    # engine.begin() 自动 commit，不需要手动调用
                     print(f"[db] migration: added {table}.{col}")
-            except Exception as e:
-                print(f"[db] migration warning ({table}.{col}): {e}")
+        except Exception as e:
+            print(f"[db] migration warning ({table}.{col}): {e}")
 
 
 def session_scope(db_path: Path) -> Session:

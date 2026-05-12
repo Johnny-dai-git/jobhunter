@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block title %}Agent 健康状态 · JobHunter{% endblock %}
+
+{% block content %}
+<style>
+  .agents-wrap { max-width: 960px; margin: 0 auto; padding: 20px 16px; }
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin-top: 20px;
+  }
+  .agent-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 16px;
+    position: relative;
+  }
+  .agent-card.status-running  { border-left: 4px solid #4f46e5; }
+  .agent-card.status-done     { border-left: 4px solid #16a34a; }
+  .agent-card.status-error    { border-left: 4px solid #dc2626; }
+  .agent-card.status-skipped  { border-left: 4px solid #94a3b8; }
+  .agent-card.status-pending  { border-left: 4px solid #e2e8f0; }
+  .agent-card.status-stuck    { border-left: 4px solid #ea580c; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+  .agent-name { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+  .agent-status-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 600;
+  }
+  .badge-running  { background: #eef2ff; color: #4f46e5; }
+  .badge-done     { background: #dcfce7; color: #16a34a; }
+  .badge-error    { background: #fee2e2; color: #dc2626; }
+  .badge-skipped  { background: #f1f5f9; color: #64748b; }
+  .badge-pending  { background: #f8fafc; color: #94a3b8; }
+  .badge-stuck    { background: #fff7ed; color: #ea580c; }
+
+  .agent-meta { margin-top: 10px; font-size: 12px; color: var(--color-text-muted); display: flex; flex-direction: column; gap: 3px; }
+  .agent-meta span { display: flex; justify-content: space-between; }
+  .agent-meta .val { color: var(--color-text); font-weight: 500; }
+
+  .heartbeat-bar {
+    margin-top: 10px; height: 4px; background: var(--color-border);
+    border-radius: 2px; overflow: hidden;
+  }
+  .heartbeat-fill {
+    height: 100%; border-radius: 2px; transition: width .5s;
+  }
+
+  .pipeline-status {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  }
+  .pipeline-phase {
+    font-size: 13px; font-weight: 600;
+    padding: 4px 12px; border-radius: 6px;
+    background: var(--color-accent-light); color: var(--color-accent);
+  }
+
+  .refresh-note { font-size: 12px; color: var(--color-text-dim); margin-left: auto; }
+</style>
+
+<div class="agents-wrap">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+    <h2 style="margin:0; font-size:20px; font-weight:700;">🤖 Agent 健康状态</h2>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <span class="refresh-note" id="lastRefresh">—</span>
+      <button class="btn btn-secondary btn-sm" onclick="refresh()">刷新</button>
+      <form method="post" action="/pipeline/cancel" style="margin:0;"
+            onsubmit="return confirm('强制终止当前运行中的 pipeline？')">
+        <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);">⏹ Kill</button>
+      </form>
+      <a href="/onboarding" class="btn btn-secondary btn-sm">← 返回</a>
+    </div>
+  </div>
+  <p style="color:var(--color-text-muted); font-size:13px; margin:0 0 16px;">每 3 秒自动刷新 · 心跳超时则标记为 stuck</p>
+
+  <!-- Pipeline 整体状态 -->
+  <div class="pipeline-status" id="pipelineStatus">
+    <div>
+      <div style="font-size:11px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">Pipeline</div>
+      <span class="pipeline-phase" id="pipelinePhase">加载中…</span>
+    </div>
+    <div style="font-size:13px; color:var(--color-text-muted);" id="pipelineMeta">—</div>
+    <div style="font-size:12px; color:var(--color-text-dim);" id="pipelineTrigger">—</div>
+  </div>
+
+  <!-- Per-agent 卡片 -->
+  <div class="agents-grid" id="agentsGrid">
+    {% if not has_any_run %}
+    <div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--color-text-muted); font-size:13px;">
+      <div style="font-size:32px; margin-bottom:12px;">🤖</div>
+      <div style="font-weight:600; margin-bottom:6px;">还没有运行过 pipeline</div>
+      <div>创建画像并运行后，这里会显示每个 agent 的实时状态。</div>
+      <a href="/onboarding" class="btn btn-primary btn-sm" style="margin-top:16px; display:inline-block;">去创建画像</a>
+    </div>
+    {% endif %}
+    {% for name, info in agents.items() %}
+    {% set is_stuck = info.get('stuck', False) %}
+    {% set status = 'stuck' if is_stuck else info.get('status', 'pending') %}
+    <div class="agent-card status-{{ status }}" id="card-{{ name }}">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div class="agent-name">{{ name.replace('_', ' ').title() }}</div>
+        <span class="agent-status-badge badge-{{ status }}">
+          {% if status == 'running' %}⚡ 运行中
+          {% elif status == 'done' %}✅ 完成
+          {% elif status == 'error' %}❌ 错误
+          {% elif status == 'skipped' %}⏭ 跳过
+          {% elif status == 'stuck' %}🔥 卡住
+          {% else %}⏳ 等待{% endif %}
+        </span>
+      </div>
+
+      <div class="agent-meta">
+        {% if info.get('duration_sec') is not none %}
+        <span><span>耗时</span><span class="val">{{ info.duration_sec }}s</span></span>
+        {% endif %}
+        {% if info.get('heartbeat_age_sec') is not none %}
+        <span><span>心跳</span><span class="val" style="color:{{ '#ea580c' if is_stuck else 'inherit' }}">{{ info.heartbeat_age_sec }}s 前</span></span>
+        {% endif %}
+        {% if info.get('error') %}
+        <span style="color:var(--color-danger); font-size:11px; margin-top:4px;">{{ info.error[:80] }}</span>
+        {% endif %}
+        {% if info.get('meta') %}
+          {% for k, v in info.meta.items() %}
+          <span><span>{{ k }}</span><span class="val">{{ v }}</span></span>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      {% if status == 'running' and info.get('heartbeat_age_sec') is not none %}
+      {% set timeout = info.get('heartbeat_timeout_sec', 120) %}
+      {% set pct = [100 - (info.heartbeat_age_sec / timeout * 100), 0] | max %}
+      <div class="heartbeat-bar">
+        <div class="heartbeat-fill" style="width:{{ pct }}%; background:{{ '#ea580c' if pct < 20 else '#4f46e5' }};"></div>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Liveness / Readiness -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:20px;">
+    <div style="background:var(--color-card); border:1px solid var(--color-border); border-radius:var(--radius); padding:14px 16px;">
+      <div style="font-size:12px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Liveness</div>
+      <div id="livenessStatus" style="font-weight:700; font-size:16px;">{{ liveness }}</div>
+      {% if issues_live %}
+      <ul style="margin:8px 0 0 16px; padding:0; font-size:12px; color:var(--color-danger);">
+        {% for issue in issues_live %}<li>{{ issue }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    <div style="background:var(--color-card); border:1px solid var(--color-border); border-radius:var(--radius); padding:14px 16px;">
+      <div style="font-size:12px; color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">Readiness</div>
+      <div id="readinessStatus" style="font-weight:700; font-size:16px;">{{ readiness }}</div>
+      {% if issues_ready %}
+      <ul style="margin:8px 0 0 16px; padding:0; font-size:12px; color:var(--color-warn);">
+        {% for issue in issues_ready %}<li>{{ issue }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+const STATUS_LABELS = {
+  running:'⚡ 运行中', done:'✅ 完成', error:'❌ 错误',
+  skipped:'⏭ 跳过', stuck:'🔥 卡住', pending:'⏳ 等待'
+};
+const STATUS_CSS = {
+  running:'badge-running', done:'badge-done', error:'badge-error',
+  skipped:'badge-skipped', stuck:'badge-stuck', pending:'badge-pending'
+};
+
+async function refresh() {
+  try {
+    const [agentsResp, healthResp] = await Promise.all([
+      fetch('/health/agents'),
+      fetch('/health/liveness'),
+    ]);
+    const agents = await agentsResp.json();
+    const health = await healthResp.json();
+
+    // 检查是否有任何 agent 运行过（非全 pending）
+    const hasRun = Object.values(agents).some(a => a.status !== 'pending' || a.heartbeat_at);
+    const wasEmpty = document.getElementById('agentsGrid').querySelector('.agent-card') === null;
+
+    if (hasRun && wasEmpty) {
+      // Pipeline 刚开始运行，但页面上没有卡片（服务端渲染为空）
+      // → 整页刷新以获取服务端渲染的完整卡片
+      location.reload();
+      return;
+    }
+    if (hasRun) {
+      updateAgentCards(agents);
+    }
+    updatePipeline(health);
+    document.getElementById('lastRefresh').textContent = '上次刷新: ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    console.error('刷新失败', e);
+  }
+}
+
+function updateAgentCards(agents) {
+  for (const [name, info] of Object.entries(agents)) {
+    const card = document.getElementById('card-' + name);
+    if (!card) continue;
+    const isStuck = info.stuck;
+    const status = isStuck ? 'stuck' : (info.status || 'pending');
+
+    // update card class
+    card.className = 'agent-card status-' + status;
+
+    // update badge
+    const badge = card.querySelector('.agent-status-badge');
+    if (badge) {
+      badge.className = 'agent-status-badge ' + (STATUS_CSS[status] || 'badge-pending');
+      badge.textContent = STATUS_LABELS[status] || status;
+    }
+
+    // update meta
+    let metaHtml = '';
+    if (info.duration_sec != null) metaHtml += `<span><span>耗时</span><span class="val">${info.duration_sec}s</span></span>`;
+    if (info.heartbeat_age_sec != null) {
+      const color = isStuck ? '#ea580c' : 'inherit';
+      metaHtml += `<span><span>心跳</span><span class="val" style="color:${color}">${info.heartbeat_age_sec}s 前</span></span>`;
+    }
+    if (info.error) metaHtml += `<span style="color:var(--color-danger);font-size:11px;margin-top:4px;">${info.error.slice(0,80)}</span>`;
+    if (info.meta) {
+      for (const [k,v] of Object.entries(info.meta)) {
+        metaHtml += `<span><span>${k}</span><span class="val">${v}</span></span>`;
+      }
+    }
+    const metaDiv = card.querySelector('.agent-meta');
+    if (metaDiv) metaDiv.innerHTML = metaHtml;
+
+    // heartbeat bar
+    let bar = card.querySelector('.heartbeat-bar');
+    if (status === 'running' && info.heartbeat_age_sec != null) {
+      const timeout = info.heartbeat_timeout_sec || 120;
+      const pct = Math.max(0, 100 - (info.heartbeat_age_sec / timeout * 100));
+      const color = pct < 20 ? '#ea580c' : '#4f46e5';
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.className = 'heartbeat-bar';
+        bar.innerHTML = `<div class="heartbeat-fill" style="width:${pct}%;background:${color};"></div>`;
+        card.appendChild(bar);
+      } else {
+        const fill = bar.querySelector('.heartbeat-fill');
+        if (fill) { fill.style.width = pct + '%'; fill.style.background = color; }
+      }
+    } else if (bar) {
+      bar.remove();
+    }
+  }
+}
+
+function updatePipeline(health) {
+  const cur = health.current_run;
+  const phase = document.getElementById('pipelinePhase');
+  const meta = document.getElementById('pipelineMeta');
+  const trigger = document.getElementById('pipelineTrigger');
+  if (cur) {
+    phase.textContent = cur.phase || 'running';
+    meta.textContent = cur.current_platform ? `平台: ${cur.current_platform}` : '';
+    trigger.textContent = `触发: ${cur.trigger || '—'} · PID ${cur.pid || '—'}`;
+  } else {
+    phase.textContent = health.status || 'idle';
+    meta.textContent = '';
+    trigger.textContent = '';
+  }
+}
+
+// 自动刷新 (3秒)
+refresh();
+setInterval(refresh, 3000);
+</script>
+{% endblock %}

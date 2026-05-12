@@ -238,7 +238,40 @@
       </div>
     </div>
 
-    <!-- ④ 自动化 -->
+    <!-- ④ 工作类型 -->
+    <div class="section-card">
+      <div class="section-title">
+        💼 <span class="zh">工作类型</span><span class="en">Job Types</span>
+      </div>
+      <div class="section-desc">
+        <span class="zh">选择这个画像要搜索的岗位类型。Full-time 和 Internship 会作为两次完整的独立操作分别运行。</span>
+        <span class="en">Select job types for this profile. Full-time and Internship each run as a complete independent pipeline.</span>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;">
+        {% set cur_job_types = profile.job_types_list if profile and profile.job_types_json else ['Full-time'] %}
+        {% for jt in [('Full-time','全职','💼'), ('Internship','实习','🎓'), ('Contract','合同工','📋'), ('Part-time','兼职','⏱')] %}
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;
+                      padding:10px 16px; border:2px solid var(--color-border);
+                      border-radius:var(--radius-sm); font-size:13px; font-weight:500;
+                      background:var(--color-card); transition:all .15s;"
+               onmouseenter="this.style.borderColor='var(--color-accent)'"
+               onmouseleave="if(!this.querySelector('input').checked)this.style.borderColor='var(--color-border)'"
+               id="jt-label-{{ jt[0] }}">
+          <input type="checkbox" name="job_types" value="{{ jt[0] }}"
+                 {{ 'checked' if jt[0] in cur_job_types else '' }}
+                 onchange="updateJtStyle(this)"
+                 style="width:15px; height:15px; accent-color:var(--color-accent);">
+          <span>{{ jt[2] }} <span class="zh">{{ jt[1] }}</span><span class="en">{{ jt[0] }}</span></span>
+        </label>
+        {% endfor %}
+      </div>
+      <div style="font-size:12px; color:var(--color-text-muted); margin-top:8px;">
+        <span class="zh">💡 选多个类型时，每个类型会独立跑完整的采集→评分流程，岗位会分别入库。</span>
+        <span class="en">💡 Multiple types each run a full collect→score pipeline independently.</span>
+      </div>
+    </div>
+
+    <!-- ⑤ 自动化 -->
     <div class="section-card">
       <div class="section-title">
         ⏰ <span class="zh">自动化设置</span><span class="en">Automation</span>
@@ -290,6 +323,14 @@
       <a href="/onboarding" class="btn btn-secondary">
         <span class="zh">取消</span><span class="en">Cancel</span>
       </a>
+      {% if profile %}
+      <form method="post" action="/profiles/{{ profile.id }}/delete" style="margin:0;"
+            onsubmit="return confirm('删除画像 #{{ profile.id }}？此操作不可恢复。')">
+        <button type="submit" class="btn btn-secondary" style="color:var(--color-danger);">
+          🗑 <span class="zh">删除此画像</span><span class="en">Delete Profile</span>
+        </button>
+      </form>
+      {% endif %}
       <div class="spacer"></div>
       {% if profile %}
         <button type="submit" name="action" value="save" class="btn btn-secondary">
@@ -311,6 +352,20 @@
 </div>
 
 <script>
+  // Job type checkbox 样式更新
+  function updateJtStyle(cb) {
+    const label = cb.closest('label');
+    if (cb.checked) {
+      label.style.borderColor = 'var(--color-accent)';
+      label.style.background = 'var(--color-accent-light)';
+    } else {
+      label.style.borderColor = 'var(--color-border)';
+      label.style.background = 'var(--color-card)';
+    }
+  }
+  // 初始化样式
+  document.querySelectorAll('input[name="job_types"]').forEach(cb => updateJtStyle(cb));
+
   // 上传区显示控制
   const radios = document.querySelectorAll('input[name="resume_select"]');
   const uploadField = document.getElementById('upload-field');

@@ -8,6 +8,12 @@
 
 ---
 
+## ⚠️ 工作类型约束（最高优先级，必须严格遵守）
+
+{{ job_type_instruction }}
+
+---
+
 > 两段式策略: 第一步是**先锁定 10 个 primary** (精确高分), 第二步在 collect 阶段把每个 primary 的 aliases / broader_terms 一并展开 (模糊扩大命中面). 所以 primary 要选得**准且互不重叠**, 把"模糊扩散"的活留给 aliases.
 
 ## 评分维度
@@ -24,9 +30,10 @@
 ## 硬约束
 
 ### Title 选择
-- **本 agent 只做 industry / 工业界岗位**. 仅 2 个 direction 枚举:
-  - `engineering` — 普通工程岗 (SWE, MLE, Backend, Platform, Infra, Data, Security, SRE, etc.)
-  - `research-engineering` — 工业界研究工程 (Research Engineer / Member of Technical Staff at Anthropic / DeepMind / OpenAI / Mistral 类)
+- **本 agent 只做 industry / 工业界岗位**. 共 3 个 direction 枚举:
+  - `engineering` — 全职工程岗 (SWE, MLE, Backend, Platform, Infra, Data, Security, SRE, etc.)
+  - `research-engineering` — 工业界研究工程全职 (Research Engineer / Member of Technical Staff at Anthropic / DeepMind / OpenAI / Mistral 类)
+  - `internship` — 实习岗位 (title 必须含 Intern / Co-op / Internship，适用于 Internship 类型搜索)
 - **不要**产出任何学术岗 — 没有 Postdoc / Assistant Professor / TTAP / Lecturer / Research Associate (academic) / Adjunct 等. 哪怕用户提了, 也只产出最接近的 industry 替代 (例如 user 想做 research → 给工业界 Research Engineer / Research Scientist at Google/Meta/Anthropic, 而不是学校的 postdoc).
 - **排除**: Manager / Director / VP / Head / Lead / PM / Designer / Sales / HR / Recruiter / Analyst (除非用户特别要求).
 - **10 个 position 之间避免重复** (覆盖候选人不同侧面 / 不同 seniority / 不同细分方向).
@@ -75,7 +82,7 @@ Aliases **必须是市场上真实使用的**写法, 不许造词.
 ### top_10_positions: **恰好 10 个**, 按 composite 降序
 每个 position:
 - **title** (英文): primary, 最具体的 LinkedIn title (10 个 primary **彼此不重叠**)
-- **direction**: `"engineering"` | `"research-engineering"` (只能选这 2 个, 工业界)
+- **direction**: `"engineering"` | `"research-engineering"` | `"internship"` (工业界; internship 仅在工作类型为实习时使用)
 - **scores**: `{market_demand, competition, user_advantage, composite}`
 - **aliases** (数组, 2-5 个): 真实使用的同义/变体 title (collect 会用这个模糊扩展)
 - **broader_terms** (数组, 0-3 个): 可能隐藏此方向的广义 title (collect 也会用)

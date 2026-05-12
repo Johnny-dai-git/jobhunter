@@ -62,6 +62,7 @@ def collect_all(
     profile_id: Optional[int] = None,
     on_platform_start=None,
     on_platform_done=None,   # callback(platform_name: str, new_count: int)
+    job_types: Optional[list[str]] = None,  # 覆盖 config.yaml preferences.job_types
 ) -> dict:
     """跑指定平台 (默认所有 enabled) 的采集器,返回统计.
 
@@ -104,6 +105,10 @@ def collect_all(
 
     excluded = config.preferences.get("exclude_keywords") or []
     db_path = config.path("db_path")
+
+    # job_types 覆盖: 仅在显式传入时设置，让采集器能区分"用户指定"和"读 config 默认"
+    if job_types:
+        print(f"[collect] job_types 覆盖: {job_types}")
     stats = {
         "total_new": 0,
         "total_seen": 0,
@@ -118,6 +123,9 @@ def collect_all(
         c = get_collector(platform, config)
         if not c.enabled:
             continue
+        # 仅在显式传入时注入覆盖，否则采集器自己从 config.preferences 读取
+        if job_types:
+            c._job_types_override = job_types
         if on_platform_start:
             try:
                 on_platform_start(platform)

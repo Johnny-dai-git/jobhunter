@@ -133,7 +133,7 @@ def _round1_plan(
     print(f"[tailor] Round 1 — DeepSeek 分析差距并生成 plan...")
     resp = client.messages.create(
         model=model_name,
-        max_tokens=3000,
+        max_tokens=4096,
         tools=[RESUME_PLAN_TOOL],
         tool_choice={"type": "tool", "name": "submit_resume_plan"},
         messages=[{"role": "user", "content": prompt}],
@@ -222,8 +222,12 @@ def tailor_for_job(
             raise ValueError(f"Job id={job_id} 不存在")
 
         # ── Round 1: DeepSeek → plan ─────────────────────────────────────────
-        plan_text = _round1_plan(config, resume_text, job, extras_text or "")
-        print(f"[tailor] Round 1 完成，plan 长度: {len(plan_text)} 字符")
+        try:
+            plan_text = _round1_plan(config, resume_text, job, extras_text or "")
+            print(f"[tailor] Round 1 完成，plan 长度: {len(plan_text)} 字符")
+        except Exception as e:
+            print(f"[tailor] Round 1 失败: {e}")
+            raise RuntimeError(f"简历定制 Round 1 失败（DeepSeek 分析阶段）：{str(e)[:120]}") from e
 
         # ── Round 2: Claude Opus → 最终简历 ──────────────────────────────────
         print(f"[tailor] Round 2 — Claude Opus 执行 plan 改写简历...")
@@ -235,7 +239,8 @@ def tailor_for_job(
             extras=extras_text or "(无附加材料)",
             candidate_name=candidate_name,
         )
-        text = client.complete("tailor", prompt)
+        # 简历改写输出可能较长（完整 markdown + 各项目详细 bullet），给足 token 空间
+        text = client.complete("tailor", prompt, max_tokens=8000)
         md_body = _extract_md_section(text)
         print(f"[tailor] Round 2 完成，简历长度: {len(md_body)} 字符")
 

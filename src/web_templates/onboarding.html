@@ -121,7 +121,7 @@
         <div class="pb-meta">
           {% if cur_profile %}
             <span>📄 {{ cur_profile.resume_filename or '—' }}</span>
-            <span>📅 {{ cur_profile.created_at[:10] if cur_profile.created_at else '' }}</span>
+            <span>📅 {{ cur_profile.created_at.strftime('%Y-%m-%d') if cur_profile.created_at else '' }}</span>
             {% if cur_profile.schedule_hours and cur_profile.schedule_hours > 0 %}
               <span>⏰ <span class="zh">每 {{ cur_profile.schedule_hours }}h 自动跑</span><span class="en">every {{ cur_profile.schedule_hours }}h</span></span>
             {% else %}
@@ -226,6 +226,16 @@
       {% endif %}
     </a>
 
+    <a class="module-card" href="/onboarding/agents">
+      <div class="module-icon">🤖</div>
+      <div class="module-name"><span class="zh">Agent 健康</span><span class="en">Agent Health</span></div>
+      <div class="module-desc">
+        <span class="zh">实时查看每个 Agent 的运行状态、心跳、耗时和错误信息。</span>
+        <span class="en">Live per-agent status: heartbeat, duration, stuck detection.</span>
+      </div>
+      <span class="module-badge badge-gray"><span class="zh">实时监控</span><span class="en">Live</span></span>
+    </a>
+
     <a class="module-card" href="/onboarding/materials">
       <div class="module-icon">📚</div>
       <div class="module-name"><span class="zh">资料库</span><span class="en">Materials Library</span></div>
@@ -294,7 +304,7 @@
           <div class="pr-info">
             <div class="pr-label">{{ p.label }}</div>
             <div class="pr-meta">
-              {{ p.created_at[:10] if p.created_at else '' }}
+              {{ p.created_at.strftime('%Y-%m-%d') if p.created_at else '' }}
               {% if p.resume_filename %} · 📄 {{ p.resume_filename }}{% endif %}
               {% if p.schedule_hours and p.schedule_hours > 0 %}
                 · ⏰ <span class="zh">每 {{ p.schedule_hours }}h</span><span class="en">every {{ p.schedule_hours }}h</span>
@@ -319,6 +329,11 @@
             <a href="/onboarding/profile/{{ p.id }}" class="btn btn-secondary btn-sm">
               <span class="zh">编辑</span><span class="en">Edit</span>
             </a>
+            <form method="post" action="/profiles/{{ p.id }}/delete" style="margin:0;"
+                  onsubmit="return confirm('删除画像「{{ p.label }}」？')">
+              <button type="submit" class="btn btn-secondary btn-sm"
+                      style="color:var(--color-danger);">🗑</button>
+            </form>
           </div>
         </div>
         {% endfor %}
