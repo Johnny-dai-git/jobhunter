@@ -26,7 +26,23 @@
       <span class="badge badge-indigo">🎓 {{ job.min_education|upper }}</span>
     {% endif %}
     {% if job.salary %}<span class="badge badge-green">💰 {{ job.salary }}</span>{% endif %}
-    {% if job.status == 'applied' %}<span class="badge badge-green">✓ Applied{% if job.applied_at %} · {{ job.applied_at.strftime('%Y-%m-%d') }}{% endif %}</span>{% endif %}
+    {% if job.status not in ('new','scored','shortlisted','archived') %}
+      {% set _status_map = {
+        'applied':      ('📨','已投递','Applied','#4f46e5','#eef2ff'),
+        'phone_screen': ('📞','电话初筛','Phone Screen','#0891b2','#e0f2fe'),
+        'hr_interview': ('👤','HR 面试','HR Interview','#7c3aed','#f3e8ff'),
+        'interview':    ('👤','HR 面试','HR Interview','#7c3aed','#f3e8ff'),
+        'hm_interview': ('🏢','HM 面试','HM Interview','#d97706','#fef3c7'),
+        'final_round':  ('🎯','终面','Final Round','#ea580c','#fff7ed'),
+        'offer':        ('🎉','Offer','Offer','#16a34a','#dcfce7'),
+        'rejected':     ('✗','被拒','Rejected','#dc2626','#fee2e2'),
+      } %}
+      {% set _sm = _status_map.get(job.status, ('·', job.status, job.status, '#64748b', '#f1f5f9')) %}
+      <span class="badge" style="background:{{ _sm[4] }}; color:{{ _sm[3] }};">
+        {{ _sm[0] }} <span class="zh">{{ _sm[1] }}</span><span class="en">{{ _sm[2] }}</span>
+        {% if job.applied_at %} · {{ job.applied_at.strftime('%m/%d') }}{% endif %}
+      </span>
+    {% endif %}
   </div>
   <div style="margin-top:16px;">
     <a href="{{ job.url }}" target="_blank" class="btn btn-secondary btn-sm">🔗 查看原始 JD</a>
@@ -82,29 +98,93 @@
 </div>
 {% endif %}
 
-{# ============ Actions ============ #}
+{# ============ Status Panel ============ #}
+{% set all_stages = [
+  ('applied',      '📨', '已投递',   'Applied',      '#4f46e5', '#eef2ff'),
+  ('phone_screen', '📞', '电话初筛', 'Phone Screen', '#0891b2', '#e0f2fe'),
+  ('hr_interview', '👤', 'HR 面试',  'HR Interview', '#7c3aed', '#f3e8ff'),
+  ('hm_interview', '🏢', 'HM 面试',  'HM Interview', '#d97706', '#fef3c7'),
+  ('final_round',  '🎯', '终面',     'Final Round',  '#ea580c', '#fff7ed'),
+  ('offer',        '🎉', 'Offer',    'Offer',        '#16a34a', '#dcfce7'),
+  ('rejected',     '✗',  '被拒',     'Rejected',     '#dc2626', '#fee2e2'),
+] %}
+
 <div class="card">
-  <h3>操作</h3>
-  <div class="actions">
-    <form method="post" action="/job/{{ job.id }}/tailor" style="margin:0;">
-      <button type="submit" class="btn btn-primary">
-        {% if job.tailored_resume_pdf_path %}🔄 重新生成简历 + 求职信{% else %}✨ Claude 改简历 + 写求职信{% endif %}
-      </button>
-    </form>
-
-    {% if job.tailored_resume_pdf_path %}
-    <a href="/job/{{ job.id }}/pdf" target="_blank" class="btn btn-success">📄 查看 PDF</a>
-    {% endif %}
-
-    {% if job.status != 'applied' %}
-    <form method="post" action="/job/{{ job.id }}/mark-applied" style="margin:0;">
-      <button type="submit" class="btn btn-secondary">✅ 标记已投</button>
-    </form>
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+    <h3 style="margin:0;">
+      <span class="zh">投递状态</span><span class="en">Application Status</span>
+    </h3>
+    {% if job.applied_at %}
+      <span style="font-size:12px; color:var(--color-text-muted);">
+        <span class="zh">投递于</span><span class="en">Applied</span> {{ job.applied_at.strftime('%Y-%m-%d') }}
+      </span>
     {% endif %}
   </div>
 
+  {# 阶段进度条 #}
+  <div style="display:flex; gap:4px; margin-bottom:18px; flex-wrap:wrap;">
+    {% for (val, icon, lbl_zh, lbl_en, color, bg) in all_stages %}
+      {% set is_current = (job.status == val) or (val == 'hr_interview' and job.status == 'interview') %}
+      <div style="
+        flex:1; min-width:60px; padding:8px 6px; border-radius:6px; text-align:center;
+        border: 2px solid {{ color if is_current else '#e2e8f0' }};
+        background: {{ bg if is_current else '#f8fafc' }};
+        position:relative;
+      ">
+        <div style="font-size:16px; line-height:1;">{{ icon }}</div>
+        <div style="font-size:10px; font-weight:{{ '700' if is_current else '500' }}; color:{{ color if is_current else '#94a3b8' }}; margin-top:3px; line-height:1.2;">
+          <span class="zh">{{ lbl_zh }}</span><span class="en">{{ lbl_en }}</span>
+        </div>
+        {% if is_current %}
+          <div style="width:6px;height:6px;border-radius:50%;background:{{ color }};position:absolute;top:4px;right:4px;"></div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  {# 快速切换按钮 #}
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+    {% for (val, icon, lbl_zh, lbl_en, color, bg) in all_stages %}
+      {% set is_current = (job.status == val) or (val == 'hr_interview' and job.status == 'interview') %}
+      {% if not is_current %}
+        <form method="post" action="/job/{{ job.id }}/status" style="margin:0;">
+          <input type="hidden" name="to" value="{{ val }}">
+          <button type="submit"
+            style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid {{ color }};color:{{ color }};background:white;cursor:pointer;transition:background 0.15s;"
+            onmouseover="this.style.background='{{ bg }}'" onmouseout="this.style.background='white'"
+            {% if val == 'rejected' %}onclick="return confirm('确认标记为被拒？')"{% endif %}>
+            {{ icon }} <span class="zh">{{ lbl_zh }}</span><span class="en">{{ lbl_en }}</span>
+          </button>
+        </form>
+      {% else %}
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:700;border:2px solid {{ color }};color:{{ color }};background:{{ bg }};">
+          {{ icon }} <span class="zh">{{ lbl_zh }}</span><span class="en">{{ lbl_en }}</span>
+          <span style="font-size:10px; opacity:0.7;">✓</span>
+        </span>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+{# ============ Actions ============ #}
+<div class="card">
+  <h3><span class="zh">操作</span><span class="en">Actions</span></h3>
+  <div class="actions">
+    <form method="post" action="/job/{{ job.id }}/tailor" style="margin:0;">
+      <button type="submit" class="btn btn-primary">
+        {% if job.tailored_resume_pdf_path %}
+          🔄 <span class="zh">重新生成简历</span><span class="en">Regenerate Resume</span>
+        {% else %}
+          ✨ <span class="zh">Claude 定制简历</span><span class="en">Tailor Resume with Claude</span>
+        {% endif %}
+      </button>
+    </form>
+    {% if job.tailored_resume_pdf_path %}
+      <a href="/job/{{ job.id }}/pdf" target="_blank" class="btn btn-success">📄 PDF</a>
+    {% endif %}
+  </div>
   {% if job.tailored_resume_pdf_path %}
-  <div style="font-size:11px; color:var(--color-text-dim); margin-top:10px; font-family:monospace;">{{ job.tailored_resume_pdf_path }}</div>
+    <div style="font-size:11px; color:var(--color-text-dim); margin-top:10px; font-family:monospace;">{{ job.tailored_resume_pdf_path }}</div>
   {% endif %}
 </div>
 
