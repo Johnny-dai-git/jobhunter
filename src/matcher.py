@@ -55,6 +55,11 @@ SCORING_TOOL = {
                 "items": {"type": "string"},
                 "description": "3-5 bullet points why candidate fits this job, English, will be reused in cover letter",
             },
+            "gap_bullets": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "2-4 bullet points of gaps or risks: missing skills, overqualified/underqualified areas, visa concerns, or mismatches. Be specific and honest. English.",
+            },
             "connector": {
                 "type": "string",
                 "description": "Specific connection between candidate and company, one-sentence English, will be cover letter hook",
@@ -74,7 +79,7 @@ SCORING_TOOL = {
                 "description": "Minimum education required by JD. Use unspecified if JD doesn't say",
             },
         },
-        "required": ["score", "summary", "keywords", "fit_bullets", "connector", "recommend", "work_mode", "min_education"],
+        "required": ["score", "summary", "keywords", "fit_bullets", "gap_bullets", "connector", "recommend", "work_mode", "min_education"],
     },
 }
 
@@ -109,6 +114,7 @@ class MatchResult:
     summary: str
     keywords: list[str] = field(default_factory=list)
     fit_bullets: list[str] = field(default_factory=list)
+    gap_bullets: list[str] = field(default_factory=list)
     connector: str = ""
     recommend: bool = False
     work_mode: str = "unspecified"
@@ -123,6 +129,7 @@ class MatchResult:
             summary=str(data.get("summary", "")).strip(),
             keywords=list(data.get("keywords") or []),
             fit_bullets=list(data.get("fit_bullets") or []),
+            gap_bullets=list(data.get("gap_bullets") or []),
             connector=str(data.get("connector", "")).strip(),
             recommend=bool(data.get("recommend", False)),
             work_mode=str(data.get("work_mode", "unspecified")),
@@ -223,7 +230,7 @@ def score_pending(
             job.match_score = result.score
             job.match_summary = result.summary
             job.match_strengths = _legacy_strengths_text(result.fit_bullets)
-            # match_gaps no longer directly given by model, can infer from sub-scores (optional, leave empty for now)
+            job.match_gaps = "\n".join(f"- {b}" for b in result.gap_bullets) if result.gap_bullets else ""
 
             job.score_background = result.sub_scores.background
             job.score_skills = result.sub_scores.skills
