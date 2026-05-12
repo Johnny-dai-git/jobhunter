@@ -283,6 +283,64 @@ def create_app(config: Config) -> FastAPI:
                 pass
 
 
+    def _run_pipeline_collect_match(platforms: list[str] | None, profile_id: int | None):
+        """仅跑 collect + match（不做 analyze），供画像保存后立即运行用。"""
+        with pipeline_lock:
+            if pipeline_state["running"]:
+                return
+            pipeline_state.update(
+                running=True, phase="collecting",
+                started_at=datetime.now(), ended_at=None,
+                error=None, stats={}, cancel_requested=False,
+                profile_id=profile_id, current_platform=None,
+            )
+        try:
+            agent_state.start_run(config, trigger="web", profile_id=profile_id)
+            agent_state.update_phase(config, "collecting")
+        except Exception:
+            pass
+        try:
+            def _on_plat(name: str):
+                pipeline_state["current_platform"] = name
+                try: agent_state.set_platform(config, name)
+                except Exception: pass
+
+            stats = collect_all(
+                config,
+                platforms,
+                should_continue=_should_continue,
+                profile_id=profile_id,
+                on_platform_start=_on_plat,
+            )
+            pipeline_state["stats"]["collect"] = stats
+            pipeline_state["current_platform"] = None
+            try: agent_state.set_platform(config, None)
+            except Exception: pass
+
+            if not _should_continue():
+                pipeline_state["phase"] = "cancelled"
+                return
+
+            pipeline_state["phase"] = "matching"
+            try: agent_state.update_phase(config, "matching")
+            except Exception: pass
+
+            resume_text = load_cached(config.path("resume_dir"))
+            results = score_pending(config, resume_text, should_continue=_should_continue)
+            pipeline_state["stats"]["match"] = {"scored": len(results)}
+            final_phase = "cancelled" if not _should_continue() else "done"
+            pipeline_state["phase"] = final_phase
+            try: agent_state.end_run(config, success=final_phase == "done", phase=final_phase)
+            except Exception: pass
+        except Exception as e:
+            pipeline_state["phase"] = "error"
+            pipeline_state["error"] = str(e)
+            try: agent_state.end_run(config, success=False, phase="error", error=str(e))
+            except Exception: pass
+        finally:
+            pipeline_state["running"] = False
+            pipeline_state["ended_at"] = datetime.now()
+
     def _wait_for_cancel(timeout: float = 30) -> bool:
         """请求取消,轮询等到流水线真停下来(或超时). 返回是否成功停下."""
         import time as _time
@@ -703,9 +761,43 @@ def create_app(config: Config) -> FastAPI:
             except Exception:
                 pass
 
+        # ---- 平台元数据 (供画像编辑页使用) ----
+        from .collect import PLATFORMS
+        import json as _json
+        _platform_meta = {
+            "linkedin":     {"label": "LinkedIn",    "icon": "💼", "available": True},
+            "indeed":       {"label": "Indeed",      "icon": "🔎", "available": True},
+            "glassdoor":    {"label": "Glassdoor",   "icon": "🏢", "available": False},
+            "ziprecruiter": {"label": "ZipRecruiter","icon": "📮", "available": False},
+            "yc":           {"label": "YC Jobs",     "icon": "🚀", "available": True},
+            "wellfound":    {"label": "Wellfound",   "icon": "🌊", "available": False},
+            "dice":         {"label": "Dice",        "icon": "🎲", "available": True},
+            "hackernews":   {"label": "HN",          "icon": "🔶", "available": True},
+        }
+        # 从 config 中读取实际 enabled 状态
+        collectors_cfg = getattr(config, "collectors", None) or {}
+        for pid, meta in _platform_meta.items():
+            cfg = collectors_cfg.get(pid, {})
+            if isinstance(cfg, dict):
+                meta["available"] = bool(cfg.get("enabled", meta["available"]))
+        all_platforms = [
+            {"id": p, **_platform_meta.get(p, {"label": p, "icon": "🔗", "available": True})}
+            for p in PLATFORMS
+        ]
+        # 默认启用平台
+        default_platforms = [p["id"] for p in all_platforms if p["available"]]
+
+        # 给 history profiles 挂上 enabled_platforms_list 辅助属性
+        for h in history:
+            try:
+                h.enabled_platforms_list = _json.loads(h.enabled_platforms) if h.enabled_platforms else default_platforms
+            except Exception:
+                h.enabled_platforms_list = default_platforms
+
         return {
             "existing_desc": existing_desc,
             "has_profile": profile is not None,
+            "profiles": history,
             "supported_exts": ", ".join(sorted(SUPPORTED_EXTS)),
             "history": history,
             "current_id": current_id,
@@ -723,11 +815,13 @@ def create_app(config: Config) -> FastAPI:
             "counts": _compute_counts(),
             "lifetime": agent_state.get_lifetime_stats(config),
             "digest_to": (config.digest or {}).get("to"),
+            "all_platforms": all_platforms,
+            "default_platforms": default_platforms,
         }
 
-    # ---- Onboarding (首次使用 / 重设画像) ----
+    # ---- Onboarding Hub ----
     @app.get("/onboarding")
-    def onboarding_form():
+    def onboarding_hub():
         return render("onboarding.html", **_build_onboarding_context())
 
     @app.get("/onboarding/status")
@@ -740,11 +834,223 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/onboarding/profiles")
     def onboarding_profiles():
-        return render("onboarding_profiles.html", **_build_onboarding_context())
+        return render("onboarding.html", **_build_onboarding_context())
 
     @app.get("/onboarding/automation")
     def onboarding_automation():
-        return render("onboarding_automation.html", **_build_onboarding_context())
+        return render("onboarding.html", **_build_onboarding_context())
+
+    # ---- 画像 新建 / 编辑 ----
+    @app.get("/onboarding/profile/new")
+    def profile_new_form():
+        ctx = _build_onboarding_context()
+        return render("onboarding_profile.html", profile=None, **ctx)
+
+    @app.get("/onboarding/profile/{profile_id}")
+    def profile_edit_form(profile_id: int):
+        import json as _json
+        with session_scope(db_path) as session:
+            from .db import Profile as ProfileModel
+            row = session.get(ProfileModel, profile_id)
+            if not row:
+                raise HTTPException(404, f"画像 #{profile_id} 不存在")
+            try:
+                row.enabled_platforms_list = _json.loads(row.enabled_platforms) if row.enabled_platforms else None
+            except Exception:
+                row.enabled_platforms_list = None
+            session.expunge(row)
+        ctx = _build_onboarding_context()
+        return render("onboarding_profile.html", profile=row, existing_desc=row.user_description, **ctx)
+
+    @app.post("/onboarding/profile/new/submit")
+    async def profile_new_submit(
+        background_tasks: BackgroundTasks,
+        description: str = Form(...),
+        resume: UploadFile | None = File(None),
+        resume_select: str = Form("__upload__"),
+        platforms: list[str] = Form(default=[]),
+        schedule_hours: int = Form(24),
+        action: str = Form("save_and_run"),
+    ):
+        """创建新画像并可选立即运行."""
+        import json as _json
+        from .collect import PLATFORMS as ALL_PLATFORMS
+
+        desc = (description or "").strip()
+        if not desc:
+            raise HTTPException(400, "请填写求职目标描述")
+
+        # 1) 处理简历
+        resume_dir = config.path("resume_dir")
+        uploaded_filename: str | None = None
+        if resume_select == "__upload__" or not resume_select:
+            if resume and resume.filename:
+                safe_filename = _validate_resume_filename(resume.filename)
+                content = await resume.read()
+                if not content:
+                    raise HTTPException(400, "上传文件为空")
+                (resume_dir / safe_filename).write_bytes(content)
+                uploaded_filename = safe_filename
+                try:
+                    parse_and_cache(resume_dir)
+                except Exception as e:
+                    raise HTTPException(500, f"解析简历失败: {e}")
+        else:
+            # 选了已有简历 — 激活它
+            target = resume_dir / resume_select
+            if target.exists():
+                target.touch()
+                try:
+                    parse_and_cache(resume_dir)
+                except Exception:
+                    pass
+            uploaded_filename = resume_select
+
+        # 2) 停止当前流水线
+        if pipeline_state["running"]:
+            _wait_for_cancel(timeout=60)
+
+        # 3) 保存描述 + 分析 + 创建 DB 行
+        save_user_description(config, desc)
+        init_db(config.path("db_path"))
+
+        enabled_plats = platforms if platforms else ALL_PLATFORMS
+        enabled_json = _json.dumps(enabled_plats)
+
+        # 4) 后台跑 analyze → collect → match，并写入 Profile 行（含 schedule/platforms）
+        def _run_with_extra():
+            from .profile_analyzer import analyze_profile, save_profile_snapshot
+            import json as _j
+            try:
+                pa = analyze_profile(config, desc)
+                save_profile(config, pa)
+                pid = save_profile_snapshot(
+                    config, pa,
+                    user_description=desc,
+                    resume_filename=uploaded_filename,
+                )
+                # 写入 schedule / platforms
+                with session_scope(db_path) as session:
+                    from .db import Profile as ProfileModel
+                    row = session.get(ProfileModel, pid)
+                    if row:
+                        row.schedule_hours = schedule_hours
+                        row.enabled_platforms = enabled_json
+                        session.commit()
+                # 更新调度器
+                if schedule_hours and schedule_hours > 0:
+                    scheduler.set_schedule_hours(schedule_hours)
+            except Exception as e:
+                print(f"[profile_new] analyze 失败: {e}")
+                return
+            if action == "save_and_run":
+                _run_pipeline_collect_match(enabled_plats, pid)
+
+        background_tasks.add_task(_run_with_extra)
+        if action == "save_and_run":
+            return RedirectResponse(url="/onboarding/processing", status_code=303)
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    @app.post("/onboarding/profile/{profile_id}/save")
+    async def profile_save(
+        profile_id: int,
+        background_tasks: BackgroundTasks,
+        description: str = Form(...),
+        resume: UploadFile | None = File(None),
+        resume_select: str = Form("__upload__"),
+        platforms: list[str] = Form(default=[]),
+        schedule_hours: int = Form(24),
+        action: str = Form("save"),
+    ):
+        """更新已有画像的描述、简历、平台和调度设置。"""
+        import json as _json
+        from .collect import PLATFORMS as ALL_PLATFORMS
+
+        desc = (description or "").strip()
+        if not desc:
+            raise HTTPException(400, "请填写求职目标描述")
+
+        # 检查画像存在
+        with session_scope(db_path) as session:
+            from .db import Profile as ProfileModel
+            row = session.get(ProfileModel, profile_id)
+            if not row:
+                raise HTTPException(404, f"画像 #{profile_id} 不存在")
+
+        # 1) 处理简历
+        resume_dir = config.path("resume_dir")
+        uploaded_filename: str | None = None
+        if resume_select == "__upload__" or not resume_select:
+            if resume and resume.filename:
+                safe_filename = _validate_resume_filename(resume.filename)
+                content = await resume.read()
+                if not content:
+                    raise HTTPException(400, "上传文件为空")
+                (resume_dir / safe_filename).write_bytes(content)
+                uploaded_filename = safe_filename
+                try:
+                    parse_and_cache(resume_dir)
+                except Exception:
+                    pass
+        else:
+            uploaded_filename = resume_select
+            target = resume_dir / resume_select
+            if target.exists():
+                target.touch()
+                try:
+                    parse_and_cache(resume_dir)
+                except Exception:
+                    pass
+
+        # 2) 更新 DB 行
+        enabled_plats = platforms if platforms else ALL_PLATFORMS
+        with session_scope(db_path) as session:
+            from .db import Profile as ProfileModel
+            row = session.get(ProfileModel, profile_id)
+            row.user_description = desc
+            row.label = desc[:60].strip()
+            row.schedule_hours = schedule_hours
+            row.enabled_platforms = _json.dumps(enabled_plats)
+            if uploaded_filename:
+                row.resume_filename = uploaded_filename
+            session.commit()
+
+        # 3) 如果是当前激活画像，同步 description 文件
+        current_id = get_current_profile_id(config)
+        if current_id == profile_id:
+            save_user_description(config, desc)
+            if schedule_hours and schedule_hours > 0:
+                scheduler.set_schedule_hours(schedule_hours)
+            elif schedule_hours == 0:
+                scheduler.set_schedule_hours(0)
+
+        if action == "save_and_run":
+            if pipeline_state["running"]:
+                _wait_for_cancel(timeout=60)
+            background_tasks.add_task(_run_pipeline_collect_match, enabled_plats, profile_id)
+            return RedirectResponse(url="/onboarding/processing", status_code=303)
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    @app.post("/onboarding/profile/{profile_id}/activate")
+    def profile_activate(profile_id: int, background_tasks: BackgroundTasks):
+        """激活某画像（不重跑流水线）。"""
+        try:
+            activate_profile_snapshot(config, profile_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        return RedirectResponse(url="/onboarding", status_code=303)
+
+    def _validate_resume_filename(filename: str) -> str:
+        name = (filename or "").strip()
+        if not name:
+            raise HTTPException(400, "文件名为空")
+        if Path(name).name != name or "/" in name or "\\" in name:
+            raise HTTPException(400, "非法文件名")
+        if name.startswith("_") or name.startswith("."):
+            raise HTTPException(400, "文件名不能以 _ 或 . 开头")
+        if Path(name).suffix.lower() not in SUPPORTED_EXTS:
+            raise HTTPException(400, "不支持的格式")
+        return name
 
     @app.post("/onboarding/submit")
     async def onboarding_submit(
@@ -771,7 +1077,8 @@ def create_app(config: Config) -> FastAPI:
         resume_dir = config.path("resume_dir")
         uploaded_filename = None
         if resume and resume.filename:
-            ext = Path(resume.filename).suffix.lower()
+            safe_filename = _validate_resume_filename(resume.filename)
+            ext = Path(safe_filename).suffix.lower()
             if ext not in SUPPORTED_EXTS:
                 raise HTTPException(
                     400,
@@ -780,9 +1087,9 @@ def create_app(config: Config) -> FastAPI:
             content = await resume.read()
             if not content:
                 raise HTTPException(400, "上传文件为空")
-            target = resume_dir / resume.filename
+            target = resume_dir / safe_filename
             target.write_bytes(content)
-            uploaded_filename = resume.filename
+            uploaded_filename = safe_filename
             try:
                 parse_and_cache(resume_dir)
             except Exception as e:
@@ -832,6 +1139,7 @@ def create_app(config: Config) -> FastAPI:
         )
 
     def _safe_resume_path(filename: str) -> Path:
+        filename = _validate_resume_filename(filename)
         resume_dir = config.path("resume_dir")
         target = (resume_dir / filename).resolve()
         # 防 path traversal
@@ -860,6 +1168,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/resume/{filename}/delete")
     def delete_resume(filename: str):
+        filename = _validate_resume_filename(filename)
         # 先尝试在主目录, 找不到再尝试 _paused/
         resume_dir = config.path("resume_dir")
         active_target = resume_dir / filename
@@ -881,6 +1190,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/resume/{filename}/pause")
     def pause_resume(filename: str):
+        filename = _validate_resume_filename(filename)
         resume_dir = config.path("resume_dir")
         try:
             pause_resume_file(resume_dir, filename)
@@ -900,6 +1210,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/resume/{filename}/unpause")
     def unpause_resume(filename: str):
+        filename = _validate_resume_filename(filename)
         resume_dir = config.path("resume_dir")
         try:
             unpause_resume_file(resume_dir, filename)
@@ -919,14 +1230,15 @@ def create_app(config: Config) -> FastAPI:
         """单独上传/替换简历, 不触发流水线. 后续任何 run-all / refresh 都用最新的."""
         if not resume.filename:
             raise HTTPException(400, "未选择文件")
-        ext = Path(resume.filename).suffix.lower()
+        safe_filename = _validate_resume_filename(resume.filename)
+        ext = Path(safe_filename).suffix.lower()
         if ext not in SUPPORTED_EXTS:
             raise HTTPException(400, f"不支持的格式 {ext}. 仅支持: {sorted(SUPPORTED_EXTS)}")
         content = await resume.read()
         if not content:
             raise HTTPException(400, "上传文件为空")
         resume_dir = config.path("resume_dir")
-        target = resume_dir / resume.filename
+        target = resume_dir / safe_filename
         target.write_bytes(content)
         # 强制重新解析,刷新 _parsed.txt 缓存
         try:

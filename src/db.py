@@ -53,6 +53,9 @@ class Profile(Base):
     resume_filename: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     profile_json: Mapped[str] = mapped_column(Text)                # ProfileAnalysis 序列化
     is_current: Mapped[bool] = mapped_column(Boolean, default=False)  # 当前活跃画像
+    # 每画像独立的自动化设置
+    schedule_hours: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)          # 每 N 小时跑一次, 0=关闭
+    enabled_platforms: Mapped[Optional[str]] = mapped_column(Text, nullable=True)          # JSON list, e.g. '["linkedin","yc"]'
 
 
 class Job(Base):
