@@ -159,6 +159,7 @@ def score_job(
             tools=tools,
             tool_choice={"type": "function", "function": {"name": "submit_match_score"}},
             messages=[{"role": "user", "content": prompt}],
+            extra_body={"thinking": {"type": "disabled"}},
         ) as stream:
             resp = stream.get_final_completion()
         if resp.choices[0].message.tool_calls:
