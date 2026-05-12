@@ -1,8 +1,12 @@
 """Apify collector base class.
 
 Apify is a third-party "scraping as a service" platform with anti-bot maintenance by their professional team.
-We invoke their Actor via REST API:
-    POST https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token=...
+We invoke their Actor via async REST API:
+    POST https://api.apify.com/v2/acts/{actor}/runs?token=...   → start run, get run_id
+    GET  https://api.apify.com/v2/actor-runs/{run_id}            → poll until SUCCEEDED
+    GET  https://api.apify.com/v2/datasets/{dataset_id}/items    → fetch results
+
+Using async avoids the 300-second hard limit of the sync endpoint (run-sync-get-dataset-items).
 
 Each Actor has different input/output schemas, so the base class provides the framework
 and platform subclasses implement:
@@ -12,6 +16,7 @@ and platform subclasses implement:
 from __future__ import annotations
 
 import os
+import time
 from typing import Any, Iterable, Optional
 from urllib.parse import quote
 
@@ -67,41 +72,66 @@ class ApifyCollector(BaseCollector):
 
     # ---- Public utility methods ----
     def _run_actor(self, input_data: dict) -> list[dict]:
-        """Make one Apify Actor request, return list of raw items.
-        Subclasses can call this directly in their search() for more flexible search strategies.
+        """Run Apify Actor asynchronously (start → poll → fetch), return list of raw items.
+
+        Uses async API to avoid the 300-second hard limit of run-sync-get-dataset-items.
+        Polls every 5 seconds until the run SUCCEEDS or FAILS (up to self._timeout_sec).
         """
         actor_path = self.actor_id.replace("/", "~")
-        url = (
-            f"https://api.apify.com/v2/acts/{quote(actor_path)}"
-            "/run-sync-get-dataset-items"
-        )
         params = {"token": self._token}
 
-        try:
-            with httpx.Client(timeout=self._timeout_sec) as client:
-                resp = client.post(url, params=params, json=input_data)
-        except httpx.TimeoutException:
-            raise ApifyError(f"Apify Actor {self.actor_id} timed out ({self._timeout_sec}s)")
-        except httpx.HTTPError as e:
-            raise ApifyError(f"Apify API request failed: {e}")
+        with httpx.Client(timeout=60) as client:
+            # 1) Start the run
+            start_resp = client.post(
+                f"https://api.apify.com/v2/acts/{quote(actor_path)}/runs",
+                params=params,
+                json=input_data,
+            )
+            if start_resp.status_code >= 400:
+                raise ApifyError(
+                    f"Apify Actor {self.actor_id} start failed {start_resp.status_code}: {start_resp.text[:300]}"
+                )
+            run_data = start_resp.json().get("data", {})
+            run_id = run_data.get("id")
+            if not run_id:
+                raise ApifyError(f"Apify did not return run id: {start_resp.text[:200]}")
 
-        if resp.status_code >= 400:
+            # 2) Poll until finished
+            deadline = time.time() + self._timeout_sec
+            poll_interval = 5
+            while time.time() < deadline:
+                time.sleep(poll_interval)
+                poll_resp = client.get(
+                    f"https://api.apify.com/v2/actor-runs/{run_id}",
+                    params=params,
+                )
+                if poll_resp.status_code >= 400:
+                    raise ApifyError(f"Apify poll failed {poll_resp.status_code}: {poll_resp.text[:200]}")
+                status = poll_resp.json().get("data", {}).get("status", "")
+                if status == "SUCCEEDED":
+                    dataset_id = poll_resp.json()["data"]["defaultDatasetId"]
+                    break
+                if status in ("FAILED", "ABORTED", "TIMED-OUT"):
+                    raise ApifyError(f"Apify Actor run {status}: run_id={run_id}")
+            else:
+                raise ApifyError(f"Apify Actor {self.actor_id} timed out after {self._timeout_sec}s")
+
+            # 3) Fetch results
+            items_resp = client.get(
+                f"https://api.apify.com/v2/datasets/{dataset_id}/items",
+                params={**params, "format": "json", "clean": "true"},
+            )
+            if items_resp.status_code >= 400:
+                raise ApifyError(f"Apify dataset fetch failed {items_resp.status_code}: {items_resp.text[:200]}")
             try:
-                msg = resp.json()
+                items = items_resp.json()
             except Exception:
-                msg = resp.text[:500]
-            raise ApifyError(
-                f"Apify Actor {self.actor_id} returned {resp.status_code}: {msg}"
-            )
-        try:
-            items = resp.json()
-        except Exception:
-            raise ApifyError(f"Apify returned non-JSON: {resp.text[:200]}")
-        if not isinstance(items, list):
-            raise ApifyError(
-                f"Apify Actor returned non-array: {type(items).__name__}. Check if actor is correct."
-            )
-        return items
+                raise ApifyError(f"Apify returned non-JSON: {items_resp.text[:200]}")
+            if not isinstance(items, list):
+                raise ApifyError(
+                    f"Apify Actor returned non-array: {type(items).__name__}. Check if actor is correct."
+                )
+            return items
 
     # ---- Default search flow (subclasses can override) ----
     def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:
