@@ -1,0 +1,130 @@
+Job-Agent Engineering Notes
+============================
+Date: 2026-05-12
+Author: Yuanjun Dai
+
+This document summarizes technical issues encountered and resolved during development.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. HTML TEMPLATES — MISSING ZH/EN BILINGUAL TAGS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Problem:
+  The app has a language toggle (Chinese/English) implemented via CSS:
+    body.lang-en .zh { display: none }
+    body.lang-en .en { display: revert }
+  Only onboarding.html properly used <span class="zh">/<span class="en"> pairs.
+  All other 12 templates had bare Chinese text that stayed visible in English mode.
+
+Fix:
+  Added zh/en span pairs to all 17 HTML templates.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. JOB TYPE (INTERN VS FULL-TIME) NOT COLLECTED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Problem:
+  Profile #7 had job_types = ["Full-time", "Internship"] but internship jobs were
+  never collected. Two bugs:
+  a) _run_pipeline_bg() did not pass job_types to collect_all() — always used
+     config.yaml defaults (Internship was commented out).
+  b) Job model had no job_type column — even correctly collected jobs had no type label.
+
+Fix:
+  a) Added job_types resolution in _run_pipeline_bg() reading from profile.job_types_json.
+  b) Added job_type column (VARCHAR 32) to Job table with DB migration.
+  c) Added _infer_job_type() in collect.py to populate job_type from platform API,
+     title heuristic, or search filter.
+  d) Added job_type filter to /jobs endpoint and index.html UI.
+  e) Removed 'intern' and 'internship' from exclude_keywords in config.yaml.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. PROFILE ANALYSIS — ROUND 1 RETURNING EMPTY {}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Problem:
+  Round 1 (skill extraction) consistently returned empty tool input {}.
+  Debug showed r1_tool_result = {} with no keys.
+
+Root cause:
+  Materials library = 561,380 chars ≈ 140,000 tokens.
+  deepseek-chat context window = 64k tokens.
+  Input exceeded context window → model called the tool but with empty fields.
+  Additionally, max_tokens=3000 was too small for the JSON output.
+
+Fix (intermediate):
+  Implemented map-reduce: split materials into 19 chunks of 30k chars each,
+  summarize each chunk, then send consolidated summary (~30k chars) to Round 1.
+
+Fix (final, see issue #5):
+  Switched to deepseek-v4-flash with thinking disabled (1M context, see below).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. ANTHROPIC SDK TIMEOUT FOR LARGE REQUESTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Problem:
+  ValueError: Streaming is required for operations that may take longer than 10 minutes.
+  The Anthropic SDK estimates request duration from max_tokens and raises this error
+  for large values before even making the API call.
+
+Fix:
+  Replaced all client.messages.create() calls with streaming:
+    with client.messages.stream(...) as s:
+        resp = s.get_final_message()
+  Applied across: profile_analyzer.py, matcher.py, tailor.py, trends.py,
+  manual_add.py, enricher.py, refine.py, agent.py.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. DEEPSEEK NEW MODELS NOT SUPPORTED ON ANTHROPIC ENDPOINT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Problem:
+  Switched to deepseek-v4-flash/pro for 1M context but got:
+    "deepseek-reasoner does not support this tool_choice"
+  DeepSeek's Anthropic-compatible endpoint (api.deepseek.com/anthropic) only
+  recognizes 'deepseek-chat' and 'deepseek-reasoner'. Unknown model names are
+  silently mapped to deepseek-reasoner (thinking model) which rejects tool_choice.
+
+Fix:
+  Refactored agent.py to route DeepSeek calls through OpenAI SDK:
+    openai.OpenAI(api_key=..., base_url="https://api.deepseek.com/v1")
+  Claude calls continue to use Anthropic SDK.
+  Added llm_complete() unified helper, _convert_tool_to_openai() schema converter.
+  Updated all 8 LLM-calling files to use the new dual-SDK architecture.
+
+Note: base_url must be "https://api.deepseek.com/v1" (with /v1 suffix).
+      "https://api.deepseek.com" alone returns 404.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. DEEPSEEK-V4-FLASH THINKING MODE CONSUMING OUTPUT TOKENS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Problem:
+  After switching to OpenAI SDK, deepseek-v4-flash still failed:
+  - LengthFinishReasonError: completion_tokens=8000, reasoning_tokens=2656
+  - JSONDecodeError: JSON truncated mid-way
+
+Root cause:
+  deepseek-v4-flash is a thinking (reasoning) model. Reasoning tokens count against
+  max_tokens budget. With max_tokens=32000, ~25000-30000 were consumed by internal
+  reasoning, leaving only 2000-7000 tokens for actual JSON output — insufficient
+  for the complex tool call schemas.
+
+Fix:
+  Pass extra_body={"thinking": {"type": "disabled"}} to all DeepSeek API calls.
+  With thinking disabled:
+  - reasoning_tokens = 0
+  - Full 32000 tokens available for JSON output
+  - tool_choice forced function calling works correctly
+  - 1M context window remains available (no map-reduce needed)
+
+Final model configuration:
+  profile_analyzer: deepseek-v4-flash + thinking disabled (1M context, full output)
+  matcher/trends:   deepseek-v4-flash + thinking disabled
+  tailor/cover_letter: claude-opus-4-6 (unchanged)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LESSONS LEARNED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Always check context window AND output token limits separately.
+- Thinking/reasoning models include reasoning in max_tokens — disable for
+  structured extraction tasks where reasoning adds no value.
+- DeepSeek's Anthropic endpoint and OpenAI endpoint support different model names.
+  Use the OpenAI SDK for new DeepSeek models.
+- base_url for DeepSeek OpenAI SDK must end with /v1.
+- For LLM tool calling with large schemas, max_tokens should be ≥ 16000.
