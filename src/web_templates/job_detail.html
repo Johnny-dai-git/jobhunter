@@ -94,10 +94,6 @@
 
     {% if job.tailored_resume_pdf_path %}
     <a href="/job/{{ job.id }}/pdf" target="_blank" class="btn btn-success">📄 查看 PDF</a>
-    <a href="/job/{{ job.id }}/md" target="_blank" class="btn btn-secondary">📝 查看 Markdown</a>
-    {% endif %}
-    {% if job.cover_letter_path %}
-    <a href="/job/{{ job.id }}/cover" target="_blank" class="btn btn-secondary">✉ 求职信</a>
     {% endif %}
 
     {% if job.status != 'applied' %}

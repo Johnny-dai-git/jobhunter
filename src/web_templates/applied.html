@@ -123,14 +123,7 @@
           <div style="display:flex; gap:5px; flex-wrap:wrap;">
             {% if j.tailored_resume_pdf_path %}
               <a href="/job/{{ j.id }}/pdf" target="_blank" class="badge badge-indigo" style="text-decoration:none;">📄 PDF</a>
-            {% endif %}
-            {% if j.tailored_resume_path %}
-              <a href="/job/{{ j.id }}/md" target="_blank" class="badge badge-gray" style="text-decoration:none;">📝 MD</a>
-            {% endif %}
-            {% if j.cover_letter_path %}
-              <a href="/job/{{ j.id }}/cover" target="_blank" class="badge badge-gray" style="text-decoration:none;">✉ Cover</a>
-            {% endif %}
-            {% if not j.tailored_resume_pdf_path and not j.cover_letter_path %}
+            {% else %}
               <span style="color:var(--color-text-dim); font-size:11px;">—</span>
             {% endif %}
           </div>
