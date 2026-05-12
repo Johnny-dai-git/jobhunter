@@ -20,3 +20,14 @@ data/outputs/
 
 # Playwright
 .pw-cache/
+
+# Personal data
+data/resume/*.pdf
+data/resume/*.docx
+data/resume/*.md
+data/resume/*.txt
+data/resume/_user_description.txt
+data/materials/
+data/agent_state.json
+data/resume/_profile.json
+data/settings.json

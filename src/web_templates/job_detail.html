@@ -44,8 +44,13 @@
       </span>
     {% endif %}
   </div>
-  <div style="margin-top:16px;">
+  <div style="margin-top:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
     <a href="{{ job.url }}" target="_blank" class="btn btn-secondary btn-sm">🔗 查看原始 JD</a>
+    <form method="post" action="/job/{{ job.id }}/delete" style="margin:0;"
+          onsubmit="return confirm('永久删除 #{{ job.id }} {{ job.title }} @ {{ job.company }}？')">
+      <button type="submit" class="btn btn-secondary btn-sm"
+              style="color:var(--color-danger);">🗑 删除此岗位</button>
+    </form>
   </div>
 </div>
 
@@ -179,6 +184,11 @@
         {% endif %}
       </button>
     </form>
+    {% if job.tailored_resume_path %}
+      <a href="/job/{{ job.id }}/refine" class="btn btn-primary">
+        ✏️ <span class="zh">对话精修简历</span><span class="en">Refine Resume</span>
+      </a>
+    {% endif %}
     {% if job.tailored_resume_pdf_path %}
       <a href="/job/{{ job.id }}/pdf" target="_blank" class="btn btn-success">📄 PDF</a>
     {% endif %}

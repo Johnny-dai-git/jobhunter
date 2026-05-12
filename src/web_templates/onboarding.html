@@ -226,6 +226,36 @@
       {% endif %}
     </a>
 
+    <a class="module-card" href="/onboarding/materials">
+      <div class="module-icon">📚</div>
+      <div class="module-name"><span class="zh">资料库</span><span class="en">Materials Library</span></div>
+      <div class="module-desc">
+        <span class="zh">上传文章、论文、项目说明等背景材料，tailor 简历时 Claude 自动参考。</span>
+        <span class="en">Upload articles, papers, project docs — Claude reads them automatically when tailoring your resume.</span>
+      </div>
+      {% if material_count > 0 %}
+        <span class="module-badge badge-green">
+          {{ material_count }} <span class="zh">份材料</span><span class="en">file(s)</span>
+        </span>
+      {% else %}
+        <span class="module-badge badge-gray">
+          <span class="zh">暂无材料</span><span class="en">No materials yet</span>
+        </span>
+      {% endif %}
+    </a>
+
+    <a class="module-card" href="/job/add">
+      <div class="module-icon">➕</div>
+      <div class="module-name"><span class="zh">手动添加岗位</span><span class="en">Add Job Manually</span></div>
+      <div class="module-desc">
+        <span class="zh">粘贴 JD 文本或上传文件，DeepSeek 自动提取字段并评分入库。</span>
+        <span class="en">Paste JD text or upload a file — DeepSeek extracts all fields and scores it automatically.</span>
+      </div>
+      <span class="module-badge badge-blue">
+        <span class="zh">手动录入</span><span class="en">Manual Entry</span>
+      </span>
+    </a>
+
     <a class="module-card" href="/jobs">
       <div class="module-icon">🔍</div>
       <div class="module-name"><span class="zh">岗位列表</span><span class="en">Job Listings</span></div>

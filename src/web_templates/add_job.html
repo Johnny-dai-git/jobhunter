@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}添加岗位 — JobHunter{% endblock %}
+
+{% block content %}
+<div style="max-width:760px; margin:0 auto; padding:32px 16px;">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:28px;">
+    <span style="font-size:24px;">➕</span>
+    <div>
+      <h2 style="margin:0; font-size:20px; font-weight:700;">手动添加岗位</h2>
+      <p style="margin:4px 0 0; color:var(--color-text-muted); font-size:13px;">
+        粘贴 JD，LLM 自动提取字段、评分入库
+      </p>
+    </div>
+  </div>
+
+  {% if error %}
+  <div style="background:var(--color-danger-light); border:1px solid #fca5a5;
+              border-radius:var(--radius-sm); padding:12px 16px; margin-bottom:16px;
+              color:var(--color-danger); font-size:13px;">⚠️ {{ error }}</div>
+  {% endif %}
+
+  {% if duplicate %}
+  <div style="background:var(--color-warn-light); border:1px solid #fcd34d;
+              border-radius:var(--radius-sm); padding:12px 16px; margin-bottom:16px; font-size:13px;">
+    ⚠️ 已存在相同岗位：
+    <a href="/job/{{ duplicate.id }}" style="color:var(--color-accent); font-weight:600;">
+      #{{ duplicate.id }} {{ duplicate.title }} @ {{ duplicate.company }}
+    </a>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/job/add" enctype="multipart/form-data"
+        style="background:var(--color-card); border:1px solid var(--color-border);
+               border-radius:var(--radius); padding:28px; display:flex; flex-direction:column; gap:20px;">
+
+    <!-- JD 文本 -->
+    <div>
+      <label style="display:block; font-weight:600; font-size:13px; margin-bottom:6px;">
+        JD 全文 <span style="color:var(--color-danger);">*</span>
+      </label>
+      <textarea name="jd_text" rows="10" required
+                placeholder="把岗位描述全文粘贴在这里……&#10;包括职位名称、公司、工作职责、技术要求、薪资等，LLM 会自动提取所有字段。"
+                style="width:100%; padding:10px 12px; border:1px solid var(--color-border-strong);
+                       border-radius:var(--radius-sm); font-size:13px; font-family:inherit;
+                       resize:vertical; outline:none; line-height:1.6; box-sizing:border-box;"
+                onfocus="this.style.borderColor='var(--color-accent)'"
+                onblur="this.style.borderColor='var(--color-border-strong)'"></textarea>
+    </div>
+
+    <!-- 个人备注 -->
+    <div>
+      <label style="display:block; font-weight:600; font-size:13px; margin-bottom:6px;">
+        个人备注 <span style="color:var(--color-text-muted); font-weight:400;">(选填)</span>
+      </label>
+      <textarea name="user_note" rows="3"
+                placeholder="例如：朋友内推、公司规模小但技术栈很匹配、要求签 visa……"
+                style="width:100%; padding:10px 12px; border:1px solid var(--color-border-strong);
+                       border-radius:var(--radius-sm); font-size:13px; font-family:inherit;
+                       resize:vertical; outline:none; line-height:1.6; box-sizing:border-box;"
+                onfocus="this.style.borderColor='var(--color-accent)'"
+                onblur="this.style.borderColor='var(--color-border-strong)'"></textarea>
+    </div>
+
+    <!-- URL (折叠显示) -->
+    <details style="font-size:13px;">
+      <summary style="cursor:pointer; color:var(--color-text-muted); user-select:none;">
+        + 岗位链接（用于去重，选填）
+      </summary>
+      <input type="url" name="url" value="{{ form_url or '' }}"
+             placeholder="https://www.linkedin.com/jobs/view/..."
+             style="width:100%; margin-top:8px; padding:9px 12px;
+                    border:1px solid var(--color-border-strong); border-radius:var(--radius-sm);
+                    font-size:13px; outline:none; box-sizing:border-box;"
+             onfocus="this.style.borderColor='var(--color-accent)'"
+             onblur="this.style.borderColor='var(--color-border-strong)'">
+    </details>
+
+    <!-- 或上传文件 -->
+    <details style="font-size:13px;">
+      <summary style="cursor:pointer; color:var(--color-text-muted); user-select:none;">
+        + 或上传 JD 文件（PDF / DOCX / MD / TXT）
+      </summary>
+      <input type="file" name="jd_file" accept=".pdf,.docx,.md,.txt"
+             style="margin-top:8px; font-size:13px;">
+    </details>
+
+    <!-- 提交 -->
+    <div style="display:flex; align-items:center; gap:12px; padding-top:4px;">
+      <button type="submit" id="submitBtn"
+              style="background:var(--color-accent); color:white; border:none;
+                     border-radius:var(--radius-sm); padding:10px 24px;
+                     font-size:14px; font-weight:600; cursor:pointer;"
+              onmouseover="this.style.background='var(--color-accent-hover)'"
+              onmouseout="this.style.background='var(--color-accent)'">
+        🤖 解析并入库
+      </button>
+      <span id="loadingMsg" style="display:none; color:var(--color-text-muted); font-size:13px;">
+        ⏳ LLM 解析中…
+      </span>
+      <a href="/jobs" style="color:var(--color-text-muted); font-size:13px; text-decoration:none;">取消</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  document.querySelector('form').addEventListener('submit', function() {
+    document.getElementById('submitBtn').disabled = true;
+    document.getElementById('submitBtn').textContent = '处理中…';
+    document.getElementById('loadingMsg').style.display = 'inline';
+  });
+</script>
+{% endblock %}

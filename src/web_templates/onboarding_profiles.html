@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}历史画像 · JobHunter{% endblock %}
+{% block content %}
+<style>
+  .profiles-shell { max-width: 1100px; margin: 0 auto; }
+  .page-head { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:18px; }
+  .page-head h1 { margin:0 0 6px; font-size:24px; letter-spacing:0; }
+  .page-head p { margin:0; color:var(--color-text-muted); }
+  .profile-label {
+    font-weight:700; color:var(--color-accent); text-decoration:none; display:block;
+    overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    word-break:break-word; line-height:1.35;
+  }
+  .actions { display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap; }
+  @media (max-width: 760px) {
+    .page-head { display:block; }
+    .actions { justify-content:flex-start; }
+    table { font-size:12px; }
+  }
+</style>
+
+<div class="profiles-shell">
+  <div class="page-head">
+    <div>
+      <h1>历史画像</h1>
+      <p>切换求职策略、查看每个画像跑出的岗位，或清理不再使用的画像。</p>
+    </div>
+    <a href="/onboarding" class="btn btn-secondary btn-sm">回到画像</a>
+  </div>
+
+  <div class="card card-flat">
+    {% if history %}
+    <table style="table-layout:fixed; width:100%;">
+      <colgroup>
+        <col style="width:96px;">
+        <col>
+        <col style="width:130px;">
+        <col style="width:86px;">
+        <col style="width:250px;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>画像</th>
+          <th>岗位</th>
+          <th>状态</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in history %}
+        {% set counts = job_counts.get(h.id, {'total':0, 'top':0}) %}
+        <tr>
+          <td style="color:var(--color-text-muted); white-space:nowrap;">{{ h.created_at.strftime('%m-%d %H:%M') }}</td>
+          <td>
+            <a href="/profiles/{{ h.id }}" class="profile-label" title="{{ h.user_description }}">{{ h.label or '(无描述)' }}</a>
+            {% if h.resume_filename %}
+              <div style="font-size:11px; color:var(--color-text-dim); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ h.resume_filename }}</div>
+            {% endif %}
+          </td>
+          <td>
+            {% if counts.total > 0 %}
+              <a href="/jobs?profile_id={{ h.id }}" style="text-decoration:none;">
+                <span class="badge badge-indigo">{{ counts.total }} 个</span>
+                {% if counts.top > 0 %}<span class="badge badge-green" style="margin-left:4px;">{{ counts.top }} 高分</span>{% endif %}
+              </a>
+            {% else %}
+              <span style="color:var(--color-text-dim);">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if h.id == current_id %}<span class="badge badge-green">当前</span>
+            {% else %}<span class="badge badge-gray">历史</span>{% endif %}
+          </td>
+          <td>
+            <div class="actions">
+              {% if counts.total > 0 %}
+                <a href="/jobs?profile_id={{ h.id }}" class="btn btn-secondary btn-sm">查看结果</a>
+              {% endif %}
+              {% if h.id != current_id %}
+                <form method="post" action="/profiles/{{ h.id }}/use" style="margin:0;">
+                  <button class="btn btn-primary btn-sm" type="submit"
+                          {% if pipeline_running %}onclick="return confirm('当前有流水线在跑，切换会先取消它。继续?')"{% else %}onclick="return confirm('切换到这个画像并跑流水线?')"{% endif %}>激活</button>
+                </form>
+              {% else %}
+                <form method="post" action="/refresh" style="margin:0;">
+                  <button class="btn btn-secondary btn-sm" type="submit"
+                          {% if pipeline_running %}disabled{% else %}onclick="return confirm('用当前画像跑流水线?')"{% endif %}>重跑</button>
+                </form>
+              {% endif %}
+              <form method="post" action="/profiles/{{ h.id }}/delete" style="margin:0;">
+                <button class="btn btn-secondary btn-sm" type="submit" style="color:var(--color-danger);"
+                        onclick="return confirm('{% if h.id == current_id %}这是当前画像，删除后会自动激活次新的画像。{% endif %}删除 &quot;{{ h.label[:30] }}&quot;? 操作不可恢复。')">删除</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty">还没有历史画像。先回到画像页创建一个求职画像。</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -19,11 +19,11 @@ model:
     provider: deepseek
     name: deepseek-chat
   tailor:
-    provider: deepseek
-    name: deepseek-chat
+    provider: claude
+    name: claude-opus-4-6
   cover_letter:
-    provider: deepseek
-    name: deepseek-chat
+    provider: claude
+    name: claude-opus-4-6
   trends:
     provider: deepseek
     name: deepseek-chat
@@ -43,10 +43,9 @@ preferences:
     - Software Engineer Machine Learning
 
   # 目标地点 (用 LinkedIn 能识别的标准写法)
+  # LinkedIn 用 "United States" 全覆盖即可, 不需要分城市搜
   locations:
     - United States
-    - San Francisco
-    - New York
 
   # 工作类型
   job_types:
@@ -138,7 +137,11 @@ collectors:
       actor: harvestapi/linkedin-job-search
       input_overrides: {}         # 可以追加 actor 自定义 input
     cookie_file: data/cookies/linkedin.json    # 仅 backend=playwright 时用
-    max_per_run: 24               # 4 keywords × 3 locations × 2/query = 24 (~$0.024)
+    # Per-title 搜索策略: 每个 title 单独一次 Apify 调用
+    results_per_title: 15         # 每个 title 返回多少条 (~$0.015/title)
+    max_titles: 40                # 最多搜索多少个 title (primary + aliases + broader_terms)
+    max_per_run: 400              # 跨所有 title 的全局去重上限 (40×15=600原始, 去重后约400)
+    # 费用估算: 40 titles × 15条 = 600条原始 ≈ $0.60/次
 
   indeed:
     enabled: true
@@ -200,7 +203,8 @@ collectors:
 
 # ====== 路径 ======
 paths:
-  resume_dir: data/resume
+  resume_dir: data/resume          # 简历库: 存放不同版本的简历文件
+  materials_dir: data/materials    # 资料库: 文章、论文、项目说明等个人背景材料
   jobs_dir: data/jobs
   outputs_dir: data/outputs
   db_path: data/jobs.db

@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+{% block title %}精修简历 #{{ job.id }} · JobHunter{% endblock %}
+
+{% block content %}
+<style>
+  .refine-wrap {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    grid-template-rows: 1fr;
+    gap: 14px;
+    height: calc(100vh - 80px);
+    padding: 14px 16px;
+    box-sizing: border-box;
+  }
+
+  /* ── 左栏 ── */
+  .left-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  /* 对话框 */
+  .chat-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .chat-header {
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .msg-user .bubble {
+    background: var(--color-accent);
+    color: white;
+    border-radius: 12px 12px 4px 12px;
+    padding: 9px 13px;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-left: 24px;
+  }
+  .msg-assistant .bubble {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 12px 12px 12px 4px;
+    padding: 9px 13px;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-right: 24px;
+    color: var(--color-text-muted);
+  }
+  .msg-label { font-size: 11px; color: var(--color-text-dim); margin-bottom: 3px; padding: 0 3px; }
+  .msg-user .msg-label { text-align: right; }
+  .chat-input-area {
+    padding: 10px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .chat-input-area textarea {
+    width: 100%; padding: 9px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px; font-family: inherit; resize: none; outline: none; line-height: 1.5;
+    box-sizing: border-box;
+  }
+  .chat-input-area textarea:focus { border-color: var(--color-accent); }
+
+  /* 版本历史面板 */
+  .version-panel {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    max-height: 220px;
+    display: flex;
+    flex-direction: column;
+  }
+  .version-panel-header {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--color-border);
+    font-weight: 700;
+    font-size: 13px;
+    background: var(--color-bg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .version-list-inner {
+    overflow-y: auto;
+    flex: 1;
+  }
+  .version-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background .12s;
+    font-size: 13px;
+  }
+  .version-row:last-child { border-bottom: none; }
+  .version-row:hover { background: var(--color-accent-light); }
+  .version-row.active { background: var(--color-accent-light); border-left: 3px solid var(--color-accent); }
+  .version-num {
+    font-weight: 700;
+    color: var(--color-accent);
+    min-width: 28px;
+    font-size: 12px;
+  }
+  .version-info { flex: 1; min-width: 0; }
+  .version-note { font-size: 12px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .version-time { font-size: 11px; color: var(--color-text-dim); margin-top: 1px; }
+  .version-actions { display: flex; gap: 5px; }
+
+  /* ── 右栏: 简历预览 ── */
+  .preview-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-height: 0;
+  }
+  .preview-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .preview-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px;
+  }
+  .resume-md { font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; line-height: 1.65; max-width: 760px; margin: 0 auto; }
+  .resume-md h1 { font-size: 21px; margin: 0 0 6px; }
+  .resume-md h2 { font-size: 14px; font-weight: 700; border-bottom: 1px solid var(--color-border); padding-bottom: 4px; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .resume-md h3 { font-size: 13px; font-weight: 600; margin: 12px 0 3px; }
+  .resume-md ul { margin: 3px 0 7px 18px; padding: 0; }
+  .resume-md li { margin-bottom: 2px; }
+  .resume-md p { margin: 3px 0; }
+  .resume-md a { color: var(--color-accent); }
+  .resume-md strong { font-weight: 700; }
+  .resume-md hr { border: none; border-top: 1px solid var(--color-border); margin: 12px 0; }
+
+  .loading-dots::after { content: '.'; animation: dots 1s infinite; }
+  @keyframes dots { 0%,100%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
+
+  @media (max-width: 860px) {
+    .refine-wrap { grid-template-columns: 1fr; height: auto; }
+    .left-col, .preview-panel { height: 480px; }
+  }
+</style>
+
+<div class="refine-wrap">
+
+  <!-- ── 左栏 ── -->
+  <div class="left-col">
+
+    <!-- 对话框 -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div style="font-weight:700; font-size:13px;">✏️ 对话精修</div>
+        <div style="font-size:12px; color:var(--color-text-muted); margin-top:1px;">{{ job.title }} @ {{ job.company }}</div>
+        <div style="font-size:11px; color:var(--color-text-dim); margin-top:5px; line-height:1.4;">
+          每条消息自动注入 HR + HM 视角 · 每次修改自动保存为新版本
+        </div>
+      </div>
+
+      <div class="chat-history" id="chatHistory">
+        {% if not messages %}
+        <div style="text-align:center; color:var(--color-text-dim); font-size:12px; margin-top:32px;">
+          <div style="font-size:26px; margin-bottom:8px;">💬</div>
+          告诉 Claude 想怎么改<br>
+          <span style="font-size:11px;">例如：Summary 更突出 eBPF 背景、Skills 里加 RDMA、项目描述太长删一半…</span>
+        </div>
+        {% endif %}
+        {% for msg in messages %}
+        <div class="msg msg-{{ msg.role }}">
+          <div class="msg-label">{{ '你' if msg.role == 'user' else 'Claude' }}</div>
+          <div class="bubble">{{ msg.content }}</div>
+        </div>
+        {% endfor %}
+        <div id="typingIndicator" style="display:none;" class="msg msg-assistant">
+          <div class="msg-label">Claude</div>
+          <div class="bubble"><span class="loading-dots">修改中</span></div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <textarea id="msgInput" rows="3"
+                  placeholder="告诉 Claude 怎么改…&#10;Ctrl+Enter 发送"
+                  onkeydown="handleKey(event)"></textarea>
+        <div style="display:flex; gap:7px; align-items:center;">
+          <button class="btn btn-primary btn-sm" onclick="sendMessage()" id="sendBtn">发送</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearChat()" style="color:var(--color-text-muted);">清空对话</button>
+          <a href="/job/{{ job.id }}" class="btn btn-secondary btn-sm" style="margin-left:auto;">← 返回</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 版本历史 -->
+    <div class="version-panel">
+      <div class="version-panel-header">
+        <span>📋 版本历史</span>
+        <span style="font-size:11px; color:var(--color-text-muted); font-weight:400;">点击切换预览</span>
+      </div>
+      <div class="version-list-inner" id="versionListInner">
+        <!-- 原始 tailor 版本 -->
+        <div class="version-row {% if not revisions %}active{% endif %}"
+             onclick="loadOriginal(this)" id="rowOriginal">
+          <span class="version-num">原始</span>
+          <div class="version-info">
+            <div class="version-note">Tailor 生成版本</div>
+            <div class="version-time">初始定制简历</div>
+          </div>
+          <div class="version-actions">
+            <a href="/job/{{ job.id }}/pdf" target="_blank"
+               class="btn btn-secondary btn-sm" onclick="event.stopPropagation()">PDF</a>
+          </div>
+        </div>
+        {% for rev in revisions | sort(attribute='version_num') %}
+        <div class="version-row {% if loop.last %}active{% endif %}"
+             onclick="loadVersion({{ rev.version_num }}, this)"
+             id="row{{ rev.version_num }}">
+          <span class="version-num">v{{ rev.version_num }}</span>
+          <div class="version-info">
+            <div class="version-note" title="{{ rev.note or '' }}">{{ (rev.note or '对话修改') | truncate(40) }}</div>
+            <div class="version-time">{{ rev.created_at.strftime('%m/%d %H:%M') if rev.created_at else '' }}</div>
+          </div>
+          <div class="version-actions">
+            <a href="/job/{{ job.id }}/refine/version/{{ rev.version_num }}/pdf" target="_blank"
+               class="btn btn-secondary btn-sm" onclick="event.stopPropagation()">PDF</a>
+          </div>
+        </div>
+        {% endfor %}
+        {% if not revisions %}
+        <div style="padding:12px 14px; font-size:12px; color:var(--color-text-dim);">
+          对话后每次修改都会保存为新版本
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- /left-col -->
+
+  <!-- ── 右栏: 简历预览 ── -->
+  <div class="preview-panel">
+    <div class="preview-header">
+      <span style="font-weight:600; font-size:13px;" id="previewLabel">
+        {% if revisions %}v{{ revisions[-1].version_num }} · 最新版本{% else %}原始版本{% endif %}
+      </span>
+      <a id="pdfBtn" href="/job/{{ job.id }}/pdf" target="_blank"
+         class="btn btn-secondary btn-sm" style="margin-left:auto;">📄 下载 PDF</a>
+    </div>
+    <div class="preview-body">
+      <div class="resume-md" id="resumePreview">
+        {% if current_md %}
+          {{ current_md | render_md | safe }}
+        {% else %}
+          <p style="color:var(--color-text-muted); text-align:center; margin-top:40px;">
+            还没有定制简历，请先在岗位详情页生成。
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div><!-- /refine-wrap -->
+
+<script>
+// ── Markdown 渲染 ────────────────────────────────────────────
+function renderMd(md) {
+  if (!md) return '';
+  let h = md
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // bold
+  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // links
+  h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  // headings
+  h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  h = h.replace(/^## (.+)$/gm,  '<h2>$1</h2>');
+  h = h.replace(/^# (.+)$/gm,   '<h1>$1</h1>');
+  // hr
+  h = h.replace(/^---$/gm, '<hr>');
+  // bullets
+  h = h.replace(/^- (.+)$/gm, '<li>$1</li>');
+  h = h.replace(/(<li>[\s\S]+?<\/li>\n?)+/g, m => '<ul>' + m + '</ul>');
+  // linebreaks
+  h = h.replace(/\n{2,}/g, '<br><br>');
+  return h;
+}
+
+// ── 行高亮版本行 ────────────────────────────────────────────
+function setActiveRow(el) {
+  document.querySelectorAll('.version-row').forEach(r => r.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ── 加载原始版本 ────────────────────────────────────────────
+function loadOriginal(rowEl) {
+  setActiveRow(rowEl);
+  document.getElementById('previewLabel').textContent = '原始版本';
+  document.getElementById('pdfBtn').href = '/job/{{ job.id }}/pdf';
+  // 重新 fetch 原始 md
+  fetch('/job/{{ job.id }}/refine/version/0')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (data && data.md_content) {
+        document.getElementById('resumePreview').innerHTML = renderMd(data.md_content);
+      } else {
+        // fallback: 当前页面已渲染的内容就是原始版
+        location.reload();
+      }
+    });
+}
+
+// ── 加载指定版本 ────────────────────────────────────────────
+async function loadVersion(num, rowEl) {
+  setActiveRow(rowEl);
+  document.getElementById('previewLabel').textContent = `v${num} · ${rowEl.querySelector('.version-time').textContent}`;
+  document.getElementById('pdfBtn').href = `/job/{{ job.id }}/refine/version/${num}/pdf`;
+  const resp = await fetch(`/job/{{ job.id }}/refine/version/${num}`);
+  const data = await resp.json();
+  document.getElementById('resumePreview').innerHTML = renderMd(data.md_content);
+}
+
+// ── 发送消息 ────────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  appendMsg('user', msg);
+  input.value = '';
+  document.getElementById('typingIndicator').style.display = 'block';
+  document.getElementById('sendBtn').disabled = true;
+  scrollChat();
+
+  try {
+    const fd = new FormData();
+    fd.append('message', msg);
+    const resp = await fetch('/job/{{ job.id }}/refine/chat', { method:'POST', body:fd });
+    const data = await resp.json();
+    document.getElementById('typingIndicator').style.display = 'none';
+    document.getElementById('sendBtn').disabled = false;
+
+    if (data.error) { appendMsg('assistant', '❌ ' + data.error); return; }
+
+    appendMsg('assistant', data.note || '简历已更新');
+    document.getElementById('resumePreview').innerHTML = renderMd(data.md_content);
+
+    if (data.version_num) {
+      addVersionRow(data.version_num, data.note || '对话修改');
+      document.getElementById('previewLabel').textContent = `v${data.version_num} · 刚刚`;
+      document.getElementById('pdfBtn').href = `/job/{{ job.id }}/refine/version/${data.version_num}/pdf`;
+    }
+  } catch(e) {
+    document.getElementById('typingIndicator').style.display = 'none';
+    document.getElementById('sendBtn').disabled = false;
+    appendMsg('assistant', '❌ ' + e.message);
+  }
+  scrollChat();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendMessage();
+}
+
+function appendMsg(role, content) {
+  const h = document.getElementById('chatHistory');
+  const d = document.createElement('div');
+  d.className = `msg msg-${role}`;
+  d.innerHTML = `<div class="msg-label">${role==='user'?'你':'Claude'}</div><div class="bubble">${content.replace(/\n/g,'<br>')}</div>`;
+  h.insertBefore(d, document.getElementById('typingIndicator'));
+  scrollChat();
+}
+
+function scrollChat() {
+  const h = document.getElementById('chatHistory');
+  h.scrollTop = h.scrollHeight;
+}
+
+// ── 动态添加版本行 ───────────────────────────────────────────
+function addVersionRow(num, note) {
+  const list = document.getElementById('versionListInner');
+  // 移除 active 状态
+  list.querySelectorAll('.version-row').forEach(r => r.classList.remove('active'));
+  const row = document.createElement('div');
+  row.className = 'version-row active';
+  row.id = `row${num}`;
+  const shortNote = note.length > 40 ? note.slice(0, 40) + '…' : note;
+  row.innerHTML = `
+    <span class="version-num">v${num}</span>
+    <div class="version-info">
+      <div class="version-note" title="${note}">${shortNote}</div>
+      <div class="version-time">刚刚</div>
+    </div>
+    <div class="version-actions">
+      <a href="/job/{{ job.id }}/refine/version/${num}/pdf" target="_blank"
+         class="btn btn-secondary btn-sm" onclick="event.stopPropagation()">PDF</a>
+    </div>`;
+  row.onclick = () => loadVersion(num, row);
+  list.appendChild(row);
+  list.scrollTop = list.scrollHeight;
+}
+
+// ── 清空对话 ────────────────────────────────────────────────
+function clearChat() {
+  if (!confirm('清空对话历史？（不影响已保存的版本）')) return;
+  fetch('/job/{{ job.id }}/refine/clear', {method:'POST'}).then(() => location.reload());
+}
+
+scrollChat();
+</script>
+{% endblock %}

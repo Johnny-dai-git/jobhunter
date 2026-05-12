@@ -49,8 +49,19 @@ def init():
     config.path("resume_dir")
     config.path("jobs_dir")
     config.path("outputs_dir")
+    materials_dir = config.path("materials_dir")  # 自动创建
+
     console.print(f"[green]✓[/green] 数据库已建好: {db_path}")
-    console.print(f"[green]✓[/green] 把简历放进: {config.path('resume_dir')}")
+    console.print(f"")
+    console.print(f"[bold]── 简历库 ──[/bold]")
+    console.print(f"[green]✓[/green] 目录: {config.path('resume_dir')}")
+    console.print(f"    └ 放不同版本的简历 (PDF / DOCX / MD / TXT)")
+    console.print(f"")
+    console.print(f"[bold]── 资料库 ──[/bold]")
+    console.print(f"[green]✓[/green] 目录: {materials_dir}")
+    console.print(f"    └ 放个人背景材料: 技术文章、论文、项目说明、作品集等")
+    console.print(f"    └ 支持: PDF / DOCX / MD / TXT")
+    console.print(f"    └ tailor 时自动读取，帮 Claude 更准确地提炼你的亮点")
 
 
 @cli.command("parse-resume")
@@ -196,38 +207,48 @@ def collect(platform):
 
 
 @cli.command("add-job")
-@click.option("--url", required=True)
-@click.option("--title", required=True)
-@click.option("--company", required=True)
-@click.option("--location", default=None)
-@click.option("--salary", default=None)
-@click.option("--source", default="manual")
-@click.option("--jd-file", type=click.Path(exists=True, dir_okay=False), default=None)
-@click.option("--jd", default=None)
-def add_job(url, title, company, location, salary, source, jd_file, jd):
-    """手动添加一个岗位."""
-    config = _load_config()
-    description = None
-    if jd_file:
-        description = Path(jd_file).read_text(encoding="utf-8")
-    elif jd:
-        description = jd
+@click.option("--url", default="", help="岗位链接 (选填, 用于去重和投递)")
+@click.option("--jd-file", type=click.Path(exists=True, dir_okay=False), default=None,
+              help="包含 JD 的文件 (PDF/DOCX/MD/TXT)")
+@click.option("--jd", default=None, help="直接粘贴 JD 文本")
+@click.option("--no-match", is_flag=True, help="跳过自动评分, 只入库")
+def add_job(url, jd_file, jd, no_match):
+    """手动添加岗位: 粘贴 JD 文本或上传文件, DeepSeek 自动提取字段 + 评分入库.
 
-    db_path = config.path("db_path")
-    with session_scope(db_path) as session:
-        job = Job(
-            source=source,
-            url=url,
-            title=title,
-            company=company,
-            location=location,
-            salary=salary,
-            description=description,
-            status=JobStatus.NEW.value,
+    示例:
+      add-job --url https://... --jd "We are looking for..."
+      add-job --jd-file ~/Downloads/jd.pdf --url https://...
+      echo "JD text" | add-job  (从 stdin 读取)
+    """
+    from .manual_add import ManualJobInput, add_job_from_file, add_job_from_text
+
+    config = _load_config()
+
+    # 获取 JD 文本
+    if jd_file:
+        job, is_new = add_job_from_file(
+            config, Path(jd_file), url=url, run_matcher=not no_match
         )
-        session.add(job)
-        session.commit()
-        console.print(f"[green]✓[/green] 已添加 #{job.id}: {title} @ {company}")
+    else:
+        raw_text = jd
+        if not raw_text:
+            # 从 stdin 读取
+            if not sys.stdin.isatty():
+                raw_text = sys.stdin.read().strip()
+            else:
+                console.print("[yellow]请粘贴 JD 文本 (输入完后按 Ctrl+D):[/yellow]")
+                raw_text = sys.stdin.read().strip()
+        if not raw_text:
+            console.print("[red]错误: 请通过 --jd、--jd-file 或 stdin 提供 JD 内容[/red]")
+            raise SystemExit(1)
+        inp = ManualJobInput(raw_text=raw_text, url=url)
+        job, is_new = add_job_from_text(config, inp, run_matcher=not no_match)
+
+    if is_new:
+        score_str = f"  match={job.match_score:.0f}" if job.match_score is not None else ""
+        console.print(f"[green]✓[/green] 已入库 #{job.id}: {job.title} @ {job.company}{score_str}")
+    else:
+        console.print(f"[yellow]跳过[/yellow] 已存在相同岗位 #{job.id}: {job.title} @ {job.company}")
 
 
 @cli.command()
@@ -386,6 +407,49 @@ def enrich(limit):
     config = _load_config()
     done = enrich_pending(config, limit=limit)
     console.print(f"[green]✓[/green] 补填了 {done} 个岗位")
+
+
+@cli.command("backfill-hash")
+@click.option("--dry-run", is_flag=True, help="只预览, 不写入 DB")
+def backfill_hash(dry_run):
+    """给历史岗位补填 content_hash (跨平台语义去重字段).
+
+    新采集的岗位会自动带 hash, 这个命令只针对旧数据.
+    """
+    from .dedup import content_hash as _hash, dedup_key
+    from sqlalchemy import update as _update
+
+    config = _load_config()
+    db_path = config.path("db_path")
+    updated = 0
+    skipped = 0
+
+    with session_scope(db_path) as session:
+        jobs = session.scalars(
+            select(Job).where(Job.content_hash.is_(None))
+        ).all()
+        console.print(f"找到 {len(jobs)} 个没有 content_hash 的岗位")
+
+        for job in jobs:
+            h = _hash(job.title, job.company, job.location or "")
+            if dry_run:
+                console.print(
+                    f"  #{job.id} {job.title} @ {job.company} "
+                    f"→ {h} ({dedup_key(job.title, job.company, job.location or '')})"
+                )
+                skipped += 1
+            else:
+                job.content_hash = h
+                session.add(job)
+                updated += 1
+
+        if not dry_run:
+            session.commit()
+
+    if dry_run:
+        console.print(f"[yellow]dry-run[/yellow] 预览了 {skipped} 条 (未写入)")
+    else:
+        console.print(f"[green]✓[/green] 补填了 {updated} 个岗位的 content_hash")
 
 
 @cli.command()

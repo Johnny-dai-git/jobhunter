@@ -74,6 +74,8 @@ class Job(Base):
     title: Mapped[str] = mapped_column(String(256))
     company: Mapped[str] = mapped_column(String(256))
     location: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # 跨平台语义去重: sha256(normalize(company)|normalize(title)|normalize(location))[:16]
+    content_hash: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, index=True)
     salary: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # 岗位实际发布时间(各平台 actor 提供,如有)
@@ -123,6 +125,25 @@ class Job(Base):
     events: Mapped[list["Event"]] = relationship(
         "Event", back_populates="job", cascade="all, delete-orphan"
     )
+    revisions: Mapped[list["ResumeRevision"]] = relationship(
+        "ResumeRevision", back_populates="job", cascade="all, delete-orphan",
+        order_by="ResumeRevision.version_num",
+    )
+
+
+class ResumeRevision(Base):
+    """简历版本历史: 每次对话修改后保存一个版本."""
+
+    __tablename__ = "resume_revisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
+    version_num: Mapped[int] = mapped_column(Integer)          # 1, 2, 3 ...
+    md_content: Mapped[str] = mapped_column(Text)              # 完整 markdown 正文
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 用户或 AI 的改动说明
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    job: Mapped["Job"] = relationship("Job", back_populates="revisions")
 
 
 class Event(Base):
@@ -145,9 +166,51 @@ def get_engine(db_path: Path):
 
 
 def init_db(db_path: Path) -> None:
-    """建表."""
+    """建表, 并对已有 DB 执行增量 migration (添加新列)."""
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
+    # 增量 migration: 安全地添加新列 (SQLite 不支持 ALTER TABLE ADD COLUMN IF NOT EXISTS)
+    _migrate_add_columns(engine)
+
+
+def _migrate_add_columns(engine) -> None:
+    """检测并添加新版本引入的列, 已存在则跳过."""
+    migrations = [
+        ("jobs", "content_hash", "VARCHAR(16)"),
+    ]
+    # 新表 migration
+    with engine.connect() as conn:
+        tables = [row[0] for row in conn.execute(
+            __import__("sqlalchemy").text("SELECT name FROM sqlite_master WHERE type='table'")
+        )]
+        if "resume_revisions" not in tables:
+            conn.execute(__import__("sqlalchemy").text("""
+                CREATE TABLE resume_revisions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id INTEGER NOT NULL REFERENCES jobs(id),
+                    version_num INTEGER NOT NULL,
+                    md_content TEXT NOT NULL,
+                    note TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            print("[db] migration: created resume_revisions table")
+    with engine.connect() as conn:
+        for table, col, col_type in migrations:
+            try:
+                existing = [
+                    row[1] for row in
+                    conn.execute(__import__("sqlalchemy").text(f"PRAGMA table_info({table})"))
+                ]
+                if col not in existing:
+                    conn.execute(__import__("sqlalchemy").text(
+                        f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"
+                    ))
+                    conn.commit()
+                    print(f"[db] migration: added {table}.{col}")
+            except Exception as e:
+                print(f"[db] migration warning ({table}.{col}): {e}")
 
 
 def session_scope(db_path: Path) -> Session:

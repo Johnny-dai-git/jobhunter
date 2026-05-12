@@ -122,13 +122,44 @@ SORTERS = {
 }
 
 
+def _render_md_simple(md: str) -> str:
+    """轻量 markdown → HTML，供 Jinja2 filter 使用（简历预览用）。"""
+    import re as _re
+    if not md:
+        return ""
+    h = (md
+         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+         .replace("**", "\x00")  # temp marker for bold
+    )
+    # bold (between markers)
+    parts = h.split("\x00")
+    h = "".join(f"<strong>{p}</strong>" if i % 2 else p for i, p in enumerate(parts))
+    # links
+    h = _re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2" target="_blank">\1</a>', h)
+    # headings
+    h = _re.sub(r"^### (.+)$", r"<h3>\1</h3>", h, flags=_re.MULTILINE)
+    h = _re.sub(r"^## (.+)$", r"<h2>\1</h2>", h, flags=_re.MULTILINE)
+    h = _re.sub(r"^# (.+)$", r"<h1>\1</h1>", h, flags=_re.MULTILINE)
+    # bullets
+    h = _re.sub(r"^- (.+)$", r"<li>\1</li>", h, flags=_re.MULTILINE)
+    h = _re.sub(r"(<li>.*?</li>\n?)+", lambda m: "<ul>" + m.group(0) + "</ul>", h, flags=_re.DOTALL)
+    # blockquote
+    h = _re.sub(r"^> (.+)$", r"<blockquote>\1</blockquote>", h, flags=_re.MULTILINE)
+    # paragraphs
+    h = _re.sub(r"\n{2,}", "<br><br>", h)
+    return h
+
+
 def _make_env() -> Environment:
     """直接构造 Jinja2 Environment, 不走 starlette wrapper, 避开 cache_key bug."""
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=select_autoescape(["html", "xml"]),
-        cache_size=0,  # 禁用缓存彻底避坑
+        cache_size=0,
     )
+    from markupsafe import Markup
+    env.filters["render_md"] = lambda md: Markup(_render_md_simple(md or ""))
+    return env
 
 
 def create_app(config: Config) -> FastAPI:
@@ -382,6 +413,19 @@ def create_app(config: Config) -> FastAPI:
             return job
 
     # ---- helpers for health/stats ----
+    def _agent_readiness(agent_name: str, checks: dict) -> dict:
+        """每个 agent 的 readiness: 它需要的前置条件是否满足."""
+        req: dict[str, list[str]] = {
+            "context_agent":    ["has_resume"],
+            "collection_agent": ["has_profile", "has_apify_token"],
+            "matching_agent":   ["has_resume", "has_deepseek_key"],
+            "digest_agent":     [],
+            "trend_agent":      [],
+            "validation_agent": [],
+        }
+        missing = [k for k in req.get(agent_name, []) if not checks.get(k)]
+        return {"ready": not missing, "missing": missing}
+
     def _compute_health() -> dict:
         """liveness + readiness + 问题列表."""
         persistent = agent_state.get_state(config)
@@ -487,12 +531,24 @@ def create_app(config: Config) -> FastAPI:
     @app.get("/health/liveness")
     def liveness_probe():
         h = _compute_health()
-        # 200 当 liveness 是 running/healthy, 否则 503
-        status_code = 200 if h["liveness"] in ("running", "healthy") else 503
+        agents_live = agent_state.get_agents_liveness(config)
+        # 503 if pipeline liveness is bad OR any agent is stuck
+        ok = h["liveness"] in ("running", "healthy") and not agents_live["any_stuck"]
+        status_code = 200 if ok else 503
         return JSONResponse({
             "status": h["liveness"],
             "issues": h["issues_live"],
             "current_run": agent_state.get_state(config).get("current_run"),
+            "agents": {
+                name: {
+                    "status": a["status"],
+                    "stuck": a.get("stuck", False),
+                    "heartbeat_age_sec": a.get("heartbeat_age_sec"),
+                    "heartbeat_at": a.get("heartbeat_at"),
+                }
+                for name, a in agents_live["agents"].items()
+            },
+            "stuck_agents": agents_live["stuck_agents"],
         }, status_code=status_code)
 
     @app.get("/health/readiness")
@@ -503,13 +559,31 @@ def create_app(config: Config) -> FastAPI:
             "status": h["readiness"],
             "issues": h["issues_ready"],
             "checks": h["checks"],
+            "agents_readiness": {
+                name: _agent_readiness(name, h["checks"])
+                for name in agent_state.ALL_AGENTS
+            },
         }, status_code=status_code)
+
+    @app.get("/health/agents")
+    def health_agents():
+        """Per-agent 细粒度状态: status, heartbeat, stuck, duration, meta."""
+        agents = agent_state.get_agents_state(config)
+        timeouts = agent_state.AGENT_HEARTBEAT_TIMEOUT
+        return JSONResponse({
+            name: {
+                **info,
+                "heartbeat_timeout_sec": timeouts.get(name, agent_state.DEFAULT_HEARTBEAT_TIMEOUT),
+            }
+            for name, info in agents.items()
+        })
 
     @app.get("/health")
     def health_combined():
         h = _compute_health()
         counts = _compute_counts()
         lifetime = agent_state.get_lifetime_stats(config)
+        agents_live = agent_state.get_agents_liveness(config)
         return JSONResponse({
             "liveness": h["liveness"],
             "readiness": h["readiness"],
@@ -518,6 +592,18 @@ def create_app(config: Config) -> FastAPI:
             "checks": h["checks"],
             "counts": counts,
             "lifetime": lifetime,
+            "agents": {
+                name: {
+                    "status": a["status"],
+                    "stuck": a.get("stuck", False),
+                    "duration_sec": a.get("duration_sec"),
+                    "heartbeat_at": a.get("heartbeat_at"),
+                    "error": a.get("error"),
+                }
+                for name, a in agents_live["agents"].items()
+            },
+            "stuck_agents": agents_live["stuck_agents"],
+            "errored_agents": agents_live["errored_agents"],
         })
 
     # ---- 面试阶段元数据 (供多处复用) ----
@@ -706,6 +792,140 @@ def create_app(config: Config) -> FastAPI:
             profile_label=profile_label,
         )
 
+    # ---- 简历对话精修 (必须在 /job/{job_id} 之前注册) ----
+
+    @app.get("/job/{job_id}/refine")
+    def refine_page(job_id: int):
+        from .refine import get_revisions, get_current_resume_md, load_chat_history
+        job = _get_job(job_id)
+        revisions = get_revisions(config, job_id)
+        current_md = get_current_resume_md(config, job_id) or ""
+        messages = load_chat_history(config, job_id)
+        # 只展示简洁版消息（不含嵌入简历）
+        import re as _re
+        display_msgs = []
+        for msg in messages:
+            if msg["role"] == "user":
+                display_msgs.append({
+                    "role": "user",
+                    "content": msg["content"].split("---\n当前简历")[0].strip(),
+                })
+            else:
+                m = _re.search(r"```(?:markdown|md)?\s*\n.*?\n```", msg["content"], _re.DOTALL)
+                note = msg["content"][m.end():].strip() if m else msg["content"]
+                display_msgs.append({"role": "assistant", "content": note or "(简历已更新)"})
+        return render("refine.html",
+                      job=job,
+                      revisions=revisions,
+                      current_md=current_md,
+                      messages=display_msgs)
+
+    @app.post("/job/{job_id}/refine/chat")
+    async def refine_chat(job_id: int, message: str = Form(...)):
+        from .refine import chat_refine
+        try:
+            result = chat_refine(config, job_id, message)
+            return JSONResponse(result)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @app.post("/job/{job_id}/refine/clear")
+    def refine_clear(job_id: int):
+        from .refine import clear_chat_history
+        clear_chat_history(config, job_id)
+        return RedirectResponse(url=f"/job/{job_id}/refine", status_code=303)
+
+    @app.get("/job/{job_id}/refine/version/{version_num}")
+    def refine_version(job_id: int, version_num: int):
+        from .refine import get_revision, get_current_resume_md
+        # version_num=0 表示原始 tailor 输出
+        if version_num == 0:
+            md = get_current_resume_md(config, job_id)
+            if not md:
+                raise HTTPException(404, "原始简历不存在")
+            return JSONResponse({"md_content": md, "note": "Tailor 生成版本",
+                                 "version_num": 0, "created_at": ""})
+        rev = get_revision(config, job_id, version_num)
+        if not rev:
+            raise HTTPException(404, "版本不存在")
+        return JSONResponse({"md_content": rev.md_content, "note": rev.note,
+                             "version_num": rev.version_num,
+                             "created_at": str(rev.created_at)})
+
+    @app.get("/job/{job_id}/refine/version/{version_num}/pdf")
+    def refine_version_pdf(job_id: int, version_num: int):
+        from .refine import get_revision
+        rev = get_revision(config, job_id, version_num)
+        if not rev:
+            raise HTTPException(404, "版本不存在")
+        import re as _re
+        import tempfile, os
+        safe_company = _re.sub(r"[^\w\-]+", "_", _get_job(job_id).company)[:30]
+        pdf_path = config.path("outputs_dir") / f"{job_id:03d}_{safe_company}_v{version_num}.pdf"
+        if not pdf_path.exists():
+            try:
+                md_to_pdf(rev.md_content, pdf_path)
+            except Exception as e:
+                raise HTTPException(500, f"PDF 生成失败: {e}")
+        return FileResponse(str(pdf_path), media_type="application/pdf",
+                            filename=pdf_path.name)
+
+    # ---- 手动添加岗位 (必须在 /job/{job_id} 之前注册，否则 "add" 被当成 int 解析) ----
+
+    @app.get("/job/add")
+    def add_job_form(error: str = "", duplicate_id: int = 0, form_url: str = ""):
+        duplicate = None
+        if duplicate_id:
+            with session_scope(config.path("db_path")) as session:
+                dup = session.get(Job, duplicate_id)
+                if dup:
+                    session.expunge(dup)
+                    duplicate = dup
+        return render("add_job.html", error=error, duplicate=duplicate, form_url=form_url)
+
+    @app.post("/job/add")
+    async def add_job_submit(
+        url: str = Form(default=""),
+        jd_text: str = Form(default=""),
+        user_note: str = Form(default=""),
+        jd_file: UploadFile = File(default=None),
+    ):
+        from .manual_add import ManualJobInput, add_job_from_file, add_job_from_text
+
+        raw_text = ""
+        tmp_path = None
+        if jd_file and jd_file.filename:
+            content = await jd_file.read()
+            if content:
+                import tempfile
+                suffix = Path(jd_file.filename).suffix.lower()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+                    f.write(content)
+                    tmp_path = Path(f.name)
+        elif jd_text.strip():
+            raw_text = jd_text.strip()
+        else:
+            return RedirectResponse(url=f"/job/add?error=请提供JD文本或文件&form_url={url}", status_code=303)
+
+        try:
+            if tmp_path:
+                job, is_new = add_job_from_file(
+                    config, tmp_path, url=url.strip(),
+                    user_note=user_note.strip(), run_matcher=True,
+                )
+            else:
+                inp = ManualJobInput(raw_text=raw_text, url=url.strip(), user_note=user_note.strip())
+                job, is_new = add_job_from_text(config, inp, run_matcher=True)
+        except Exception as e:
+            return RedirectResponse(url=f"/job/add?error={str(e)[:120]}&form_url={url}", status_code=303)
+        finally:
+            if tmp_path and tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+
+        if not is_new:
+            return RedirectResponse(url=f"/job/add?duplicate_id={job.id}&form_url={url}", status_code=303)
+        return RedirectResponse(url=f"/job/{job.id}", status_code=303)
+
     @app.get("/job/{job_id}")
     def job_detail(job_id: int):
         job = _get_job(job_id)
@@ -765,6 +985,18 @@ def create_app(config: Config) -> FastAPI:
     def mark_app(job_id: int, note: Optional[str] = None):
         mark_applied(config, job_id, note=note)
         return RedirectResponse(url=f"/job/{job_id}", status_code=303)
+
+    @app.post("/job/{job_id}/delete")
+    def delete_job(job_id: int, redirect_to: str = Form(default="/jobs")):
+        """从数据库永久删除一个岗位及其所有事件记录.
+        删除后所有 counter 在下次页面加载时自动更新 (全部实时从 DB 计算).
+        """
+        with session_scope(config.path("db_path")) as session:
+            job = session.get(Job, job_id)
+            if job:
+                session.delete(job)
+                session.commit()
+        return RedirectResponse(url=redirect_to, status_code=303)
 
     def _build_onboarding_context() -> dict[str, Any]:
         existing_desc = load_user_description(config) or ""
@@ -899,6 +1131,7 @@ def create_app(config: Config) -> FastAPI:
             "job_counts": job_counts,
             "pipeline_running": pipeline_state["running"],
             "resume_files": resume_files,
+            "material_count": len(list(config.path("materials_dir").glob("*"))) if config.path("materials_dir").exists() else 0,
             "schedule": schedule_info,
             "freshness": freshness_info,
             "agent_state": agent_status,
@@ -926,6 +1159,47 @@ def create_app(config: Config) -> FastAPI:
     @app.get("/onboarding/resumes")
     def onboarding_resumes():
         return render("onboarding_resumes.html", **_build_onboarding_context())
+
+    # ---- 资料库 ----
+
+    def _list_material_files() -> list[dict]:
+        materials_dir = config.path("materials_dir")
+        files = []
+        for p in sorted(materials_dir.iterdir(), key=lambda x: -x.stat().st_mtime):
+            if p.is_file() and p.suffix.lower() in SUPPORTED_EXTS \
+                    and not p.name.startswith("_") and not p.name.startswith("."):
+                files.append({
+                    "filename": p.name,
+                    "size_kb": round(p.stat().st_size / 1024, 1),
+                    "modified": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
+                })
+        return files
+
+    @app.get("/onboarding/materials")
+    def onboarding_materials(message: str = "", error: str = ""):
+        return render("onboarding_materials.html",
+                      material_files=_list_material_files(),
+                      message=message, error=error)
+
+    @app.post("/materials/upload")
+    async def upload_material(material: UploadFile = File(...)):
+        if not material.filename:
+            return RedirectResponse("/onboarding/materials?error=未选择文件", status_code=303)
+        safe_name = _validate_resume_filename(material.filename)
+        content = await material.read()
+        if not content:
+            return RedirectResponse("/onboarding/materials?error=文件为空", status_code=303)
+        target = config.path("materials_dir") / safe_name
+        target.write_bytes(content)
+        return RedirectResponse(f"/onboarding/materials?message={safe_name} 上传成功", status_code=303)
+
+    @app.post("/materials/{filename}/delete")
+    def delete_material(filename: str):
+        safe_name = _validate_resume_filename(filename)
+        target = config.path("materials_dir") / safe_name
+        if target.exists():
+            target.unlink()
+        return RedirectResponse(f"/onboarding/materials?message={safe_name} 已删除", status_code=303)
 
     @app.get("/onboarding/profiles")
     def onboarding_profiles():
@@ -1319,6 +1593,7 @@ def create_app(config: Config) -> FastAPI:
         except Exception:
             pass
         return RedirectResponse(url="/onboarding", status_code=303)
+
 
     @app.post("/resume/upload")
     async def upload_resume_only(resume: UploadFile = File(...)):

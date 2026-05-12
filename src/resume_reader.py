@@ -151,3 +151,37 @@ def load_cached(resume_dir: Path) -> str:
         return cache_path.read_text(encoding="utf-8")
     _, text = parse_and_cache(resume_dir)
     return text
+
+
+def read_materials(materials_dir: Path) -> str:
+    """读取资料库目录下所有支持格式的文件,拼成一段文本返回.
+
+    每份文件用文件名标注,方便模型区分来源。
+    目录不存在或为空时返回空字符串。
+    """
+    if not materials_dir.exists():
+        return ""
+
+    files = sorted(
+        [
+            p for p in materials_dir.iterdir()
+            if p.is_file()
+            and p.suffix.lower() in SUPPORTED_EXTS
+            and not p.name.startswith("_")
+            and not p.name.startswith(".")
+        ],
+        key=lambda p: p.name,
+    )
+    if not files:
+        return ""
+
+    parts: list[str] = []
+    for f in files:
+        try:
+            text = read_resume(f).strip()
+            if text:
+                parts.append(f"### [{f.name}]\n{text}")
+        except Exception as e:
+            parts.append(f"### [{f.name}]\n(读取失败: {e})")
+
+    return "\n\n".join(parts)

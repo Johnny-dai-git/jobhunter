@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}资料库 · JobHunter{% endblock %}
+{% block content %}
+<div style="max-width:1040px; margin:0 auto;">
+  <div style="display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:18px;">
+    <div>
+      <h1 style="margin:0 0 6px; font-size:24px; letter-spacing:0;">
+        <span class="zh">📚 资料库</span><span class="en">📚 Materials Library</span>
+      </h1>
+      <p style="margin:0; color:var(--color-text-muted);">
+        <span class="zh">上传个人背景材料（文章、论文、项目说明等），tailor 简历时 Claude 会自动读取作为参考。</span>
+        <span class="en">Upload personal background materials (articles, papers, project docs, etc.). Claude reads them automatically when tailoring your resume.</span>
+      </p>
+    </div>
+    <a href="/onboarding" class="btn btn-secondary btn-sm">
+      <span class="zh">回到首页</span><span class="en">Back</span>
+    </a>
+  </div>
+
+  {% if message %}
+  <div style="background:var(--color-success-light); border:1px solid #86efac; border-radius:var(--radius-sm);
+              padding:10px 16px; margin-bottom:16px; color:var(--color-success); font-size:13px;">
+    ✅ {{ message }}
+  </div>
+  {% endif %}
+
+  {% if error %}
+  <div style="background:var(--color-danger-light); border:1px solid #fca5a5; border-radius:var(--radius-sm);
+              padding:10px 16px; margin-bottom:16px; color:var(--color-danger); font-size:13px;">
+    ⚠️ {{ error }}
+  </div>
+  {% endif %}
+
+  <!-- 上传区 -->
+  <div class="card">
+    <p style="margin:0 0 12px; font-weight:600; font-size:14px;">
+      <span class="zh">上传新材料</span><span class="en">Upload Material</span>
+    </p>
+    <form method="post" action="/materials/upload" enctype="multipart/form-data"
+          style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <input type="file" name="material" accept=".pdf,.docx,.md,.txt" required
+             style="padding:7px 10px; border:1px solid var(--color-border-strong); border-radius:var(--radius-sm);">
+      <button type="submit" class="btn btn-primary">
+        <span class="zh">上传</span><span class="en">Upload</span>
+      </button>
+      <span style="color:var(--color-text-muted); font-size:12px;">
+        <span class="zh">支持 PDF / DOCX / MD / TXT</span>
+        <span class="en">Supports PDF / DOCX / MD / TXT</span>
+      </span>
+    </form>
+  </div>
+
+  <!-- 材料列表 -->
+  <div class="card card-flat">
+    {% if material_files %}
+    <table>
+      <thead>
+        <tr>
+          <th><span class="zh">文件名</span><span class="en">Filename</span></th>
+          <th><span class="zh">大小</span><span class="en">Size</span></th>
+          <th><span class="zh">上传时间</span><span class="en">Uploaded</span></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in material_files %}
+        <tr>
+          <td style="font-weight:600;">{{ m.filename }}</td>
+          <td style="color:var(--color-text-muted);">{{ m.size_kb }} KB</td>
+          <td style="color:var(--color-text-muted);">{{ m.modified }}</td>
+          <td style="text-align:right;">
+            <form method="post" action="/materials/{{ m.filename }}/delete" style="display:inline;">
+              <button type="submit" class="btn btn-secondary btn-sm"
+                      style="color:var(--color-danger);"
+                      onclick="return confirm('删除 {{ m.filename }}?')">
+                <span class="zh">删除</span><span class="en">Delete</span>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      <span class="zh">还没有上传任何资料。上传文章、论文或项目说明，让 Claude 更了解你。</span>
+      <span class="en">No materials uploaded yet. Add articles, papers, or project docs to help Claude understand your background better.</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 说明 -->
+  <div style="margin-top:16px; background:var(--color-accent-light); border:1px solid #c7d2fe;
+              border-radius:var(--radius-sm); padding:14px 18px; font-size:13px; color:#3730a3;">
+    <strong>💡 <span class="zh">这些资料有什么用？</span><span class="en">What are these for?</span></strong><br>
+    <span class="zh">
+      每次 tailor 简历时，Claude 会读取这里的所有文件作为参考背景。
+      材料不会直接复制进简历，而是帮助 Claude 更准确地理解你的技术深度，
+      从而在已有经历的基础上写出更有说服力的描述。
+      <br><br>
+      <strong>适合放什么：</strong>发表过的技术博客/文章、论文、GitHub 项目说明、获奖经历详述、开源贡献说明等。
+    </span>
+    <span class="en">
+      When tailoring your resume, Claude reads all files here as background context.
+      Materials aren't copied directly into the resume — they help Claude understand your technical depth
+      and write more convincing descriptions based on your real experience.
+      <br><br>
+      <strong>Good examples:</strong> Technical blog posts, papers, GitHub project docs, award writeups, open source contributions.
+    </span>
+  </div>
+</div>
+{% endblock %}

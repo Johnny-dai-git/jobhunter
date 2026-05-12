@@ -1,20 +1,18 @@
-"""简历画像分析器: 让 DeepSeek 综合"市场热度 × 竞争强度 × 候选人优势"
-为候选人找出 Top-10 最优投递岗位.
+"""简历画像分析器 (三轮 pipeline 版).
 
-两段式策略:
-1. **第一步: 确定 Top-10 primary** — DeepSeek 必须产出**恰好 10 个**主 title (高精度).
-2. **第二步: 模糊扩展** — 每个 primary 自带 2-5 个 aliases + 0-3 个 broader_terms,
-   collect 阶段把这些一并扔给搜索引擎, 撒大网兜更多潜在命中.
+三轮多轮对话策略:
+  Round 1 — 提取 (profile_extract.md):
+      resume + materials → 结构化技能档案 + ATS 关键词池
+  Round 2 — 评估 (profile_perspectives.md):
+      提取结果 → HR视角 / HM视角 / 策略师视角 → 候选人定位分析
+  Round 3 — 输出 (profile_analyzer.md):
+      全部上下文 + 用户需求 → Top-10 positions (含 aliases/broader_terms)
 
-设计原则:
-1. **三维评分**: market_demand / competition (越低越好) / user_advantage
-   composite = market_demand * (10 - competition) * user_advantage / 10  范围 0-100.
-2. **方向限制**: 仅 industry — engineering / research-engineering. 不做 academic.
-3. **Title 强制为市场真实高频称谓**, 不允许造词.
-4. **Schema 严格**, tool_use 强制结构化输出, code 可靠解析.
+每轮的输出作为下一轮 messages 历史的一部分传入,
+让模型在完整上下文中做决策,而不是每次从头开始.
 
-输出存到 data/resume/_profile.json. 后续 collect 自动读取 top_10_positions
-的 title + aliases (+ broader_terms) 作为搜索关键词.
+最终输出存到 data/resume/_profile.json,
+后续 collect 自动读取 top_10_positions 的 title + aliases + broader_terms 作为搜索关键词.
 """
 from __future__ import annotations
 
@@ -120,9 +118,15 @@ PROFILE_TOOL: dict[str, Any] = {
                         "why_this_position": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "minItems": 2,
-                            "maxItems": 5,
-                            "description": "2-5 条 bullets,引用简历具体项目/数字 (中文)",
+                            "minItems": 4,
+                            "maxItems": 6,
+                            "description": (
+                                "4-6 条 bullets (中文), 前 2 条以 '[HR]' 开头: "
+                                "HR 视角——关键词覆盖/学历门槛/title 匹配; "
+                                "后 2-4 条以 '[HM]' 开头: "
+                                "HM 视角——引用简历或资料库里的具体项目/数字/论文/开源贡献, "
+                                "说明候选人能给团队带来的差异化价值"
+                            ),
                         },
                         "market_evidence": {
                             "type": "string",
@@ -164,6 +168,163 @@ PROFILE_TOOL: dict[str, Any] = {
             },
         },
         "required": ["top_10_positions", "target_locations", "recommended_companies", "summary"],
+    },
+}
+
+
+# ── Round 1 tool: 技能提取 ──────────────────────────────────────────────────
+
+EXTRACT_TOOL: dict[str, Any] = {
+    "name": "submit_skill_extraction",
+    "description": "提交从简历和资料库中提取的结构化技能档案",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "technical_skills": {
+                "type": "array",
+                "description": "所有技术技能列表",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "skill":    {"type": "string"},
+                        "level":    {"type": "string",
+                                     "enum": ["exposure", "proficient", "deep_project", "published_or_open_source"],
+                                     "description": "接触过 / 熟练 / 深度项目经验 / 发表或开源贡献"},
+                        "source":   {"type": "string",
+                                     "enum": ["resume", "materials", "both"]},
+                        "evidence": {"type": "string",
+                                     "description": "一句话说明证据, 例如: '用 PyTorch 实现 LLM 推理引擎, 吞吐量提升 3x'"},
+                    },
+                    "required": ["skill", "level", "source"],
+                },
+            },
+            "key_projects": {
+                "type": "array",
+                "description": "最重要的 3-6 个项目/经历",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name":       {"type": "string"},
+                        "scale":      {"type": "string", "description": "独立/小团队/大型系统"},
+                        "impact":     {"type": "string", "description": "量化影响, 尽量有数字"},
+                        "tech_stack": {"type": "array", "items": {"type": "string"}},
+                        "source":     {"type": "string", "enum": ["resume", "materials", "both"]},
+                    },
+                    "required": ["name", "impact", "tech_stack"],
+                },
+            },
+            "materials_highlights": {
+                "type": "array",
+                "description": "资料库中展示的、简历里未充分体现的深度内容 (论文/文章/开源等)",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title":       {"type": "string"},
+                        "type":        {"type": "string",
+                                        "enum": ["paper", "article", "open_source", "project_doc", "other"]},
+                        "tech_depth":  {"type": "string", "description": "技术方向和深度一句话描述"},
+                        "signal":      {"type": "string", "description": "外部认可信号: 发表期刊/GitHub stars/引用数等"},
+                    },
+                    "required": ["title", "type", "tech_depth"],
+                },
+            },
+            "ats_keywords": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "所有材料中提炼的 ATS 关键词池, 20-50 个, 供 HR 视角评估和 JD 匹配",
+            },
+            "experience_years": {
+                "type": "number",
+                "description": "总工作年限 (不含在读)",
+            },
+            "education_level": {
+                "type": "string",
+                "enum": ["bachelor", "master", "phd", "other"],
+            },
+        },
+        "required": ["technical_skills", "key_projects", "ats_keywords",
+                     "experience_years", "education_level"],
+    },
+}
+
+
+# ── Round 2 tool: 三视角评估 ────────────────────────────────────────────────
+
+PERSPECTIVES_TOOL: dict[str, Any] = {
+    "name": "submit_perspectives",
+    "description": "提交 HR / HM / 策略师三视角对候选人的综合评估",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "hr_view": {
+                "type": "object",
+                "properties": {
+                    "strong_match_directions": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "HR 会直接放行的方向 (关键词强覆盖 + 门槛满足)",
+                    },
+                    "conditional_directions": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "HR 会犹豫的方向 (部分满足, 需要补充材料或降一级投)",
+                    },
+                    "weak_directions": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "HR 会直接 pass 的方向",
+                    },
+                    "keyword_coverage_note": {
+                        "type": "string",
+                        "description": "ATS 关键词覆盖情况的简短说明",
+                    },
+                },
+                "required": ["strong_match_directions", "conditional_directions", "keyword_coverage_note"],
+            },
+            "hm_view": {
+                "type": "object",
+                "properties": {
+                    "proven_delivery": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "有明确交付证明的技术方向 (引用具体项目/数字/论文)",
+                    },
+                    "differentiators": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "HM 会认为候选人有差异化价值的特质 (大多数同级别竞争者没有的)",
+                    },
+                    "main_concerns": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "HM 最可能的疑虑 (例如: 某方向年限短/广度有余深度不足)",
+                    },
+                    "high_value_directions": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "HM 视角下候选人能带来独特价值的方向",
+                    },
+                },
+                "required": ["proven_delivery", "differentiators", "high_value_directions"],
+            },
+            "strategist_view": {
+                "type": "object",
+                "properties": {
+                    "high_roi_directions": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "需求旺 + 候选人有竞争优势的高性价比方向",
+                    },
+                    "avoid_directions": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "竞争太激烈或候选人优势不明显、建议避开的方向",
+                    },
+                    "key_positioning": {
+                        "type": "string",
+                        "description": "一句话总结候选人最应该主打的市场定位 (中文, <=50字)",
+                    },
+                },
+                "required": ["high_roi_directions", "key_positioning"],
+            },
+            "combined_keywords": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "综合三视角后, 在简历/cover letter 中应重点强调的关键词, 15-30 个, 按重要性降序",
+            },
+        },
+        "required": ["hr_view", "hm_view", "strategist_view", "combined_keywords"],
     },
 }
 
@@ -499,35 +660,126 @@ def load_profile(config: Config) -> ProfileAnalysis | None:
 
 
 def analyze_profile(config: Config, user_description: str | None = None) -> ProfileAnalysis:
-    """读取简历 + 用户自描述求职需求, 调 DeepSeek 做 Top-10 三维度评分分析.
+    """三轮 pipeline 分析候选人画像.
 
-    user_description 是用户自由输入的"我想找什么样的工作"自然语言,
-    优先级高于 config.preferences. 如果传 None 则尝试从磁盘加载.
+    Round 1: resume + materials → 结构化技能提取
+    Round 2: 提取结果 → HR / HM / 策略师三视角评估
+    Round 3: 全部上下文 + 用户需求 → Top-10 positions
+
+    每轮输出作为下一轮 messages 历史的一部分传入,
+    模型在完整对话上下文中做最终决策.
     """
+    from .resume_reader import read_materials
+
     resume_text = load_cached(config.path("resume_dir"))
     if user_description is None:
         user_description = load_user_description(config)
-
-    prompt = render(
-        load_prompt("profile_analyzer"),
-        resume=resume_text,
-        user_description=user_description or "(候选人未提供自述,只根据简历和默认偏好推断)",
-        preferences=json.dumps(config.preferences, ensure_ascii=False, indent=2),
-    )
+    materials_text = read_materials(config.path("materials_dir"))
+    materials_str = materials_text or "(候选人未上传任何资料库材料)"
 
     role = "profile_analyzer"
     if not config.raw.get("model", {}).get(role):
         role = "matcher"
     client, model_name = make_client(config, role)
 
-    resp = client.messages.create(
+    # ── Round 1: 技能提取 ───────────────────────────────────────────────────
+    print("[profile] Round 1 — 提取技能档案和关键词...")
+    r1_prompt = render(
+        load_prompt("profile_extract"),
+        resume=resume_text,
+        materials=materials_str,
+    )
+    r1_resp = client.messages.create(
+        model=model_name,
+        max_tokens=3000,
+        tools=[EXTRACT_TOOL],
+        tool_choice={"type": "tool", "name": "submit_skill_extraction"},
+        messages=[{"role": "user", "content": r1_prompt}],
+    )
+    r1_tool_result = None
+    for block in r1_resp.content:
+        if getattr(block, "type", None) == "tool_use" and block.name == "submit_skill_extraction":
+            r1_tool_result = block.input
+            break
+    if r1_tool_result is None:
+        raise RuntimeError("[profile] Round 1 失败: 模型未返回 submit_skill_extraction")
+
+    r1_summary = json.dumps(r1_tool_result, ensure_ascii=False, indent=2)
+    print(f"[profile] Round 1 完成: 提取 {len(r1_tool_result.get('technical_skills', []))} 项技能, "
+          f"{len(r1_tool_result.get('ats_keywords', []))} 个关键词")
+
+    # ── Round 2: 三视角评估 (携带 Round 1 的完整对话历史) ───────────────────
+    print("[profile] Round 2 — HR / HM / 策略师三视角评估...")
+    r2_prompt = load_prompt("profile_perspectives")
+    messages: list[dict] = [
+        {"role": "user", "content": r1_prompt},
+        # Round 1 的 assistant 回复 (工具调用 + 结果) 作为历史
+        {"role": "assistant", "content": r1_resp.content},
+        {"role": "user", "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": next(
+                    b.id for b in r1_resp.content
+                    if getattr(b, "type", None) == "tool_use"
+                ),
+                "content": r1_summary,
+            }
+        ]},
+        {"role": "assistant", "content": "已完成技能提取。开始三视角分析。"},
+        {"role": "user", "content": r2_prompt},
+    ]
+    r2_resp = client.messages.create(
+        model=model_name,
+        max_tokens=3000,
+        tools=[PERSPECTIVES_TOOL],
+        tool_choice={"type": "tool", "name": "submit_perspectives"},
+        messages=messages,
+    )
+    r2_tool_result = None
+    for block in r2_resp.content:
+        if getattr(block, "type", None) == "tool_use" and block.name == "submit_perspectives":
+            r2_tool_result = block.input
+            break
+    if r2_tool_result is None:
+        raise RuntimeError("[profile] Round 2 失败: 模型未返回 submit_perspectives")
+
+    r2_summary = json.dumps(r2_tool_result, ensure_ascii=False, indent=2)
+    combined_kw = r2_tool_result.get("combined_keywords", [])
+    print(f"[profile] Round 2 完成: {len(combined_kw)} 个核心关键词, "
+          f"强匹配方向: {r2_tool_result.get('hr_view', {}).get('strong_match_directions', [])}")
+
+    # ── Round 3: Top-10 输出 (携带全部对话历史) ─────────────────────────────
+    print("[profile] Round 3 — 生成 Top-10 最优投递方向...")
+    r3_prompt = render(
+        load_prompt("profile_analyzer"),
+        user_description=user_description or "(候选人未提供自述,只根据简历和默认偏好推断)",
+        preferences=json.dumps(config.preferences, ensure_ascii=False, indent=2),
+    )
+    messages_r3: list[dict] = [
+        *messages,
+        {"role": "assistant", "content": r2_resp.content},
+        {"role": "user", "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": next(
+                    b.id for b in r2_resp.content
+                    if getattr(b, "type", None) == "tool_use"
+                ),
+                "content": r2_summary,
+            }
+        ]},
+        {"role": "assistant", "content": "已完成三视角评估。开始生成 Top-10 投递方向。"},
+        {"role": "user", "content": r3_prompt},
+    ]
+    r3_resp = client.messages.create(
         model=model_name,
         max_tokens=4096,
         tools=[PROFILE_TOOL],
         tool_choice={"type": "tool", "name": "submit_profile_analysis"},
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages_r3,
     )
-    for block in resp.content:
+    for block in r3_resp.content:
         if getattr(block, "type", None) == "tool_use" and block.name == "submit_profile_analysis":
+            print("[profile] Round 3 完成: Top-10 生成成功")
             return ProfileAnalysis.from_tool_input(block.input)
-    raise RuntimeError("模型没返回 submit_profile_analysis 工具调用")
+    raise RuntimeError("[profile] Round 3 失败: 模型未返回 submit_profile_analysis")

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from .collectors import CollectedJob, get_collector
 from .config import Config
 from .db import Job, JobStatus, session_scope
+from .dedup import content_hash, dedup_key
 from .profile_analyzer import load_profile
 
 
@@ -60,6 +61,7 @@ def collect_all(
     should_continue=None,
     profile_id: Optional[int] = None,
     on_platform_start=None,
+    on_platform_done=None,   # callback(platform_name: str, new_count: int)
 ) -> dict:
     """跑指定平台 (默认所有 enabled) 的采集器,返回统计.
 
@@ -134,17 +136,36 @@ def collect_all(
                     print(f"  [跳过] '{hit}' in {cj.title} @ {cj.company}")
                     continue
 
-                # 2) 去重: 按 source + external_id 或 url
+                # 2) 去重: 三层检查
+                chash = content_hash(cj.title, cj.company, cj.location or "")
                 with session_scope(db_path) as session:
-                    stmt = select(Job)
+                    existing = None
+
+                    # 层1: source + external_id 精确匹配
                     if cj.external_id:
-                        stmt = stmt.where(
-                            Job.source == cj.source,
-                            Job.external_id == cj.external_id,
-                        )
-                    else:
-                        stmt = stmt.where(Job.url == cj.url)
-                    existing = session.scalars(stmt).first()
+                        existing = session.scalars(
+                            select(Job).where(
+                                Job.source == cj.source,
+                                Job.external_id == cj.external_id,
+                            )
+                        ).first()
+
+                    # 层2: URL 精确匹配 (跨平台同 URL)
+                    if not existing and cj.url:
+                        existing = session.scalars(
+                            select(Job).where(Job.url == cj.url)
+                        ).first()
+
+                    # 层3: content_hash 语义去重 (跨平台同岗位, URL 不同)
+                    if not existing:
+                        existing = session.scalars(
+                            select(Job).where(Job.content_hash == chash)
+                        ).first()
+                        if existing:
+                            print(f"  [语义重复] {cj.title} @ {cj.company} "
+                                  f"≈ #{existing.id} ({existing.source}) "
+                                  f"key={dedup_key(cj.title, cj.company, cj.location or '')}")
+
                     if existing:
                         seen_count += 1
                         continue
@@ -162,6 +183,7 @@ def collect_all(
                         posted_at=_parse_posted_at(cj),
                         status=JobStatus.NEW.value,
                         profile_id=profile_id,
+                        content_hash=chash,
                     )
                     session.add(job)
                     session.commit()
@@ -180,5 +202,10 @@ def collect_all(
         stats["total_new"] += new_count
         stats["total_seen"] += seen_count
         stats["total_excluded"] += excluded_count
+        if on_platform_done:
+            try:
+                on_platform_done(platform, new_count)
+            except Exception:
+                pass
 
     return stats

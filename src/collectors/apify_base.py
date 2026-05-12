@@ -64,27 +64,17 @@ class ApifyCollector(BaseCollector):
         """
         raise NotImplementedError
 
-    # ---- 公共 search 流程 ----
-    def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:
-        if not self._token:
-            raise ApifyError(
-                "APIFY_API_TOKEN 未设置. 去 https://console.apify.com/account/integrations 拿一个,填到 .env"
-            )
-
-        input_data = self._build_input(keywords, locations)
-        # 用户的覆盖项最终生效
-        input_data.update(self.input_overrides)
-
-        # actor_id 形如 "username/actor-name", URL 里转成 "username~actor-name"
+    # ---- 公共工具方法 ----
+    def _run_actor(self, input_data: dict) -> list[dict]:
+        """发一次 Apify Actor 请求, 返回原始 items 列表.
+        子类可以在自己的 search() 里直接调这个, 实现更灵活的搜索策略.
+        """
         actor_path = self.actor_id.replace("/", "~")
-        # quote 一下,虽然一般是 ascii
         url = (
             f"https://api.apify.com/v2/acts/{quote(actor_path)}"
             "/run-sync-get-dataset-items"
         )
         params = {"token": self._token}
-
-        print(f"  [apify] POST {self.actor_id}  input={input_data!r}")
 
         try:
             with httpx.Client(timeout=self._timeout_sec) as client:
@@ -102,18 +92,30 @@ class ApifyCollector(BaseCollector):
             raise ApifyError(
                 f"Apify Actor {self.actor_id} 返回 {resp.status_code}: {msg}"
             )
-
         try:
             items = resp.json()
-        except Exception as e:
+        except Exception:
             raise ApifyError(f"Apify 返回非 JSON: {resp.text[:200]}")
-
         if not isinstance(items, list):
             raise ApifyError(
                 f"Apify Actor 返回了非数组: {type(items).__name__}. 检查 actor 是否正确."
             )
+        return items
 
+    # ---- 默认 search 流程 (子类可覆盖) ----
+    def search(self, keywords: list[str], locations: list[str]) -> Iterable[CollectedJob]:
+        if not self._token:
+            raise ApifyError(
+                "APIFY_API_TOKEN 未设置. 去 https://console.apify.com/account/integrations 拿一个,填到 .env"
+            )
+
+        input_data = self._build_input(keywords, locations)
+        input_data.update(self.input_overrides)
+
+        print(f"  [apify] POST {self.actor_id}  input={input_data!r}")
+        items = self._run_actor(input_data)
         print(f"  [apify] 拿回 {len(items)} 条原始数据")
+
         count = 0
         for item in items:
             if count >= self.max_per_run:

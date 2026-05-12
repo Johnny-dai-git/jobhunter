@@ -171,6 +171,7 @@ def score_pending(
     *,
     limit: int | None = None,
     should_continue=None,
+    on_scored=None,   # callback(job_id: int, score: float) called after each job
 ) -> list[tuple[int, MatchResult]]:
     if should_continue is None:
         should_continue = lambda: True
@@ -222,5 +223,10 @@ def score_pending(
             session.add(job)
             session.commit()
             results.append((job.id, result))
+            if on_scored:
+                try:
+                    on_scored(job.id, result.score)
+                except Exception:
+                    pass
 
     return results

@@ -27,8 +27,24 @@
         "trigger": ...,
         "stats": {...},
         "error": str | null
+    },
+    "agents": {            # per-agent 细粒度状态 (每次 run 开始时重置)
+        "<agent_name>": {
+            "status": "pending|running|done|error|skipped",
+            "started_at": ISO | null,
+            "ended_at": ISO | null,
+            "heartbeat_at": ISO | null,   # 长操作中周期性更新, 用于 stuck 检测
+            "duration_sec": int | null,
+            "error": str | null,
+            "meta": {}                    # agent 自定义字段 (processed_count 等)
+        }
     }
 }
+
+Heartbeat 超时阈值 (秒):
+  collection_agent: 300  (Apify 单个任务最长 600s, 每个平台完成后更新)
+  matching_agent:   120  (每评一批岗位更新)
+  其他 agent:        60
 """
 from __future__ import annotations
 
@@ -73,6 +89,20 @@ def _save(config, state: dict) -> None:
     p.write_text(json.dumps(state, indent=2, default=str, ensure_ascii=False), encoding="utf-8")
 
 
+# ── per-agent heartbeat 超时阈值 (秒) ─────────────────────────────────────
+AGENT_HEARTBEAT_TIMEOUT: dict[str, int] = {
+    "context_agent":    60,
+    "collection_agent": 300,   # Apify 单任务最长 600s
+    "matching_agent":   120,
+    "digest_agent":     60,
+    "trend_agent":      90,
+    "validation_agent": 30,
+}
+DEFAULT_HEARTBEAT_TIMEOUT = 120
+
+ALL_AGENTS = list(AGENT_HEARTBEAT_TIMEOUT.keys())
+
+
 def start_run(
     config,
     *,
@@ -91,6 +121,19 @@ def start_run(
         "current_platform": None,
         "platform_started_at": None,
         "stats": {},
+    }
+    # 每次 run 开始时重置所有 agent 状态为 pending
+    state["agents"] = {
+        name: {
+            "status": "pending",
+            "started_at": None,
+            "ended_at": None,
+            "heartbeat_at": None,
+            "duration_sec": None,
+            "error": None,
+            "meta": {},
+        }
+        for name in ALL_AGENTS
     }
     _save(config, state)
 
@@ -154,6 +197,114 @@ def end_run(config, *, success: bool = True, phase: str = "done", error: Optiona
     lifetime["total_duration_sec"] += int(cur.get("duration_sec") or 0)
 
     _save(config, state)
+
+
+# ── Per-agent liveness / heartbeat ─────────────────────────────────────────
+
+def agent_start(config, agent_name: str) -> None:
+    """Agent 节点开始执行时调用."""
+    state = _load(config)
+    agents = state.setdefault("agents", {})
+    agents[agent_name] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "ended_at": None,
+        "heartbeat_at": datetime.now().isoformat(),
+        "duration_sec": None,
+        "error": None,
+        "meta": {},
+    }
+    _save(config, state)
+
+
+def agent_heartbeat(config, agent_name: str, **meta) -> None:
+    """长操作中周期性调用, 更新心跳时间戳 + 可附加进度元数据."""
+    state = _load(config)
+    agents = state.setdefault("agents", {})
+    entry = agents.setdefault(agent_name, {})
+    entry["heartbeat_at"] = datetime.now().isoformat()
+    entry["status"] = "running"
+    if meta:
+        entry.setdefault("meta", {}).update(meta)
+    _save(config, state)
+
+
+def agent_end(
+    config,
+    agent_name: str,
+    *,
+    success: bool = True,
+    skipped: bool = False,
+    error: Optional[str] = None,
+    **meta,
+) -> None:
+    """Agent 节点完成时调用."""
+    state = _load(config)
+    agents = state.setdefault("agents", {})
+    entry = agents.get(agent_name) or {}
+    now = datetime.now()
+    entry["ended_at"] = now.isoformat()
+    entry["heartbeat_at"] = now.isoformat()
+    entry["status"] = "skipped" if skipped else ("done" if success else "error")
+    if error:
+        entry["error"] = str(error)
+    if entry.get("started_at"):
+        try:
+            start = datetime.fromisoformat(entry["started_at"])
+            entry["duration_sec"] = int((now - start).total_seconds())
+        except Exception:
+            pass
+    if meta:
+        entry.setdefault("meta", {}).update(meta)
+    agents[agent_name] = entry
+    _save(config, state)
+
+
+def get_agents_state(config) -> dict[str, dict]:
+    """返回当前所有 agent 的状态快照, 带 stuck 检测."""
+    state = _load(config)
+    agents: dict[str, dict] = state.get("agents") or {}
+    now = datetime.now()
+
+    result = {}
+    for name in ALL_AGENTS:
+        entry = dict(agents.get(name) or {
+            "status": "pending",
+            "started_at": None,
+            "ended_at": None,
+            "heartbeat_at": None,
+            "duration_sec": None,
+            "error": None,
+            "meta": {},
+        })
+        # stuck 检测: running 状态但心跳超时
+        if entry.get("status") == "running" and entry.get("heartbeat_at"):
+            try:
+                last_hb = datetime.fromisoformat(entry["heartbeat_at"])
+                elapsed = (now - last_hb).total_seconds()
+                timeout = AGENT_HEARTBEAT_TIMEOUT.get(name, DEFAULT_HEARTBEAT_TIMEOUT)
+                entry["stuck"] = elapsed > timeout
+                entry["heartbeat_age_sec"] = int(elapsed)
+            except Exception:
+                entry["stuck"] = False
+        else:
+            entry["stuck"] = False
+        result[name] = entry
+    return result
+
+
+def get_agents_liveness(config) -> dict:
+    """返回 agents 整体 liveness 摘要, 供 /health/liveness 使用."""
+    agents = get_agents_state(config)
+    stuck = [name for name, a in agents.items() if a.get("stuck")]
+    errored = [name for name, a in agents.items() if a.get("status") == "error"]
+    return {
+        "agents": agents,
+        "any_stuck": bool(stuck),
+        "any_error": bool(errored),
+        "stuck_agents": stuck,
+        "errored_agents": errored,
+    }
 
 
 def get_lifetime_stats(config) -> dict:
